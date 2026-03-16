@@ -1,0 +1,24 @@
+﻿{
+  "name": "cnm-mk-hb",
+  "private": true,
+  "version": "0.1.0",
+  "description": "E-commerce system for computers and accessories with AI customer support module",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w services/api & npm run dev -w apps/web",
+    "dev:api": "npm run dev -w services/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -ws",
+    "lint": "npm run lint -ws",
+    "test": "npm run test -ws",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
