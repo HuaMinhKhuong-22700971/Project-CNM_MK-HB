@@ -30,3 +30,7 @@ services/api/prisma/dev.db
 
 # Frontend
 apps/web/.vite/
+
+.npm-cache/
+
+*.tsbuildinfo

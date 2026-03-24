@@ -1,4 +1,4 @@
-﻿generator client {
+generator client {
   provider = "prisma-client-js"
 }
 
@@ -8,35 +8,150 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  fullName  String?
-  role      String   @default("CUSTOMER")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  fullName        String?
+  role            String   @default("CUSTOMER")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  cart            Cart?
+  orders          Order[]
+  reportedTickets Ticket[] @relation("TicketReporter")
+  assignedTickets Ticket[] @relation("TicketAssignee")
+}
+
+model Category {
+  id                 String              @id @default(cuid())
+  name               String              @unique
+  slug               String              @unique
+  description        String?             @db.Text
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  products           Product[]
+  sourceRules        CompatibilityRule[] @relation("RuleSourceCategory")
+  targetRules        CompatibilityRule[] @relation("RuleTargetCategory")
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  sku         String   @unique
+  id          String             @id @default(cuid())
+  categoryId  String
+  sku         String             @unique
   name        String
-  description String?  @db.Text
-  price       Decimal  @db.Decimal(12, 2)
-  stock       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  slug        String             @unique
+  description String?            @db.Text
+  price       Decimal            @db.Decimal(12, 2)
+  stock       Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  category    Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  attributes  ProductAttribute[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+}
+
+model ProductAttribute {
+  id         String   @id @default(cuid())
+  productId  String
+  key        String
+  value      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, key])
+}
+
+model CompatibilityRule {
+  id                 String                @id @default(cuid())
+  sourceCategoryId   String
+  targetCategoryId   String
+  sourceAttributeKey String
+  targetAttributeKey String
+  operator           CompatibilityOperator @default(EQ)
+  description        String?               @db.Text
+  isActive           Boolean               @default(true)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  sourceCategory     Category              @relation("RuleSourceCategory", fields: [sourceCategoryId], references: [id], onDelete: Cascade)
+  targetCategory     Category              @relation("RuleTargetCategory", fields: [targetCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([sourceCategoryId, targetCategoryId])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+}
+
+model CartItem {
+  id         String    @id @default(cuid())
+  cartId     String
+  productId  String
+  quantity   Int
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  cart       Cart      @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([cartId, productId])
 }
 
 model Order {
-  id          String      @id @default(cuid())
-  userId      String
-  totalAmount Decimal     @db.Decimal(12, 2)
-  status      OrderStatus @default(PENDING)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id              String        @id @default(cuid())
+  userId          String
+  totalAmount     Decimal       @db.Decimal(12, 2)
+  paymentMethod   PaymentMethod @default(COD)
+  paymentStatus   String        @default("UNPAID")
+  shippingAddress String        @db.Text
+  status          OrderStatus   @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  productId    String
+  skuSnapshot  String
+  nameSnapshot String
+  unitPrice    Decimal  @db.Decimal(12, 2)
+  quantity     Int
+  lineTotal    Decimal  @db.Decimal(12, 2)
+
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+model Ticket {
+  id           String         @id @default(cuid())
+  userId       String
+  assignedToId String?
+  title        String
+  description  String         @db.Text
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(MEDIUM)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  reporter     User           @relation("TicketReporter", fields: [userId], references: [id], onDelete: Cascade)
+  assignee     User?          @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 }
 
 enum OrderStatus {
@@ -46,4 +161,28 @@ enum OrderStatus {
   SHIPPED
   COMPLETED
   CANCELED
+}
+
+enum PaymentMethod {
+  COD
+  VNPAY
+}
+
+enum CompatibilityOperator {
+  EQ
+  NEQ
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
