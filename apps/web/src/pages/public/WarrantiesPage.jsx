@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -124,7 +124,7 @@ export function WarrantiesPage() {
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
-      <section style={{ padding: "26px 28px", borderRadius: 28, border: "1px solid var(--border)", background: "linear-gradient(135deg, rgba(255,250,242,0.98), rgba(223,236,229,0.92))", boxShadow: "var(--shadow)" }}>
+      <section style={{ padding: "36px 32px", borderRadius: 24, border: "1px solid #e2e8f0", background: "linear-gradient(135deg, #f8fafc, #f1f5f9)", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
         <h1 style={{ margin: "0 0 8px", fontSize: 44, letterSpacing: "-0.06em" }}>Bảo hành điện tử</h1>
         <div style={{ color: "var(--muted)", lineHeight: 1.7 }}>Kích hoạt bảo hành cho sản phẩm đã mua, lấy mã bảo hành và theo dõi hạn sử dụng ngay trên hệ thống.</div>
       </section>

@@ -36,6 +36,6 @@ export async function checkBuildCompatibility(buildId) {
 }
 
 export async function suggestBuild(payload) {
-  const response = await httpClient.post("/pc-builder/suggestion", payload);
+  const response = await httpClient.post("/ai-advisor/suggest-build", payload);
   return response.data;
 }

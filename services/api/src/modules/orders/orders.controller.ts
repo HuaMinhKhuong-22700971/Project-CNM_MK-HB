@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 
 import { prisma } from "../../config/prisma";
 import { ROLES } from "../../constants/roles";
@@ -12,6 +12,7 @@ import {
   updateOrderStatus
 } from "./orders.repository";
 import { checkoutSchema, updateOrderStatusSchema } from "./orders.validator";
+import { generateVnpayUrl, verifyVnpayReturn } from "../../utils/vnpay";
 
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
@@ -167,11 +168,44 @@ export const patchOrderStatus = asyncHandler(async (req: Request, res: Response)
     throw new AppError("Order not found", 404);
   }
 
+  // Generate tracking code if moving to PROCESSING/SHIPPED and lacking one
+  if ((payload.status === "PROCESSING" || payload.status === "SHIPPED") && !current.trackingCode) {
+    const mockTrackingCode = "GHN-" + Math.random().toString(36).substring(2, 11).toUpperCase();
+    await prisma.order.update({
+      where: { id: current.id },
+      data: { trackingCode: mockTrackingCode }
+    });
+  }
+
+  // Generate warranties if moving to COMPLETED and previously not COMPLETED
+  if (payload.status === "COMPLETED" && current.status !== "COMPLETED") {
+    const endDate = new Date();
+    endDate.setFullYear(endDate.getFullYear() + 1); // 1 year warranty default
+
+    for (const item of current.items) {
+      for (let i = 0; i < item.quantity; i++) {
+        // Unique serial for each quantity 
+        const generateSerial = `${item.skuSnapshot}-SN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        
+        await prisma.warrantyItem.create({
+          data: {
+            orderItemId: item.id,
+            serialNumber: generateSerial,
+            endDate
+          }
+        });
+      }
+    }
+  }
+
   const updated = await updateOrderStatus(req.params.id, payload.status);
+
+  // Return full order to show new trackingCode or details
+  const finalOrder = await getOrderById(req.params.id);
 
   res.status(200).json({
     success: true,
-    data: updated
+    data: finalOrder
   });
 });
 
@@ -188,4 +222,61 @@ export const payOrderMock = asyncHandler(async (req: Request, res: Response) => 
     data: paid,
     message: "Payment confirmed (mock)"
   });
+});
+
+export const createVnpayUrl = asyncHandler(async (req: Request, res: Response) => {
+  const order = await getOrderById(req.params.id);
+  if (!order || order.userId !== req.user?.userId) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.paymentStatus === "PAID") {
+    throw new AppError("Order already paid", 400);
+  }
+
+  const ipAddr = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1";
+  const url = generateVnpayUrl(
+    ipAddr as string,
+    order.id,
+    Number(order.totalAmount),
+    `Thanh toan don hang ${order.id}`
+  );
+
+  res.status(200).json({
+    success: true,
+    data: { paymentUrl: url }
+  });
+});
+
+export const vnpayReturn = asyncHandler(async (req: Request, res: Response) => {
+  const vnp_Params = req.query;
+  const isSecure = verifyVnpayReturn(vnp_Params);
+
+  if (isSecure) {
+    const responseCode = vnp_Params["vnp_ResponseCode"];
+    res.redirect(`${process.env.FRONTEND_URL || "http://localhost:5173"}/payment/result?success=${responseCode === "00"}&orderId=${vnp_Params["vnp_TxnRef"]}`);
+  } else {
+    res.redirect(`${process.env.FRONTEND_URL || "http://localhost:5173"}/payment/result?success=false&reason=invalid_signature`);
+  }
+});
+
+export const vnpayIpn = asyncHandler(async (req: Request, res: Response) => {
+  const vnp_Params = req.query;
+  const isSecure = verifyVnpayReturn(vnp_Params);
+
+  if (isSecure) {
+    const orderId = vnp_Params["vnp_TxnRef"] as string;
+    const responseCode = vnp_Params["vnp_ResponseCode"];
+
+    if (responseCode === "00") {
+      const order = await getOrderById(orderId);
+      if (order && order.paymentStatus !== "PAID") {
+        await markOrderPaid(orderId);
+      }
+    }
+    
+    res.status(200).json({ RspCode: "00", Message: "Confirm Success" });
+  } else {
+    res.status(200).json({ RspCode: "97", Message: "Invalid checksum" });
+  }
 });

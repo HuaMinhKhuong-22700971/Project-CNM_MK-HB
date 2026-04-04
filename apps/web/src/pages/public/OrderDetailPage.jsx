@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
@@ -100,7 +100,7 @@ export function OrderDetailPage() {
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
-      <section style={{ padding: "30px 28px", borderRadius: 32, background: "radial-gradient(circle at top right, rgba(198,124,49,0.18), transparent 20%), linear-gradient(135deg, rgba(223,236,229,0.95), rgba(248,243,234,0.95))", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
+      <section style={{ padding: "36px 32px", borderRadius: 24, background: "linear-gradient(135deg, #f8fafc, #f1f5f9)", border: "1px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 20, flexWrap: "wrap", alignItems: "end" }}>
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Chi tiết đơn hàng</div>
@@ -131,14 +131,17 @@ export function OrderDetailPage() {
 
           <div style={{ display: "grid", gap: 12 }}>
             {(order.items || []).map((item) => (
-              <div key={item.id} style={{ display: "grid", gap: 8, padding: 18, borderRadius: 18, background: "#f9fafb", border: "1px solid #e5e7eb" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div key={item.id} style={{ display: "flex", gap: 16, padding: 18, borderRadius: 18, background: "#fff", border: "1px solid #f1f5f9", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                <div style={{ width: 64, height: 64, borderRadius: 12, background: "linear-gradient(135deg, #f8fafc, #fff)", border: "1px solid #e2e8f0", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                </div>
+                <div style={{ flex: 1, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ fontWeight: 700 }}>{item.productName}</div>
-                    <div style={{ fontSize: 14, color: "var(--muted)" }}>SKU: {item.sku || "Không rõ"}</div>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{item.productName}</div>
+                    <div style={{ fontSize: 14, color: "var(--muted)", marginTop: 4 }}>SKU: {item.sku || "Không rõ"}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 700 }}>{formatCurrency(item.lineTotal)} VND</div>
+                    <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(item.lineTotal)} VND</div>
                     <div style={{ fontSize: 14, color: "var(--muted)" }}>{formatCurrency(item.unitPrice)} x {item.quantity}</div>
                   </div>
                 </div>
@@ -155,13 +158,37 @@ export function OrderDetailPage() {
             <InfoRow label="Ghi chú" value={order.note || "Không có ghi chú"} />
           </section>
 
+          {order.trackingCode && (
+            <section style={{ display: "grid", gap: 14, padding: 24, borderRadius: 24, background: "linear-gradient(135deg, #f0fdf4, #dcfce7)", border: "1px solid #bbf7d0", boxShadow: "0 4px 12px rgba(34, 197, 94, 0.1)" }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#22c55e", color: "#fff", display: "grid", placeItems: "center", boxShadow: "0 2px 8px rgba(34, 197, 94, 0.3)" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, color: "#166534", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>Mã vận đơn (Theo dõi hành trình)</div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: "#14532d", letterSpacing: "0.02em" }}>{order.trackingCode}</div>
+                </div>
+              </div>
+              <p style={{ margin: 0, color: "#15803d", fontSize: 14 }}>Đơn hàng đang trên đường giao. Tra cứu mã vận đơn trên trang chủ đối tác để theo dõi lộ trình nhanh nhất.</p>
+            </section>
+          )}
+
           <section style={{ display: "grid", gap: 14, padding: 24, borderRadius: 24, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-            <h2 style={{ margin: 0, fontSize: 24 }}>Thanh toán và vận đơn</h2>
-            <InfoRow label="Tạm tính" value={`${formatCurrency(order.totalAmount)} VND`} />
-            <InfoRow label="Phí vận chuyển" value={`${formatCurrency(order.shippingFee)} VND`} />
-            <InfoRow label="Tổng thanh toán" value={`${formatCurrency(order.finalAmount)} VND`} />
-            <InfoRow label="Tracking code" value={order.shipment?.trackingCode || "Chưa có vận đơn"} />
-            <InfoRow label="Trạng thái vận đơn" value={order.shipment?.status || "Chưa tạo vận đơn"} />
+            <h2 style={{ margin: 0, fontSize: 24 }}>Chi tiết thanh toán</h2>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}>
+                 <span>Tạm tính</span>
+                 <span>{formatCurrency(order.totalAmount)} VND</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}>
+                 <span>Phí dịch vụ & vận chuyển</span>
+                 <span>{formatCurrency(order.shippingFee)} VND</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 22, paddingTop: 16, marginTop: 4, borderTop: "1px dashed #cbd5e1" }}>
+                 <span>Cần thanh toán</span>
+                 <span style={{ color: "var(--primary)" }}>{formatCurrency(order.finalAmount)} VND</span>
+              </div>
+            </div>
           </section>
 
           <section style={{ display: "grid", gap: 12, padding: 24, borderRadius: 24, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>

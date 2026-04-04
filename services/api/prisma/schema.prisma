@@ -117,6 +117,7 @@ model Order {
   paymentMethod   PaymentMethod @default(COD)
   paymentStatus   String        @default("UNPAID")
   shippingAddress String        @db.Text
+  trackingCode    String?
   status          OrderStatus   @default(PENDING)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -137,6 +138,23 @@ model OrderItem {
 
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  
+  warranties   WarrantyItem[]
+}
+
+model WarrantyItem {
+  id           String    @id @default(cuid())
+  orderItemId  String
+  serialNumber String    @unique
+  startDate    DateTime  @default(now())
+  endDate      DateTime
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  orderItem    OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  
+  @@index([orderItemId])
 }
 
 model Ticket {

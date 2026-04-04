@@ -14,3 +14,8 @@ export async function getOrderDetail(orderId) {
   const response = await httpClient.get(`/orders/${orderId}`);
   return response.data;
 }
+
+export async function createVnpayUrl(orderId, payload = {}) {
+  const response = await httpClient.post(`/orders/${orderId}/vnpay-url`, payload);
+  return response.data;
+}

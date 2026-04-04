@@ -1,4 +1,4 @@
-﻿import { Navigate, Link, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Link, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 
@@ -22,9 +22,9 @@ export function TechLayout() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f6fb", color: "#1f2937" }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(139, 92, 246, 0.15), transparent 40%), var(--color-bg)", color: "#1f2937" }}>
       <div style={{ maxWidth: 1360, margin: "0 auto", padding: "28px 24px 40px", display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
-        <aside style={{ position: "sticky", top: 24, display: "grid", gap: 18, padding: 24, borderRadius: 24, background: "#ffffff", border: "1px solid #e5e7eb", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)" }}>
+        <aside style={{ position: "sticky", top: 24, display: "grid", gap: 18, padding: 24, borderRadius: 24, background: "rgba(255, 255, 255, 0.65)", border: "1px solid rgba(255, 255, 255, 0.8)", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.04)", backdropFilter: "blur(24px) saturate(150%)", WebkitBackdropFilter: "blur(24px) saturate(150%)" }}>
           <div style={{ display: "grid", gap: 6 }}>
             <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6b7280" }}>Tech workspace</div>
             <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>Hỗ trợ kỹ thuật</div>
@@ -33,8 +33,8 @@ export function TechLayout() {
             </div>
           </div>
 
-          <div style={{ padding: 16, borderRadius: 18, background: "linear-gradient(135deg, #eff6ff, #dbeafe)", border: "1px solid #bfdbfe", display: "grid", gap: 4 }}>
-            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "#1d4ed8" }}>Đăng nhập với</div>
+          <div style={{ padding: 16, borderRadius: 18, background: "linear-gradient(145deg, rgba(139, 92, 246, 0.1), rgba(37, 99, 235, 0.1))", border: "1px solid rgba(139, 92, 246, 0.15)", display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "#6d28d9" }}>Đăng nhập với</div>
             <div style={{ fontSize: 22, fontWeight: 700 }}>{techName}</div>
             <div style={{ color: "#1e40af" }}>Vai trò: {role}</div>
           </div>
@@ -53,9 +53,10 @@ export function TechLayout() {
                     padding: "14px 16px",
                     borderRadius: 16,
                     textDecoration: "none",
-                    background: isActive ? "#eff6ff" : "#ffffff",
-                    border: isActive ? "1px solid #bfdbfe" : "1px solid #e5e7eb",
-                    color: "#1f2937"
+                    background: isActive ? "rgba(139, 92, 246, 0.1)" : "transparent",
+                    border: isActive ? "1px solid rgba(139, 92, 246, 0.2)" : "1px solid transparent",
+                    color: "#1f2937",
+                    transition: "0.2s ease"
                   }}
                 >
                   <span style={{ fontWeight: 700 }}>{item.label}</span>

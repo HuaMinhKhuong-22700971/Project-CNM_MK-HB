@@ -1,9 +1,8 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CategoryGrid } from "../../components/marketplace/CategoryGrid";
 import { HeroBanner } from "../../components/marketplace/HeroBanner";
 import { ProductSection } from "../../components/marketplace/ProductSection";
-import { ServiceIcons } from "../../components/marketplace/ServiceIcons";
 import { getCategories, getProducts } from "../../services/catalog.service";
 
 function normalizeProductsResponse(data) {
@@ -66,10 +65,11 @@ export function HomePage() {
   }, []);
 
   return (
-    <div className="market-home">
+    <div className="market-home" style={{ padding: "0" }}>
       <HeroBanner />
-      <ServiceIcons />
-      <CategoryGrid categories={categories} />
+      
+      <div className="market-container">
+        <CategoryGrid categories={categories} />
 
       {loading ? (
         <div className="market-panel">
@@ -100,6 +100,7 @@ export function HomePage() {
           products={recommendedProducts}
         />
       ) : null}
+      </div>
     </div>
   );
 }

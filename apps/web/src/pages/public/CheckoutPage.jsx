@@ -1,21 +1,20 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 import { useAuth } from "../../hooks/useAuth";
 import { getCart } from "../../services/cart.service";
-import { createOrder } from "../../services/order.service";
-import { createPayment } from "../../services/payment.service";
+import { createOrder, createVnpayUrl } from "../../services/order.service";
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: "COD", label: "Thanh toán khi nhận hàng" },
-  { value: "VNPAY", label: "Thanh toán online (sandbox / mock VNPAY)" }
+  { value: "VNPAY", label: "Thanh toán online (VNPAY Sandbox)" }
 ];
 
 const inputStyle = {
   padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid rgba(122, 92, 48, 0.18)",
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
   outline: "none",
   width: "100%",
   background: "rgba(255,255,255,0.88)",
@@ -148,13 +147,16 @@ export function CheckoutPage() {
       const order = normalizeOrderResponse(response);
 
       if (String(formValues.paymentMethod).toUpperCase() === "VNPAY") {
-        const paymentResponse = await createPayment({
-          orderId: order.id,
-          paymentMethod: "VNPAY",
-          note: "Created from checkout sandbox flow"
+        const urlResponse = await createVnpayUrl(order.id, {
+          amount: finalAmount
         });
-        const payment = paymentResponse?.data || paymentResponse;
-        navigate(`/payment/result?paymentId=${payment.id}`, { replace: true });
+        const responseData = urlResponse?.data || urlResponse;
+        
+        if (responseData && responseData.paymentUrl) {
+          window.location.href = responseData.paymentUrl;
+        } else {
+          throw new Error("Không thể tạo URL thanh toán VNPay");
+        }
         return;
       }
 
@@ -202,11 +204,11 @@ export function CheckoutPage() {
     <div style={{ display: "grid", gap: 24 }}>
       <section
         style={{
-          padding: "30px 28px",
-          borderRadius: 32,
-          background: "radial-gradient(circle at top right, rgba(198,124,49,0.18), transparent 20%), linear-gradient(135deg, rgba(223,236,229,0.95), rgba(248,243,234,0.95))",
-          border: "1px solid var(--border)",
-          boxShadow: "var(--shadow)"
+          padding: "36px 32px",
+          borderRadius: 24,
+          background: "linear-gradient(135deg, #f8fafc, #f1f5f9)",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.02)"
         }}
       >
         <h1 style={{ margin: "0 0 8px", fontSize: 48, lineHeight: 1, letterSpacing: "-0.06em" }}>Thanh toán</h1>
@@ -244,7 +246,7 @@ export function CheckoutPage() {
               {errors.addressId ? <span style={{ color: "var(--danger)", fontSize: 14 }}>{errors.addressId}</span> : null}
             </div>
 
-            <div style={{ padding: 14, borderRadius: 16, background: "rgba(31, 76, 63, 0.08)", border: "1px solid rgba(31, 76, 63, 0.12)", color: "var(--primary)", fontSize: 14 }}>
+            <div style={{ padding: 16, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 14 }}>
               Gợi ý: hãy dùng địa chỉ có sẵn trong bảng <strong>addresses</strong>, ví dụ mã địa chỉ <strong>1</strong> cho tài khoản demo.
             </div>
           </section>
@@ -252,7 +254,7 @@ export function CheckoutPage() {
           <section style={{ display: "grid", gap: 12 }}>
             <div>
               <h2 style={{ margin: "0 0 6px", fontSize: 28, letterSpacing: "-0.04em" }}>Thanh toán</h2>
-              <p style={{ margin: 0, color: "var(--muted)" }}>Nếu chọn online, hệ thống sẽ chuyển sang màn hình kết quả thanh toán để mô phỏng gateway VNPAY sandbox.</p>
+              <p style={{ margin: 0, color: "var(--muted)" }}>Nếu chọn VNPAY, hệ thống sẽ chuyển hướng sang cổng thanh toán thực tế của VNPay Sandbox.</p>
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>
@@ -283,15 +285,18 @@ export function CheckoutPage() {
             type="submit"
             disabled={isSubmitting}
             style={{
-              padding: 14,
-              borderRadius: 16,
+              padding: "16px",
+              borderRadius: 12,
               border: "none",
-              background: isSubmitting ? "#94a3b8" : "linear-gradient(135deg, var(--primary), #2b6b58)",
+              background: isSubmitting ? "#94a3b8" : "linear-gradient(135deg, #2563eb, #1d4ed8)",
               color: "#ffffff",
-              fontWeight: 800
+              fontSize: 16,
+              fontWeight: 800,
+              boxShadow: "0 4px 14px rgba(37, 99, 235, 0.25)",
+              cursor: "pointer"
             }}
           >
-            {isSubmitting ? "Đang xử lý..." : formValues.paymentMethod === "VNPAY" ? "Tạo đơn và chuyển sang cổng thanh toán mock" : "Xác nhận đặt hàng"}
+            {isSubmitting ? "Đang xử lý..." : formValues.paymentMethod === "VNPAY" ? "Thanh toán qua cổng VNPAY" : "Xác nhận đặt hàng"}
           </button>
         </form>
 
@@ -315,7 +320,7 @@ export function CheckoutPage() {
 
           <div style={{ display: "grid", gap: 12 }}>
             {items.map((item) => (
-              <div key={item.id} style={{ paddingBottom: 12, borderBottom: "1px solid rgba(122, 92, 48, 0.12)", display: "grid", gap: 4 }}>
+              <div key={item.id} style={{ paddingBottom: 16, borderBottom: "1px solid #e2e8f0", display: "grid", gap: 6 }}>
                 <div style={{ fontWeight: 800 }}>{item.product?.name}</div>
                 <div style={{ fontSize: 14, color: "var(--muted)" }}>SKU: {item.variant?.sku}</div>
                 <div style={{ fontSize: 14, color: "var(--muted)" }}>

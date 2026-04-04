@@ -15,7 +15,7 @@ const processes = [
 const children = processes.map((processConfig) =>
   spawn(processConfig.command, processConfig.args, {
     stdio: "inherit",
-    shell: false
+    shell: true
   })
 );
 

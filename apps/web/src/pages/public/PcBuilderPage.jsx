@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -474,35 +474,44 @@ export function PcBuilderPage() {
           {successMessage ? <div className="market-empty" style={{ color: "#166534" }}>{successMessage}</div> : null}
 
           {suggestionResult ? (
-            <section className="market-panel">
-              <div className="market-panel__head">
-                <div>
-                  <div className="market-panel__title">Cấu hình gợi ý</div>
-                  <div className="market-panel__subtitle">{suggestionResult.explanation}</div>
-                </div>
-                <button className="market-btn market-btn--primary" type="button" onClick={handleApplySuggestion} disabled={generalLoading || suggestionLoading}>
-                  Đưa vào cấu hình hiện tại
-                </button>
-              </div>
-              <div className="market-grid-two" style={{ marginBottom: 16 }}>
-                <div className="market-empty" style={{ textAlign: "left" }}>
-                  <strong>Ngân sách:</strong> {formatCurrency(suggestionResult.budget)}đ
-                </div>
-                <div className="market-empty" style={{ textAlign: "left" }}>
-                  <strong>Tổng đề xuất:</strong> {formatCurrency(suggestionResult.totalPrice)}đ
-                </div>
-              </div>
-              <div className="market-product-grid">
-                {suggestionResult.items?.map((item) => (
-                  <div key={`${item.componentType}-${item.variant?.id}`} className="market-build-card">
-                    <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--market-muted)" }}>
-                      {item.componentType}
-                    </div>
-                    <strong>{item.product?.name}</strong>
-                    <span style={{ color: "var(--market-muted)" }}>SKU: {item.variant?.sku || "-"}</span>
-                    <span style={{ fontWeight: 700 }}>{formatCurrency(item.variant?.price)}đ</span>
+            <section style={{ padding: 2, borderRadius: 24, background: "linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899)", boxShadow: "0 10px 30px rgba(139, 92, 246, 0.25)" }}>
+              <div style={{ background: "#fff", borderRadius: 22, overflow: "hidden" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16, padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: 24, display: "flex", alignItems: "center", gap: 8 }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="url(#ai-gradient)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><defs><linearGradient id="ai-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#ec4899"/></linearGradient></defs><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path></svg>
+                      Cấu hình AI Đề xuất
+                    </h2>
+                    <div style={{ margin: "6px 0 0", color: "var(--muted)", maxWidth: 500, lineHeight: 1.5 }}>{suggestionResult.explanation}</div>
                   </div>
-                ))}
+                  <button className="market-btn" type="button" onClick={handleApplySuggestion} disabled={generalLoading || suggestionLoading} style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", color: "#fff", border: "none" }}>
+                    Chép vào cấu hình hiện tại
+                  </button>
+                </div>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "16px 24px", background: "#f8fafc" }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ngân sách dự tính</div>
+                    <div style={{ fontWeight: 800, fontSize: 22 }}>{formatCurrency(suggestionResult.budget)} VND</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tổng tiền linh kiện</div>
+                    <div style={{ fontWeight: 900, fontSize: 22, color: "#8b5cf6" }}>{formatCurrency(suggestionResult.totalPrice)} VND</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16, padding: 24 }}>
+                  {suggestionResult.items?.map((item) => (
+                    <div key={`${item.componentType}-${item.variant?.id}`} style={{ padding: 18, borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(180deg, #fff, #f8fafc)", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "#8b5cf6", fontWeight: 800, marginBottom: 8 }}>
+                        {item.componentType}
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 16 }}>{item.product?.name}</div>
+                      <div style={{ fontSize: 13, color: "var(--muted)", margin: "6px 0" }}>Mã SKU: {item.variant?.sku || "-"}</div>
+                      <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>{formatCurrency(item.variant?.price)}đ</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
           ) : null}

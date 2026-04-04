@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { apiRequest } from "../lib/api";
 import type { ApiEnvelope, CartData } from "../types/api";
@@ -6,7 +6,9 @@ import type { ApiEnvelope, CartData } from "../types/api";
 export function CartPage() {
   const [cart, setCart] = useState<CartData | null>(null);
   const [address, setAddress] = useState("123 Nguyen Trai, District 1, Ho Chi Minh City");
+  const [paymentMethod, setPaymentMethod] = useState("COD");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function loadCart() {
     try {
@@ -23,22 +25,38 @@ export function CartPage() {
   }
 
   async function checkout() {
+    setLoading(true);
     try {
       const response = await apiRequest<ApiEnvelope<{ id: string }>>(
         "/orders/checkout",
         {
           method: "POST",
           body: JSON.stringify({
-            paymentMethod: "COD",
+            paymentMethod: paymentMethod,
             shippingAddress: address
           })
         },
         true
       );
-      alert(`Dat hang thanh cong. Ma don: ${response.data.id}`);
+      
+      const orderId = response.data.id;
+
+      if (paymentMethod === "VNPAY") {
+        const urlResponse = await apiRequest<ApiEnvelope<{ paymentUrl: string }>>(
+          `/orders/${orderId}/vnpay-url`,
+          { method: "POST" },
+          true
+        );
+        window.location.href = urlResponse.data.paymentUrl;
+        return;
+      }
+
+      alert(`Dat hang thanh cong. Ma don: ${orderId}`);
       loadCart();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Checkout failed");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -68,9 +86,20 @@ export function CartPage() {
             onChange={(e) => setAddress(e.target.value)}
             rows={3}
             style={{ width: "100%", marginBottom: 12 }}
+            placeholder="Địa chỉ giao hàng"
           />
-          <button disabled={cart.items.length === 0} onClick={checkout}>
-            Dat hang (COD)
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ marginRight: 16 }}>
+              <input type="radio" value="COD" checked={paymentMethod === "COD"} onChange={(e) => setPaymentMethod(e.target.value)} />
+              Thanh toán khi nhận hàng (COD)
+            </label>
+            <label>
+              <input type="radio" value="VNPAY" checked={paymentMethod === "VNPAY"} onChange={(e) => setPaymentMethod(e.target.value)} />
+              Thanh toán trực tuyến (VNPAY)
+            </label>
+          </div>
+          <button disabled={cart.items.length === 0 || loading} onClick={checkout}>
+            {loading ? "Đang xử lý..." : "Đặt hàng"}
           </button>
         </>
       )}
