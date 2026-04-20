@@ -1,0 +1,377 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id    Int     @id @default(autoincrement())
+  name  String? @unique(map: "name") @db.VarChar(50)
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id              Int               @id @default(autoincrement())
+  email           String?           @unique(map: "email") @db.VarChar(100)
+  password        String?           @db.VarChar(255)
+  fullName        String?           @map("full_name") @db.VarChar(100)
+  roleId          Int?              @map("role_id")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamp(0)
+  status          String?           @default("ACTIVE") @db.VarChar(50)
+  updatedAt       DateTime?         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  phone           String?           @db.VarChar(30)
+  addresses       Address[]
+  ai_chats        ai_chats[]
+  cart            Cart[]
+  pc_builds       PcBuild[]
+  ticket_messages ticket_messages[]
+  assignedTickets Ticket[]          @relation("TicketAssignee")
+  reportedTickets Ticket[]          @relation("TicketReporter")
+  role            Role?             @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
+  warranties      warranties[]
+
+  @@index([roleId], map: "role_id")
+  @@map("users")
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  slug      String?   @db.VarChar(255)
+  logoUrl   String?   @map("logo_url") @db.VarChar(255)
+  status    String?   @default("ACTIVE") @db.VarChar(50)
+  isActive  Boolean?  @default(true) @map("is_active")
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  products  Product[]
+
+  @@map("brands")
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String?   @db.VarChar(100)
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          Int              @id @default(autoincrement())
+  name        String?          @db.VarChar(255)
+  description String?          @db.Text
+  price       Decimal?         @db.Decimal(10, 2)
+  categoryId  Int?             @map("category_id")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamp(0)
+  slug        String?          @db.VarChar(255)
+  brandId     Int?             @map("brand_id")
+  status      String?          @default("ACTIVE") @db.VarChar(50)
+  isActive    Boolean?         @default(true) @map("is_active")
+  updatedAt   DateTime?        @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  skus        ProductSku[]
+  variants    ProductVariant[]
+  brand       Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_products_brand")
+  category    Category?        @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "products_ibfk_1")
+
+  @@index([categoryId], map: "category_id")
+  @@index([brandId], map: "fk_products_brand")
+  @@map("products")
+}
+
+model ProductVariant {
+  id            Int       @id @default(autoincrement())
+  productId     Int       @map("product_id")
+  sku           String    @db.VarChar(255)
+  price         Decimal   @default(0.00) @db.Decimal(12, 2)
+  stockQuantity Int       @default(0) @map("stock_quantity")
+  imageUrl      String?   @map("image_url") @db.VarChar(255)
+  status        String?   @default("ACTIVE") @db.VarChar(50)
+  isActive      Boolean?  @default(true) @map("is_active")
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  product       Product   @relation(fields: [productId], references: [id], onUpdate: Restrict, map: "fk_product_variants_product")
+
+  @@index([productId], map: "fk_product_variants_product")
+  @@map("product_variants")
+}
+
+model ProductSku {
+  id            Int            @id @default(autoincrement())
+  productId     Int?           @map("product_id")
+  price         Decimal?       @db.Decimal(10, 2)
+  stock         Int?
+  sku           String?        @db.VarChar(255)
+  imageUrl      String?        @map("image_url") @db.VarChar(255)
+  status        String?        @default("ACTIVE") @db.VarChar(50)
+  isActive      Boolean?       @default(true) @map("is_active")
+  createdAt     DateTime?      @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt     DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  cartItems     CartItem[]
+  orderItems    OrderItem[]    @relation("OrderItemVariant")
+  pcBuildItems  PcBuildItem[]
+  product       Product?       @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "product_skus_ibfk_1")
+  skuAttributes SkuAttribute[]
+
+  @@index([productId], map: "product_id")
+  @@map("product_skus")
+}
+
+model Attribute {
+  id     Int              @id @default(autoincrement())
+  name   String?          @db.VarChar(100)
+  values AttributeValue[]
+
+  @@map("attributes")
+}
+
+model AttributeValue {
+  id                                                                          Int                 @id @default(autoincrement())
+  attributeId                                                                 Int?                @map("attribute_id")
+  value                                                                       String?             @db.VarChar(100)
+  attribute                                                                   Attribute?          @relation(fields: [attributeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "attribute_values_ibfk_1")
+  compatibility_rules_compatibility_rules_attribute_value_1Toattribute_values CompatibilityRule[] @relation("compatibility_rules_attribute_value_1Toattribute_values")
+  compatibility_rules_compatibility_rules_attribute_value_2Toattribute_values CompatibilityRule[] @relation("compatibility_rules_attribute_value_2Toattribute_values")
+  skuAttributes                                                               SkuAttribute[]
+
+  @@index([attributeId], map: "attribute_id")
+  @@map("attribute_values")
+}
+
+model SkuAttribute {
+  id               Int             @id @default(autoincrement())
+  skuId            Int?            @map("sku_id")
+  attributeValueId Int?            @map("attribute_value_id")
+  sku              ProductSku?     @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "sku_attributes_ibfk_1")
+  attributeValue   AttributeValue? @relation(fields: [attributeValueId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "sku_attributes_ibfk_2")
+
+  @@index([attributeValueId], map: "attribute_value_id")
+  @@index([skuId], map: "sku_id")
+  @@map("sku_attributes")
+}
+
+model CompatibilityRule {
+  id                                                                       Int             @id @default(autoincrement())
+  attributeValue1                                                          Int?            @map("attribute_value_1")
+  attributeValue2                                                          Int?            @map("attribute_value_2")
+  isCompatible                                                             Boolean?        @map("is_compatible")
+  sourceCategoryId                                                         Int?            @map("source_category_id")
+  targetCategoryId                                                         Int?            @map("target_category_id")
+  sourceAttributeKey                                                       String?         @map("source_attribute_key") @db.VarChar(255)
+  targetAttributeKey                                                       String?         @map("target_attribute_key") @db.VarChar(255)
+  operator                                                                 String?         @default("EQ") @db.VarChar(20)
+  description                                                              String?         @db.Text
+  status                                                                   String?         @default("ACTIVE") @db.VarChar(50)
+  isActive                                                                 Boolean?        @default(true) @map("is_active")
+  createdAt                                                                DateTime?       @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt                                                                DateTime?       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  attribute_values_compatibility_rules_attribute_value_1Toattribute_values AttributeValue? @relation("compatibility_rules_attribute_value_1Toattribute_values", fields: [attributeValue1], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "compatibility_rules_ibfk_1")
+  attribute_values_compatibility_rules_attribute_value_2Toattribute_values AttributeValue? @relation("compatibility_rules_attribute_value_2Toattribute_values", fields: [attributeValue2], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "compatibility_rules_ibfk_2")
+
+  @@index([attributeValue1], map: "attribute_value_1")
+  @@index([attributeValue2], map: "attribute_value_2")
+  @@map("compatibility_rules")
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @map("user_id")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  items     CartItem[]
+  user      User       @relation(fields: [userId], references: [id], onUpdate: Restrict, map: "fk_carts_user")
+
+  @@index([userId], map: "fk_carts_user")
+  @@map("carts")
+}
+
+model CartItem {
+  id               Int        @id @default(autoincrement())
+  cartId           Int        @map("cart_id")
+  productVariantId Int        @map("product_variant_id")
+  quantity         Int        @default(1)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  cart             Cart       @relation(fields: [cartId], references: [id], onUpdate: Restrict, map: "fk_cart_items_cart")
+  productVariant   ProductSku @relation(fields: [productVariantId], references: [id], onUpdate: Restrict, map: "fk_cart_items_sku")
+
+  @@index([cartId], map: "fk_cart_items_cart")
+  @@index([productVariantId], map: "fk_cart_items_sku")
+  @@map("cart_items")
+}
+
+model Address {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  fullName    String?  @map("full_name") @db.VarChar(255)
+  phone       String?  @db.VarChar(30)
+  addressLine String?  @map("address_line") @db.VarChar(255)
+  ward        String?  @db.VarChar(255)
+  district    String?  @db.VarChar(255)
+  province    String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user        User     @relation(fields: [userId], references: [id], onUpdate: Restrict, map: "fk_addresses_user")
+
+  @@index([userId], map: "fk_addresses_user")
+  @@map("addresses")
+}
+
+model Order {
+  id              Int          @id @default(autoincrement())
+  userId          Int?         @map("user_id")
+  total_price     Decimal?     @db.Decimal(10, 2)
+  status          String?      @db.VarChar(50)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamp(0)
+  address_id      Int?
+  totalAmount     Decimal?     @map("total_amount") @db.Decimal(12, 2)
+  shippingFee     Decimal?     @default(0.00) @map("shipping_fee") @db.Decimal(12, 2)
+  finalAmount     Decimal?     @map("final_amount") @db.Decimal(12, 2)
+  shippingAddress String?      @map("shipping_address") @db.Text
+  paymentMethod   String?      @default("COD") @map("payment_method") @db.VarChar(50)
+  paymentStatus   String?      @default("UNPAID") @map("payment_status") @db.VarChar(50)
+  note            String?      @db.Text
+  updatedAt       DateTime?    @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  items           OrderItem[]
+  shipments       shipments[]
+  warranties      warranties[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id               Int         @id @default(autoincrement())
+  orderId          Int         @map("order_id")
+  productVariantId Int         @map("product_variant_id")
+  quantity         Int         @default(1)
+  unitPrice        Decimal     @default(0.00) @map("unit_price") @db.Decimal(12, 2)
+  lineTotal        Decimal     @default(0.00) @map("line_total") @db.Decimal(12, 2)
+  productId        Int?        @map("product_id")
+  skuSnapshot      String?     @map("sku_snapshot") @db.VarChar(255)
+  nameSnapshot     String?     @map("name_snapshot") @db.VarChar(255)
+  createdAt        DateTime?   @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt        DateTime?   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  order            Order       @relation(fields: [orderId], references: [id], onUpdate: Restrict, map: "fk_order_items_order")
+  productVariant   ProductSku  @relation("OrderItemVariant", fields: [productVariantId], references: [id], onUpdate: Restrict, map: "fk_order_items_sku")
+  warranties       warranties?
+
+  @@index([orderId], map: "fk_order_items_order")
+  @@index([productVariantId], map: "fk_order_items_sku")
+  @@map("order_items")
+}
+
+model Ticket {
+  id              Int               @id @default(autoincrement())
+  userId          Int               @map("user_id")
+  title           String            @db.VarChar(255)
+  description     String            @db.Text
+  status          String            @default("OPEN") @db.VarChar(50)
+  priority        String            @default("MEDIUM") @db.VarChar(50)
+  assignedToId    Int?              @map("assigned_to_id")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  ticket_messages ticket_messages[]
+  assignee        User?             @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_tickets_assignee")
+  reporter        User              @relation("TicketReporter", fields: [userId], references: [id], onUpdate: Restrict, map: "fk_tickets_user")
+
+  @@index([assignedToId, status], map: "idx_tickets_assigned_status")
+  @@index([userId, status], map: "idx_tickets_user_status")
+  @@map("tickets")
+}
+
+model PcBuild {
+  id         Int           @id @default(autoincrement())
+  userId     Int?          @map("user_id")
+  name       String?       @db.VarChar(100)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt  DateTime?     @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  status     String?       @default("DRAFT") @db.VarChar(50)
+  isSaved    Boolean?      @default(false) @map("is_saved")
+  totalPrice Decimal?      @default(0.00) @map("total_price") @db.Decimal(12, 2)
+  items      PcBuildItem[]
+  users      User?         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "pc_builds_ibfk_1")
+
+  @@index([userId], map: "user_id")
+  @@map("pc_builds")
+}
+
+model PcBuildItem {
+  id            Int         @id @default(autoincrement())
+  buildId       Int?        @map("build_id")
+  skuId         Int?        @map("sku_id")
+  componentType String?     @map("component_type") @db.VarChar(50)
+  build         PcBuild?    @relation(fields: [buildId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "pc_build_items_ibfk_1")
+  sku           ProductSku? @relation(fields: [skuId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "pc_build_items_ibfk_2")
+
+  @@index([buildId], map: "build_id")
+  @@index([skuId], map: "sku_id")
+  @@map("pc_build_items")
+}
+
+model ai_chats {
+  id          Int           @id @default(autoincrement())
+  user_id     Int?
+  created_at  DateTime      @default(now()) @db.Timestamp(0)
+  users       User?         @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ai_chats_ibfk_1")
+  ai_messages ai_messages[]
+
+  @@index([user_id], map: "user_id")
+}
+
+model ai_messages {
+  id         Int       @id @default(autoincrement())
+  chat_id    Int?
+  sender     String?   @db.VarChar(20)
+  message    String?   @db.Text
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  ai_chats   ai_chats? @relation(fields: [chat_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ai_messages_ibfk_1")
+
+  @@index([chat_id], map: "chat_id")
+}
+
+model shipments {
+  id            Int     @id @default(autoincrement())
+  order_id      Int?
+  status        String? @db.VarChar(50)
+  tracking_code String? @db.VarChar(100)
+  orders        Order?  @relation(fields: [order_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "shipments_ibfk_1")
+
+  @@index([order_id], map: "order_id")
+}
+
+model ticket_messages {
+  id         Int      @id @default(autoincrement())
+  ticket_id  Int
+  user_id    Int
+  message    String   @db.Text
+  created_at DateTime @default(now()) @db.Timestamp(0)
+  updated_at DateTime @default(now()) @db.Timestamp(0)
+  tickets    Ticket   @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_ticket_messages_ticket")
+  users      User     @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_ticket_messages_user")
+
+  @@index([user_id], map: "fk_ticket_messages_user")
+  @@index([ticket_id, created_at], map: "idx_ticket_messages_ticket_created")
+}
+
+model warranties {
+  id            Int        @id @default(autoincrement())
+  user_id       Int
+  order_id      Int?
+  order_item_id Int?       @unique(map: "uq_warranty_order_item")
+  sku_id        Int?
+  warranty_code String     @unique(map: "uq_warranty_code") @db.VarChar(100)
+  status        String     @default("ACTIVE") @db.VarChar(50)
+  note          String?    @db.VarChar(255)
+  activated_at  DateTime?  @db.DateTime(0)
+  expires_at    DateTime?  @db.DateTime(0)
+  created_at    DateTime   @default(now()) @db.Timestamp(0)
+  orders        Order?     @relation(fields: [order_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_warranties_order")
+  order_items   OrderItem? @relation(fields: [order_item_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_warranties_order_item")
+  users         User       @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_warranties_user")
+
+  @@index([order_id], map: "fk_warranties_order")
+  @@index([user_id], map: "fk_warranties_user")
+}
