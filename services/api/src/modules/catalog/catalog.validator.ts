@@ -4,6 +4,7 @@ export const listProductsQuerySchema = z
   .object({
     search: z.string().trim().min(1).optional(),
     category: z.string().trim().min(1).optional(),
+    category_id: z.coerce.number().int().positive().optional(),
     minPrice: z.coerce.number().nonnegative().optional(),
     maxPrice: z.coerce.number().nonnegative().optional(),
     isActive: z
@@ -12,7 +13,7 @@ export const listProductsQuerySchema = z
       .optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(12),
-    sortBy: z.enum(["createdAt", "price", "name"]).default("createdAt"),
+    sortBy: z.enum(["created_at", "price", "name"]).default("created_at"),
     sortOrder: z.enum(["asc", "desc"]).default("desc")
   })
   .refine(

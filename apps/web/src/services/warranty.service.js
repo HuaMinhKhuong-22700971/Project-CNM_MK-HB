@@ -1,4 +1,4 @@
-﻿import { httpClient } from "./http";
+import { httpClient } from "./http";
 
 export async function getEligibleWarrantyItems() {
   const response = await httpClient.get("/warranties/eligible");
@@ -12,5 +12,10 @@ export async function getMyWarranties(params = {}) {
 
 export async function activateWarranty(payload) {
   const response = await httpClient.post("/warranties/activate", payload);
+  return response.data;
+}
+
+export async function lookupWarranty(code) {
+  const response = await httpClient.get(`/warranties/lookup/${code}`);
   return response.data;
 }

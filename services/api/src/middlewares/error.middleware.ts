@@ -34,7 +34,7 @@ export function errorHandler(
     }
   }
 
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  const statusCode = err instanceof AppError ? err.statusCode : ((err as any).statusCode || 500);
 
   if (statusCode === 500) {
     console.error(err);

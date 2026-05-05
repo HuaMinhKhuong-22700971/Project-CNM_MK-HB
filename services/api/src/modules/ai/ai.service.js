@@ -392,22 +392,20 @@ async function createResponsesRequest(instructions, userInput) {
     throw createError("OPENAI_API_KEY is missing", 500);
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.openaiApiKey}`
     },
     body: JSON.stringify({
-      model: env.openaiModel,
-      reasoning: { effort: "low" },
-      instructions,
-      input: [
-        {
-          role: "user",
-          content: userInput
-        }
-      ]
+      model: env.openaiModel || "gpt-4o-mini",
+      messages: [
+        { role: "system", content: instructions },
+        { role: "user", content: userInput }
+      ],
+      temperature: 0.7,
+      max_tokens: 1024
     })
   });
 
@@ -418,7 +416,13 @@ async function createResponsesRequest(instructions, userInput) {
     throw createError(apiMessage, response.status || 500);
   }
 
-  return data;
+  // Normalize response to expose output_text like the old Responses API
+  const outputText = data.choices?.[0]?.message?.content || "";
+  return {
+    model: data.model,
+    output_text: outputText,
+    usage: data.usage || null
+  };
 }
 
 function parseJsonText(text) {
@@ -460,15 +464,45 @@ async function askTechnicalAdvisor(payload = {}) {
     throw createError("message is required", 400);
   }
 
-  const data = await createResponsesRequest(
-    AI_SYSTEM_PROMPT,
-    buildUserInput(message, payload.context)
-  );
+  // Try to use real OpenAI API if key is present
+  if (env.openaiApiKey) {
+    try {
+      const data = await createResponsesRequest(
+        AI_SYSTEM_PROMPT,
+        buildUserInput(message, payload.context)
+      );
+      return {
+        model: data.model || env.openaiModel,
+        reply: data.output_text || "",
+        usage: data.usage || null
+      };
+    } catch (apiError) {
+      // Fall through to mock if quota exceeded or any API issue
+      console.warn("[AI] OpenAI API error, falling back to mock:", apiError.message || apiError);
+    }
+  }
+
+  // Smart mock responses based on keywords in the message
+  const lowerMsg = message.toLowerCase();
+  let reply;
+
+  if (lowerMsg.includes("gaming") || lowerMsg.includes("game")) {
+    reply = `Gợi ý cấu hình PC Gaming theo ngân sách:\n\n**Tầm trung 15-20 triệu:**\n• CPU: AMD Ryzen 5 5600X (socket AM4)\n• Mainboard: GIGABYTE B550 AORUS Elite\n• RAM: 16GB DDR4 3200MHz (Corsair Vengeance)\n• GPU: RTX 3060 12GB — chơi mượt 1080p Ultra\n• SSD: Samsung 970 Evo Plus 500GB NVMe\n• PSU: Seasonic 650W 80+ Gold\n• Case: Cooler Master NR600\n\n💰 Tổng ước tính: ~17-19 triệu VND\n\nCấu hình này handle được hầu hết game AAA ở 1080p/High settings!`;
+  } else if (lowerMsg.includes("lập trình") || lowerMsg.includes("code") || lowerMsg.includes("programm")) {
+    reply = `Cấu hình PC cho lập trình viên (15 triệu):\n\n• **CPU**: Intel Core i5-12400F — đa luồng tốt cho build\n• **Mainboard**: MSI PRO B660M-A\n• **RAM**: 32GB DDR4 3200MHz ⭐ ưu tiên RAM cho dev\n• **SSD**: 1TB NVMe — cài nhiều IDE, Docker, VM\n• **GPU**: GTX 1650 — đủ dùng, không cần mạnh\n• **Màn hình**: 24" IPS 1080p — hiển thị code rõ ràng\n\n💡 Lý do chọn 32GB RAM: Chạy đồng thời VS Code + Docker + Browser + VM không bị lag!`;
+  } else if (lowerMsg.includes("cpu") || lowerMsg.includes("intel") || lowerMsg.includes("amd")) {
+    reply = `So sánh Intel vs AMD (2024):\n\n**Intel Core i5/i7 thế hệ 12-14:**\n• ✅ Single-core mạnh hơn → game FPS cao hơn\n• ✅ Ổn định, ít lỗi driver\n• ❌ Tiêu thụ điện nhiều hơn\n\n**AMD Ryzen 5/7 5000-7000:**\n• ✅ Đa luồng tốt → xuất video, AI, code nhanh hơn\n• ✅ Tiết kiệm điện, ít tỏa nhiệt\n• ✅ Giá thường rẻ hơn cùng tier\n• ❌ Single-core kém Intel nhẹ\n\n**Kết luận**: Gaming → Intel; Làm việc đa nhiệm → AMD`;
+  } else if (lowerMsg.includes("ram")) {
+    reply = `Tư vấn chọn RAM:\n\n• **8GB**: Chỉ đủ cho văn phòng nhẹ, web\n• **16GB**: ✅ Chuẩn gaming + lập trình cơ bản\n• **32GB**: ✅ Lập trình chuyên nghiệp, đồ họa, AI\n• **64GB+**: Chuyên nghiệp cao (video 4K, server ảo)\n\n**Tốc độ RAM:**\n• DDR4 3200MHz: Phổ thông, giá tốt\n• DDR5 5600MHz: Hiệu năng cao hơn ~10-15%, giá đắt hơn\n\n**Lưu ý kênh đôi**: 2 thanh 8GB tốt hơn 1 thanh 16GB!`;
+  } else {
+    reply = `Cảm ơn bạn đã hỏi! Tôi là AI Tư Vấn PC của PC Mall.\n\nĐể tư vấn chính xác nhất, bạn cho tôi biết:\n1. 💰 **Ngân sách** của bạn là bao nhiêu?\n2. 🎯 **Mục đích chính**: Gaming / Lập trình / Đồ họa / Văn phòng?\n3. 🔧 Bạn đã **có linh kiện nào** chưa (mainboard, màn hình...)?\n\nVới thông tin này tôi sẽ gợi ý cấu hình tối ưu và phù hợp nhất cho bạn!`;
+  }
 
   return {
-    model: data.model || env.openaiModel,
-    reply: data.output_text || "",
-    usage: data.usage || null
+    model: "smart-mock",
+    reply,
+    usage: null,
+    isMock: true
   };
 }
 
@@ -508,5 +542,6 @@ module.exports = {
   askTechnicalAdvisor,
   askBuildAdvisor
 };
+
 
 

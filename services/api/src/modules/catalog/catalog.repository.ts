@@ -3,46 +3,44 @@ import { prisma } from "../../config/prisma";
 type ProductListParams = {
   search?: string;
   categorySlug?: string;
+  categoryId?: number;
   minPrice?: number;
   maxPrice?: number;
   isActive?: boolean;
   page: number;
   limit: number;
-  sortBy: "createdAt" | "price" | "name";
+  sortBy: "created_at" | "price" | "name";
   sortOrder: "asc" | "desc";
 };
 
 export function listCategories() {
   return prisma.category.findMany({
-    where: { isActive: true },
     orderBy: { name: "asc" }
   });
 }
 
 export function createCategory(data: {
   name: string;
-  slug: string;
   description?: string;
-  isActive?: boolean;
+  is_active?: boolean;
 }) {
   return prisma.category.create({ data });
 }
 
 export async function listProducts(params: ProductListParams) {
-  const { search, categorySlug, minPrice, maxPrice, isActive, page, limit, sortBy, sortOrder } = params;
+  const { search, categorySlug, categoryId, minPrice, maxPrice, isActive, page, limit, sortBy, sortOrder } = params;
 
-  const where = {
-    ...(typeof isActive === "boolean" ? { isActive } : {}),
+  const where: any = {
+    ...(typeof isActive === "boolean" ? { is_active: isActive } : {}),
     ...(search
       ? {
           OR: [
             { name: { contains: search } },
-            { sku: { contains: search } },
             { description: { contains: search } }
           ]
         }
       : {}),
-    ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+    ...(categoryId ? { category_id: categoryId } : {}),
     ...(typeof minPrice === "number" || typeof maxPrice === "number"
       ? {
           price: {
@@ -57,13 +55,10 @@ export async function listProducts(params: ProductListParams) {
     prisma.product.findMany({
       where,
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true
-          }
-        }
+        Category: true,
+        Brand: true,
+        ProductSku: { take: 1 },
+        ProductVariant: { take: 1 }
       },
       orderBy: {
         [sortBy]: sortOrder
@@ -77,69 +72,119 @@ export async function listProducts(params: ProductListParams) {
   return { items, total };
 }
 
-export function getProductById(id: string) {
+export async function getProductById(id: string | number) {
+  let numericId: number;
+  
+  if (typeof id === "string") {
+    numericId = parseInt(id, 10);
+    if (isNaN(numericId)) return null;
+  } else {
+    numericId = Number(id);
+  }
+
   return prisma.product.findUnique({
-    where: { id },
+    where: { id: numericId },
     include: {
-      category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true
+      Category: true,
+      Brand: true,
+      ProductSku: {
+        include: {
+          SkuAttribute: {
+            include: {
+              AttributeValue: {
+                include: {
+                  Attribute: true
+                }
+              }
+            }
+          }
+        }
+      },
+      ProductVariant: true
+    }
+  });
+}
+
+export function createProduct(data: {
+  category_id?: number;
+  name: string;
+  description?: string;
+  price?: number;
+  is_active?: boolean;
+}) {
+  return prisma.product.create({ data: data as any });
+}
+
+export function updateProduct(
+  id: string | number,
+  data: Partial<{
+    category_id: number;
+    name: string;
+    description: string;
+    price: number;
+    is_active: boolean;
+  }>
+) {
+  const finalId = typeof id === "string" ? parseInt(id, 10) : Number(id);
+  return prisma.product.update({
+    where: { id: finalId },
+    data: data as any
+  });
+}
+
+export function getCategoryById(id: string | number) {
+  const finalId = typeof id === "string" ? parseInt(id, 10) : Number(id);
+  if (isNaN(finalId)) return null;
+
+  return prisma.category.findUnique({
+    where: { id: finalId }
+  });
+}
+
+export function getCategoryBySlug(slug: string) {
+  return prisma.category.findFirst({ where: { name: slug } }); // Category has no slug, using name lookup
+}
+
+export function getCategoryByName(name: string) {
+  return prisma.category.findFirst({ where: { name } });
+}
+
+export function getProductBySku(sku: string) {
+  // Search by SKU in ProductVariant or ProductSku tables
+  return prisma.productVariant.findFirst({ 
+    where: { sku },
+    include: {
+      Product: {
+        include: {
+          Category: true,
+          ProductSku: true,
+          ProductVariant: true
         }
       }
     }
   });
 }
 
-export function createProduct(data: {
-  categoryId: string;
-  sku: string;
-  name: string;
-  slug: string;
-  description?: string;
-  price: number;
-  stock: number;
-  isActive?: boolean;
-}) {
-  return prisma.product.create({ data });
-}
-
-export function updateProduct(
-  id: string,
-  data: Partial<{
-    categoryId: string;
-    sku: string;
-    name: string;
-    slug: string;
-    description: string;
-    price: number;
-    stock: number;
-    isActive: boolean;
-  }>
-) {
-  return prisma.product.update({
-    where: { id },
-    data
-  });
-}
-
-export function getCategoryById(id: string) {
-  return prisma.category.findUnique({ where: { id } });
-}
-
-export function getCategoryBySlug(slug: string) {
-  return prisma.category.findUnique({ where: { slug } });
-}
-
-export function getCategoryByName(name: string) {
-  return prisma.category.findUnique({ where: { name } });
-}
-
-export function getProductBySku(sku: string) {
-  return prisma.product.findUnique({ where: { sku } });
-}
-
 export function getProductBySlug(slug: string) {
-  return prisma.product.findUnique({ where: { slug } });
+  return prisma.product.findFirst({ 
+    where: { slug },
+    include: {
+      Category: true,
+      Brand: true,
+      ProductSku: {
+        include: {
+          SkuAttribute: {
+            include: {
+              AttributeValue: {
+                include: {
+                  Attribute: true
+                }
+              }
+            }
+          }
+        }
+      },
+      ProductVariant: true
+    }
+  });
 }

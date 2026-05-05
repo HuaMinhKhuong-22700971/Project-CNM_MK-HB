@@ -2,24 +2,18 @@ import { prisma } from "../../config/prisma";
 
 export function getCategoriesWithProducts() {
   return prisma.category.findMany({
-    where: { isActive: true },
     orderBy: { name: "asc" },
     include: {
-      products: {
-        where: { isActive: true },
+      Product: {
+        where: { is_active: true },
         select: {
           id: true,
-          sku: true,
           name: true,
-          slug: true,
           price: true,
-          stock: true,
-          categoryId: true,
-          attributes: {
-            select: {
-              key: true,
-              value: true
-            }
+          category_id: true,
+          ProductSku: {
+            take: 1,
+            select: { id: true, sku: true, price: true, stock: true, image_url: true }
           }
         },
         orderBy: { name: "asc" }
@@ -28,76 +22,75 @@ export function getCategoriesWithProducts() {
   });
 }
 
-export function getProductsForCheck(productIds: string[]) {
+export function getProductsForCheck(productIds: (string | number)[]) {
+  const ids = productIds.map((id) => (typeof id === "string" ? parseInt(id, 10) : id));
   return prisma.product.findMany({
     where: {
-      id: { in: productIds },
-      isActive: true
+      id: { in: ids },
+      is_active: true
     },
     include: {
-      category: {
+      Category: {
         select: {
           id: true,
-          name: true,
-          slug: true
-        }
-      },
-      attributes: {
-        select: {
-          key: true,
-          value: true
+          name: true
         }
       }
     }
   });
 }
 
-export function getActiveRulesByCategories(categoryIds: string[]) {
+export function getActiveRulesByCategories(categoryIds: (string | number)[]) {
+  const ids = categoryIds.map((id) => (typeof id === "string" ? parseInt(id, 10) : id));
   return prisma.compatibilityRule.findMany({
     where: {
-      isActive: true,
-      sourceCategoryId: { in: categoryIds },
-      targetCategoryId: { in: categoryIds }
+      is_active: true,
+      source_category_id: { in: ids },
+      target_category_id: { in: ids }
     },
-    include: {
-      sourceCategory: { select: { id: true, name: true, slug: true } },
-      targetCategory: { select: { id: true, name: true, slug: true } }
-    },
-    orderBy: [{ sourceCategoryId: "asc" }, { targetCategoryId: "asc" }]
+    orderBy: [{ source_category_id: "asc" }, { target_category_id: "asc" }]
   });
 }
 
 export function listCompatibilityRules() {
   return prisma.compatibilityRule.findMany({
-    include: {
-      sourceCategory: { select: { id: true, name: true, slug: true } },
-      targetCategory: { select: { id: true, name: true, slug: true } }
-    },
-    orderBy: { createdAt: "desc" }
+    orderBy: { created_at: "desc" }
   });
 }
 
-export function findCompatibilityRuleById(id: string) {
-  return prisma.compatibilityRule.findUnique({ where: { id } });
+export function findCompatibilityRuleById(id: string | number) {
+  return prisma.compatibilityRule.findUnique({
+    where: { id: typeof id === "string" ? parseInt(id, 10) : id }
+  });
 }
 
 export function createCompatibilityRule(data: {
-  sourceCategoryId: string;
-  targetCategoryId: string;
+  sourceCategoryId: string | number;
+  targetCategoryId: string | number;
   sourceAttributeKey: string;
   targetAttributeKey: string;
   operator: "EQ" | "NEQ";
   description?: string;
   isActive?: boolean;
 }) {
-  return prisma.compatibilityRule.create({ data });
+  return prisma.compatibilityRule.create({
+    data: {
+      source_category_id: typeof data.sourceCategoryId === "string" ? parseInt(data.sourceCategoryId, 10) : data.sourceCategoryId,
+      target_category_id: typeof data.targetCategoryId === "string" ? parseInt(data.targetCategoryId, 10) : data.targetCategoryId,
+      source_attribute_key: data.sourceAttributeKey,
+      target_attribute_key: data.targetAttributeKey,
+      operator: data.operator,
+      description: data.description,
+      is_active: data.isActive ?? true
+    }
+  });
 }
 
 export function updateCompatibilityRule(
-  id: string,
+  id: string | number,
   data: Partial<{
-    sourceCategoryId: string;
-    targetCategoryId: string;
+    sourceCategoryId: string | number;
+    targetCategoryId: string | number;
     sourceAttributeKey: string;
     targetAttributeKey: string;
     operator: "EQ" | "NEQ";
@@ -105,8 +98,17 @@ export function updateCompatibilityRule(
     isActive: boolean;
   }>
 ) {
+  const finalId = typeof id === "string" ? parseInt(id, 10) : id;
   return prisma.compatibilityRule.update({
-    where: { id },
-    data
+    where: { id: finalId },
+    data: {
+      ...(data.sourceCategoryId !== undefined ? { source_category_id: Number(data.sourceCategoryId) } : {}),
+      ...(data.targetCategoryId !== undefined ? { target_category_id: Number(data.targetCategoryId) } : {}),
+      ...(data.sourceAttributeKey !== undefined ? { source_attribute_key: data.sourceAttributeKey } : {}),
+      ...(data.targetAttributeKey !== undefined ? { target_attribute_key: data.targetAttributeKey } : {}),
+      ...(data.operator !== undefined ? { operator: data.operator } : {}),
+      ...(data.description !== undefined ? { description: data.description } : {}),
+      ...(data.isActive !== undefined ? { is_active: data.isActive } : {})
+    }
   });
 }

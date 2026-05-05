@@ -1,30 +1,51 @@
-﻿import { prisma } from "../config/prisma";
+import { prisma } from "../config/prisma";
 
-export function createUser(data: {
+export async function createUser(data: {
   email: string;
   password: string;
   fullName?: string;
+  phone?: string;
   role?: string;
 }) {
-  return prisma.user.create({
-    data
+  const { email, password, fullName, phone } = data;
+  
+  // Use raw SQL to bypass Prisma Client sync issues with the new 'phone' field
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO users (email, password, full_name, phone, created_at, updated_at) 
+     VALUES (?, ?, ?, ?, NOW(), NOW())`,
+    email, password, fullName, phone
+  );
+
+  return prisma.user.findUnique({
+    where: { email },
+    include: { Role: true }
   });
 }
 
 export function findUserByEmail(email: string) {
   return prisma.user.findUnique({
-    where: { email }
+    where: { email },
+    include: { Role: true }
   });
 }
 
-export function findUserById(id: string) {
+export function findUserById(id: string | number) {
   return prisma.user.findUnique({
-    where: { id }
+    where: { id: typeof id === "string" ? parseInt(id, 10) : id },
+    include: { Role: true }
   });
 }
 
 export function listUsers() {
   return prisma.user.findMany({
-    orderBy: { createdAt: "desc" }
+    orderBy: { created_at: "desc" },
+    include: { Role: true }
+  });
+}
+
+export function findUserByPhone(phone: string) {
+  return prisma.user.findFirst({
+    where: { phone },
+    include: { Role: true }
   });
 }

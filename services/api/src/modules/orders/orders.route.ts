@@ -11,7 +11,9 @@ import {
   payOrderMock,
   createVnpayUrl,
   vnpayReturn,
-  vnpayIpn
+  vnpayIpn,
+  cancelMyOrder,
+  confirmMockPayment
 } from "./orders.controller";
 
 export const ordersRouter = Router();
@@ -25,7 +27,10 @@ ordersRouter.post("/checkout", checkout);
 ordersRouter.get("/my", getMyOrders);
 ordersRouter.get("/:id", getOrderDetail);
 ordersRouter.post("/:id/vnpay-url", createVnpayUrl);
+ordersRouter.post("/:id/mock-pay", confirmMockPayment);
+ordersRouter.post("/:id/cancel", cancelMyOrder);
 
 ordersRouter.get("/", authorize([ROLES.ADMIN, ROLES.SALES]), getAllOrders);
 ordersRouter.patch("/:id/status", authorize([ROLES.ADMIN, ROLES.SALES]), patchOrderStatus);
 ordersRouter.post("/:id/pay", authorize([ROLES.ADMIN, ROLES.SALES]), payOrderMock);
+

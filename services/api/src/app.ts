@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -15,7 +15,6 @@ export function createApp() {
   app.use(cors({ origin: env.frontendUrl, credentials: true }));
   app.use(morgan("dev"));
   app.use(express.json());
-
   app.use("/api", apiRouter);
   app.use(notFoundHandler);
   app.use(errorHandler);

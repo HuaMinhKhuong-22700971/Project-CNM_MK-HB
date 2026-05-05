@@ -16,20 +16,13 @@ export const getUsers = asyncHandler(async (_req: Request, res: Response) => {
 
   res.status(200).json({
     success: true,
-    data: users.map((u: {
-      id: string;
-      email: string;
-      fullName: string | null;
-      role: string;
-      createdAt: Date;
-      updatedAt: Date;
-    }) => ({
-      id: u.id,
-      email: u.email,
-      fullName: u.fullName,
-      role: u.role,
-      createdAt: u.createdAt,
-      updatedAt: u.updatedAt
+    data: users.map((u) => ({
+      id: String(u.id),
+      email: u.email || "",
+      fullName: u.full_name,
+      role: (u as any).Role?.name || "USER",
+      createdAt: u.created_at,
+      updatedAt: u.updated_at
     }))
   });
 });
@@ -46,10 +39,10 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     data: {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
-      role: user.role,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      fullName: user.full_name,
+      role: (user as any).Role?.name || "USER",
+      createdAt: user.created_at,
+      updatedAt: user.updated_at
     }
   });
 });
@@ -69,15 +62,19 @@ export const createUserByAdmin = asyncHandler(async (req: Request, res: Response
     role: payload.role
   });
 
+  if (!newUser) {
+    throw new AppError("Failed to create user", 500);
+  }
+
   res.status(201).json({
     success: true,
     data: {
       id: newUser.id,
       email: newUser.email,
-      fullName: newUser.fullName,
-      role: newUser.role,
-      createdAt: newUser.createdAt,
-      updatedAt: newUser.updatedAt
+      fullName: newUser.full_name,
+      role: (newUser as any).Role?.name || "USER",
+      createdAt: newUser.created_at,
+      updatedAt: newUser.updated_at
     }
   });
 });

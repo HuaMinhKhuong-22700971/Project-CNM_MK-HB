@@ -37,7 +37,7 @@ async function verifyToken(req, _res, next) {
     }
 
     const decoded = jwt.verify(token, env.jwtAccessSecret);
-    const userId = decoded.sub;
+    const userId = decoded.sub || decoded.userId;
 
     if (!userId) {
       return next(createError("Unauthorized: invalid access token", 401));

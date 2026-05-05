@@ -11,7 +11,10 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
   JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
   JWT_ACCESS_EXPIRES_IN: z.string().min(1).default("15m"),
-  JWT_REFRESH_EXPIRES_IN: z.string().min(1).default("7d")
+  JWT_REFRESH_EXPIRES_IN: z.string().min(1).default("7d"),
+  VNPAY_TMN_CODE: z.string().optional(),
+  VNPAY_HASH_SECRET: z.string().optional(),
+  VNPAY_URL: z.string().optional()
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -28,5 +31,8 @@ export const env = {
   jwtAccessSecret: parsedEnv.data.JWT_ACCESS_SECRET,
   jwtRefreshSecret: parsedEnv.data.JWT_REFRESH_SECRET,
   jwtAccessExpiresIn: parsedEnv.data.JWT_ACCESS_EXPIRES_IN,
-  jwtRefreshExpiresIn: parsedEnv.data.JWT_REFRESH_EXPIRES_IN
+  jwtRefreshExpiresIn: parsedEnv.data.JWT_REFRESH_EXPIRES_IN,
+  vnpayTmnCode: parsedEnv.data.VNPAY_TMN_CODE,
+  vnpayHashSecret: parsedEnv.data.VNPAY_HASH_SECRET,
+  vnpayUrl: parsedEnv.data.VNPAY_URL
 };

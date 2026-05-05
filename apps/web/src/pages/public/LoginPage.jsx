@@ -1,5 +1,5 @@
-﻿import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 
 import { PageCard } from "../../components/common/PageCard";
@@ -35,7 +35,11 @@ function validateForm(values) {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+  
+  const isExpired = useMemo(() => new URLSearchParams(location.search).get("expired") === "true", [location.search]);
+
   const [formValues, setFormValues] = useState({
     email: "",
     password: ""
@@ -96,6 +100,11 @@ export function LoginPage() {
     <div style={{ maxWidth: 560, margin: "36px auto" }}>
       <PageCard title="Đăng nhập" description="Đăng nhập để mua hàng, theo dõi đơn hàng và tiếp tục các cấu hình đang lưu.">
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>
+          {isExpired && (
+            <div style={{ padding: '16px 20px', borderRadius: 16, background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 20 }}>⏳</span> Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.
+            </div>
+          )}
           <div style={{ display: "grid", gap: 8 }}>
             <label htmlFor="email" style={{ fontWeight: 700 }}>Email</label>
             <input

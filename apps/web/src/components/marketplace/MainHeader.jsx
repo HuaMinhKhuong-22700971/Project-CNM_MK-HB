@@ -10,6 +10,7 @@ export function MainHeader() {
   const navLinks = [
     { href: "/pc-builder", label: "Lắp ráp PC", icon: "🔧" },
     { href: "/products", label: "Linh kiện PC", icon: "💻" },
+    { href: "/ai-chat", label: "AI Tư Vấn", icon: "🤖" },
     { href: "/warranties", label: "Bảo hành", icon: "🛡️" },
   ];
 

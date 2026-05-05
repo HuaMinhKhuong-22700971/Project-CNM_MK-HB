@@ -1,4 +1,4 @@
-﻿import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
 import { env } from "../config/env";
@@ -8,6 +8,11 @@ import type { Role } from "../constants/roles";
 
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
+
+  // Public route exemptions
+  if (req.path.includes("/warranties/lookup/") || req.path.includes("/ai-advisor/")) {
+    return next();
+  }
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return next(new AppError("Unauthorized", 401));

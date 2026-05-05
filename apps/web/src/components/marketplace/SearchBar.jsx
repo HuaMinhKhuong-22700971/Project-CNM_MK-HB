@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export function SearchBar() {
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
 
   return (
     <form
       className="market-search"
       onSubmit={(e) => {
         e.preventDefault();
-        navigate("/products");
+        if (query.trim()) {
+          navigate(`/products?search=${encodeURIComponent(query.trim())}`);
+        }
       }}
       style={{
         display: "flex",
@@ -23,6 +27,8 @@ export function SearchBar() {
     >
       <input
         placeholder="Tìm kiếm linh kiện..."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
         style={{
           flex: 1,
           background: "transparent",

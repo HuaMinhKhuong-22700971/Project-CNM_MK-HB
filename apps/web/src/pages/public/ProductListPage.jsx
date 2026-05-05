@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 import { ProductCard } from "../../components/common/ProductCard";
@@ -51,10 +52,15 @@ function normalizeFilterOptions(data) {
 }
 
 export function ProductListPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSearch = searchParams.get("search") || "";
+  const initialCategoryId = searchParams.get("category_id") || "";
+  const initialBrandId = searchParams.get("brand_id") || "";
+
   const [filters, setFilters] = useState({
-    keyword: "",
-    category_id: "",
-    brand_id: "",
+    search: initialSearch,
+    category_id: initialCategoryId,
+    brand_id: initialBrandId,
     min_price: "",
     max_price: "",
     attribute_value_ids: [],
@@ -72,7 +78,7 @@ export function ProductListPage() {
   const hasProducts = products.length > 0;
 
   const queryParams = useMemo(() => ({
-    keyword: filters.keyword || undefined,
+    search: filters.search || undefined,
     category_id: filters.category_id || undefined,
     brand_id: filters.brand_id || undefined,
     min_price: filters.min_price || undefined,
@@ -99,6 +105,21 @@ export function ProductListPage() {
 
     loadFilterData();
   }, []);
+
+  // Sync state with URL searchParams changes
+  useEffect(() => {
+    const search = searchParams.get("search") || "";
+    const category_id = searchParams.get("category_id") || "";
+    const brand_id = searchParams.get("brand_id") || "";
+    
+    setFilters(prev => ({
+      ...prev,
+      search,
+      category_id,
+      brand_id,
+      page: 1
+    }));
+  }, [searchParams]);
 
   useEffect(() => {
     async function loadProducts() {
@@ -148,6 +169,18 @@ export function ProductListPage() {
 
   function handleSearchSubmit(event) {
     event.preventDefault();
+    // Update URL params
+    const newParams = new URLSearchParams(searchParams);
+    if (filters.search) newParams.set("search", filters.search);
+    else newParams.delete("search");
+    
+    if (filters.category_id) newParams.set("category_id", filters.category_id);
+    else newParams.delete("category_id");
+    
+    if (filters.brand_id) newParams.set("brand_id", filters.brand_id);
+    else newParams.delete("brand_id");
+    
+    setSearchParams(newParams);
     setFilters((prevState) => ({ ...prevState, page: 1 }));
   }
 
@@ -174,7 +207,7 @@ export function ProductListPage() {
 
         <form onSubmit={handleSearchSubmit} style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) auto", gap: 12 }}>
-            <input name="keyword" value={filters.keyword} onChange={handleFilterChange} placeholder="Tìm theo tên sản phẩm..." style={inputStyle} />
+            <input name="search" value={filters.search} onChange={handleFilterChange} placeholder="Tìm theo tên sản phẩm..." style={inputStyle} />
 
             <select name="category_id" value={filters.category_id} onChange={handleFilterChange} style={inputStyle}>
               <option value="">Tất cả danh mục</option>

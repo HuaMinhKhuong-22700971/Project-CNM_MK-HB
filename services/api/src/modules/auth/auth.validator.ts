@@ -12,8 +12,10 @@ const fullNameSchema = z
 
 export const registerSchema = z.object({
   email: emailSchema,
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  fullName: fullNameSchema.optional()
+  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  full_name: fullNameSchema.optional(),
+  fullName: fullNameSchema.optional(),
+  phone: z.string().trim().optional()
 });
 
 export const loginSchema = z.object({

@@ -1,20 +1,29 @@
 import { prisma } from "../../config/prisma";
 
 export function getOrdersByUser(userId: string) {
+  const numericId = parseInt(userId, 10);
   return prisma.order.findMany({
-    where: { userId },
+    where: { user_id: numericId },
     include: {
-      items: true
+      OrderItem: {
+        include: {
+          ProductSku: true
+        }
+      }
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { created_at: "desc" }
   });
 }
 
-export function getOrderById(orderId: string) {
+export function getOrderById(orderId: string | number) {
   return prisma.order.findUnique({
-    where: { id: orderId },
+    where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     include: {
-      items: true
+      OrderItem: {
+        include: {
+          ProductSku: true
+        }
+      }
     }
   });
 }
@@ -22,32 +31,29 @@ export function getOrderById(orderId: string) {
 export function listOrders() {
   return prisma.order.findMany({
     include: {
-      items: true,
-      user: {
-        select: {
-          id: true,
-          email: true,
-          fullName: true
+      OrderItem: {
+        include: {
+          ProductSku: true
         }
       }
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { created_at: "desc" }
   });
 }
 
-export function updateOrderStatus(orderId: string, status: string) {
+export function updateOrderStatus(orderId: string | number, status: string) {
   return prisma.order.update({
-    where: { id: orderId },
+    where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     data: { status }
   });
 }
 
-export function markOrderPaid(orderId: string) {
+export function markOrderPaid(orderId: string | number) {
   return prisma.order.update({
-    where: { id: orderId },
+    where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     data: {
       status: "PAID",
-      paymentStatus: "PAID"
+      payment_status: "PAID"
     }
   });
 }

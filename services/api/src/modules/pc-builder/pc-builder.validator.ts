@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const compatibilityCheckSchema = z.object({
-  productIds: z.array(z.string().min(1)).min(1).max(20)
+  productIds: z.array(z.number().int().positive()).min(1).max(20)
 });
 
 export const createCompatibilityRuleSchema = z.object({

@@ -15,7 +15,33 @@ function getErrorMessage(error, fallbackMessage) {
 }
 
 function normalizeResponse(response) {
-  return response?.data || response;
+  return response?.data?.data || response?.data || response;
+}
+
+function mapDbOrderToUi(dbOrder) {
+  if (!dbOrder) return null;
+  return {
+    id: dbOrder.id,
+    status: dbOrder.status,
+    paymentMethod: dbOrder.payment_method || dbOrder.paymentMethod,
+    paymentStatus: dbOrder.payment_status || dbOrder.paymentStatus,
+    shippingAddress: dbOrder.shipping_address || dbOrder.shippingAddress,
+    createdAt: dbOrder.created_at || dbOrder.createdAt,
+    note: dbOrder.note,
+    trackingCode: dbOrder.tracking_code || dbOrder.trackingCode,
+    totalAmount: dbOrder.total_amount || dbOrder.totalAmount,
+    shippingFee: dbOrder.shipping_fee || dbOrder.shippingFee || 0,
+    finalAmount: dbOrder.final_amount || dbOrder.finalAmount || dbOrder.total_amount || dbOrder.totalAmount || 0,
+    items: (dbOrder.OrderItem || dbOrder.items || []).map(item => ({
+      id: item.id,
+      productName: item.name_snapshot || item.nameSnapshot || item.productName || item.product?.name || "Sản phẩm",
+      sku: item.sku_snapshot || item.skuSnapshot || item.sku,
+      quantity: item.quantity,
+      unitPrice: item.unit_price || item.unitPrice,
+      lineTotal: item.line_total || item.lineTotal,
+      imageUrl: item.ProductSku?.image_url || item.ProductSku?.imageUrl || item.imageUrl || item.product?.imageUrl || null
+    }))
+  };
 }
 
 function formatCurrency(value) {
@@ -50,7 +76,8 @@ export function OrderDetailPage() {
         setLoading(true);
         setErrorMessage("");
         const response = await getOrderDetail(orderId);
-        setOrder(normalizeResponse(response));
+        const rawData = normalizeResponse(response);
+        setOrder(mapDbOrderToUi(rawData));
       } catch (error) {
         setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết đơn hàng"));
       } finally {
@@ -132,8 +159,12 @@ export function OrderDetailPage() {
           <div style={{ display: "grid", gap: 12 }}>
             {(order.items || []).map((item) => (
               <div key={item.id} style={{ display: "flex", gap: 16, padding: 18, borderRadius: 18, background: "#fff", border: "1px solid #f1f5f9", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
-                <div style={{ width: 64, height: 64, borderRadius: 12, background: "linear-gradient(135deg, #f8fafc, #fff)", border: "1px solid #e2e8f0", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <div style={{ width: 64, height: 64, borderRadius: 12, background: "linear-gradient(135deg, #f8fafc, #fff)", border: "1px solid #e2e8f0", display: "grid", placeItems: "center", flexShrink: 0, overflow: "hidden" }}>
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.productName} style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} />
+                  ) : (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                  )}
                 </div>
                 <div style={{ flex: 1, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <div>

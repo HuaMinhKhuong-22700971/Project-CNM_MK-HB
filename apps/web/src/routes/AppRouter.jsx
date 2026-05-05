@@ -21,6 +21,7 @@ import { NotFoundPage } from "../pages/public/NotFoundPage";
 import { OrderDetailPage } from "../pages/public/OrderDetailPage";
 import { OrdersPage } from "../pages/public/OrdersPage";
 import { PaymentResultPage } from "../pages/public/PaymentResultPage";
+import { MockPaymentPage } from "../pages/public/MockPaymentPage";
 import { PcBuilderPage } from "../pages/public/PcBuilderPage";
 import { ProductDetailPage } from "../pages/public/ProductDetailPage";
 import { ProductListPage } from "../pages/public/ProductListPage";
@@ -30,6 +31,7 @@ import { TicketCreatePage } from "../pages/public/TicketCreatePage";
 import { TicketDetailPage } from "../pages/public/TicketDetailPage";
 import { TicketListPage } from "../pages/public/TicketListPage";
 import { WarrantiesPage } from "../pages/public/WarrantiesPage";
+import { InformationPage } from "../pages/public/InformationPage";
 import { StaffOrdersPage } from "../pages/staff/StaffOrdersPage";
 import { TechTicketsPage } from "../pages/tech/TechTicketsPage";
 import { routeConfig } from "./routeConfig";
@@ -49,6 +51,7 @@ export function AppRouter() {
         { path: routeConfig.public.cart.replace(/^\//, ""), element: <CartPage /> },
         { path: routeConfig.public.checkout.replace(/^\//, ""), element: <CheckoutPage /> },
         { path: routeConfig.public.paymentResult.replace(/^\//, ""), element: <PaymentResultPage /> },
+        { path: "payment/mock", element: <MockPaymentPage /> },
         { path: routeConfig.public.orders.replace(/^\//, ""), element: <OrdersPage /> },
         { path: routeConfig.public.orderDetail.replace(/^\//, ""), element: <OrderDetailPage /> },
         { path: routeConfig.public.tickets.replace(/^\//, ""), element: <TicketListPage /> },
@@ -57,7 +60,16 @@ export function AppRouter() {
         { path: routeConfig.public.aiChat.replace(/^\//, ""), element: <AiChatPage /> },
         { path: routeConfig.public.pcBuilder.replace(/^\//, ""), element: <PcBuilderPage /> },
         { path: routeConfig.public.login.replace(/^\//, ""), element: <LoginPage /> },
-        { path: routeConfig.public.register.replace(/^\//, ""), element: <RegisterPage /> }
+        { path: routeConfig.public.register.replace(/^\//, ""), element: <RegisterPage /> },
+        { path: routeConfig.public.help.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.guide.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.warranty.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.returns.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.about.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.jobs.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.privacy.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.terms.replace(/^\//, ""), element: <InformationPage /> },
+        { path: routeConfig.public.contact.replace(/^\//, ""), element: <InformationPage /> }
       ]
     },
     {

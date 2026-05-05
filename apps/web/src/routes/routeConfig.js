@@ -17,7 +17,16 @@ export const routeConfig = {
     aiChat: "/ai-chat",
     pcBuilder: "/pc-builder",
     login: "/login",
-    register: "/register"
+    register: "/register",
+    help: "/help",
+    guide: "/guide",
+    warranty: "/warranty",
+    returns: "/returns",
+    about: "/about",
+    jobs: "/jobs",
+    privacy: "/privacy",
+    terms: "/terms",
+    contact: "/contact"
   },
   staff: {
     root: "/staff",

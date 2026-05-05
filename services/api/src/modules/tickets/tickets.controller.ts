@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 
 import { prisma } from "../../config/prisma";
 import { ROLES } from "../../constants/roles";
@@ -57,7 +57,7 @@ export const getTicketDetail = asyncHandler(async (req: Request, res: Response) 
   }
 
   const canAccess =
-    ticket.userId === req.user.userId ||
+    Number(ticket.user_id) === Number(req.user.userId) ||
     req.user.role === ROLES.ADMIN ||
     req.user.role === ROLES.TECHNICIAN ||
     req.user.role === ROLES.SALES;
@@ -91,14 +91,14 @@ export const patchTicket = asyncHandler(async (req: Request, res: Response) => {
 
   if (payload.assignedToId) {
     const assignee = await prisma.user.findUnique({
-      where: { id: payload.assignedToId }
+      where: { id: typeof payload.assignedToId === "string" ? parseInt(payload.assignedToId, 10) : payload.assignedToId }
     });
 
     if (!assignee) {
       throw new AppError("Assignee not found", 404);
     }
 
-    const isValidAssignee = assignee.role === ROLES.TECHNICIAN || assignee.role === ROLES.ADMIN;
+    const isValidAssignee = (assignee as any).Role?.name === ROLES.TECHNICIAN || (assignee as any).Role?.name === ROLES.ADMIN;
 
     if (!isValidAssignee) {
       throw new AppError("Assignee must be technician or admin", 400);

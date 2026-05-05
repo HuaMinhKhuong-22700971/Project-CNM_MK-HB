@@ -83,3 +83,5 @@ export function verifyVnpayReturn(vnp_Params: any) {
 
   return secureHash === signed;
 }
+
+// Trigger reload

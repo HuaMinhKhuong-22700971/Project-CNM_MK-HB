@@ -1,4 +1,4 @@
-﻿import { httpClient } from "./http";
+import { httpClient } from "./http";
 
 export async function login(payload) {
   const response = await httpClient.post("/auth/login", payload);
@@ -7,6 +7,11 @@ export async function login(payload) {
 
 export async function register(payload) {
   const response = await httpClient.post("/auth/register", payload);
+  return response.data;
+}
+
+export async function googleLoginMock(payload) {
+  const response = await httpClient.post("/auth/google-mock", payload);
   return response.data;
 }
 

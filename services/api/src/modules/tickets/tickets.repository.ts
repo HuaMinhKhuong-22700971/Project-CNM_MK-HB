@@ -6,49 +6,58 @@ export function createTicket(data: {
   description: string;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 }) {
-  return prisma.ticket.create({ data });
+  const numericUserId = parseInt(data.userId, 10);
+  return prisma.ticket.create({
+    data: {
+      user_id: numericUserId,
+      title: data.title,
+      description: data.description,
+      priority: data.priority
+    }
+  });
 }
 
-export function getTicketById(id: string) {
+export function getTicketById(id: string | number) {
   return prisma.ticket.findUnique({
-    where: { id },
+    where: { id: typeof id === "string" ? parseInt(id, 10) : id },
     include: {
-      reporter: { select: { id: true, email: true, fullName: true } },
-      assignee: { select: { id: true, email: true, fullName: true } }
+      users_tickets_user_idTousers: { select: { id: true, email: true, full_name: true } },
+      users_tickets_assigned_to_idTousers: { select: { id: true, email: true, full_name: true } }
     }
   });
 }
 
 export function getTicketsByReporter(userId: string) {
+  const numericUserId = parseInt(userId, 10);
   return prisma.ticket.findMany({
-    where: { userId },
+    where: { user_id: numericUserId },
     include: {
-      assignee: { select: { id: true, email: true, fullName: true } }
+      users_tickets_assigned_to_idTousers: { select: { id: true, email: true, full_name: true } }
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { created_at: "desc" }
   });
 }
 
 export function listTickets() {
   return prisma.ticket.findMany({
     include: {
-      reporter: { select: { id: true, email: true, fullName: true } },
-      assignee: { select: { id: true, email: true, fullName: true } }
+      users_tickets_user_idTousers: { select: { id: true, email: true, full_name: true } },
+      users_tickets_assigned_to_idTousers: { select: { id: true, email: true, full_name: true } }
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: { created_at: "desc" }
   });
 }
 
 export function updateTicket(
-  id: string,
+  id: string | number,
   data: Partial<{
     status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
     priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-    assignedToId: string | null;
+    assigned_to_id: number | null;
   }>
 ) {
   return prisma.ticket.update({
-    where: { id },
+    where: { id: typeof id === "string" ? parseInt(id, 10) : id },
     data
   });
 }
