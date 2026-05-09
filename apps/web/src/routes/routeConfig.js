@@ -15,6 +15,7 @@ export const routeConfig = {
     ticketCreate: "/tickets/new",
     ticketDetail: "/tickets/:ticketId",
     aiChat: "/ai-chat",
+    aiAdvisor: "/ai-chat",
     pcBuilder: "/pc-builder",
     login: "/login",
     register: "/register",

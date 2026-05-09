@@ -1,7 +1,13 @@
 import { httpClient } from "./http";
 
 export async function getProducts(params = {}) {
-  const response = await httpClient.get("/products", { params });
+  const normalizedParams = {
+    ...params,
+    min_price: params.min_price ?? params.minPrice,
+    max_price: params.max_price ?? params.maxPrice,
+    keyword: params.keyword ?? params.search
+  };
+  const response = await httpClient.get("/products", { params: normalizedParams });
   return response.data;
 }
 

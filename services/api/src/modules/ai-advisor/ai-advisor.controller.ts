@@ -1,165 +1,219 @@
 import { Request, Response } from "express";
+
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../errors/app-error";
 import { asyncHandler } from "../../utils/async-handler";
 
-export const suggestBuild = asyncHandler(async (req: Request, res: Response) => {
-  const { requirements, budget } = req.body;
-  if (!requirements || !budget) {
-    throw new AppError("Vui lòng cung cấp 'requirements' và 'budget'", 400);
-  }
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pcBuilderService = require("../pc-builder/pc-builder.service.js");
 
-  console.log(`[AI-Advisor] Starting suggestion for budget: ${budget}`);
+function normalizeComponentType(categoryName: string | null | undefined) {
+  const normalized = String(categoryName || "").trim().toLowerCase();
+  return normalized === "ssd" ? "storage" : (normalized || "unknown");
+}
 
-  async function getDemoModeResponse() {
-    const categories = await prisma.category.findMany({ take: 7 });
-    const mockItems = [];
-    
-    for (const cat of categories) {
-      const prod = await prisma.product.findFirst({
-        where: { category_id: cat.id, is_active: true },
-        include: { Category: true, ProductSku: { take: 1 } }
-      });
-      if (prod) mockItems.push(prod);
+function mapSuggestedProduct(product: any) {
+  const firstSku = product.ProductSku?.[0];
+
+  return {
+    componentType: normalizeComponentType(product.Category?.name),
+    product: {
+      id: product.id,
+      name: product.name
+    },
+    variant: {
+      id: firstSku?.id || product.id,
+      sku: firstSku?.sku || "",
+      price: Number(firstSku?.price || product.price || 0)
     }
-    
-    const totalPrice = mockItems.reduce((sum: number, p: any) => sum + Number(p.price), 0);
-    const formattedItems = mockItems.map((p: any) => {
-      const catName = p.Category?.name?.toLowerCase() || "unknown";
-      const componentType = catName === "ssd" ? "storage" : catName;
-      const firstSku = p.ProductSku?.[0];
-      return {
-        componentType,
-        product: { id: p.id, name: p.name },
-        variant: { id: firstSku?.id || p.id, sku: firstSku?.sku_code || "", price: Number(firstSku?.price || p.price) }
-      };
-    });
+  };
+}
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        budget,
-        totalPrice,
-        explanation: "DEMO MODE: Vì chưa cấu hình OPENAI_API_KEY hoặc API Key bị lỗi, hệ thống đang lấy ngẫu nhiên linh kiện từ kho hàng để minh họa tính năng gợi ý AI.",
-        items: formattedItems
-      }
-    });
-  }
-
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_API_KEY) {
-    // Mock response for development if key is missing
-    if (process.env.NODE_ENV === "development") {
-      await getDemoModeResponse();
-      return;
-    }
-  }
-
-  // Lấy toàn bộ linh kiện hiện có (giới hạn một số thông tin cần thiết)
-  const products = await prisma.product.findMany({
-    where: { is_active: true },
-    select: {
-      id: true,
-      name: true,
-      price: true,
-      Category: {
-        select: { name: true }
-      }
-    }
-  });
-
+function buildPrompt(products: any[], budget: number, requirements: string) {
   const productListText = products
-    .map((p: any) => {
-      const catName = p.Category?.name || "unknown";
-      return `- ${p.id}: ${p.name} (Cat: ${catName}) | Giá: ${p.price} VND`;
+    .map((product) => {
+      const firstSku = product.ProductSku?.[0];
+      const price = Number(firstSku?.price || product.price || 0);
+      const categoryName = product.Category?.name || "unknown";
+      return `- PRODUCT_ID=${product.id} | ${product.name} | Cat=${categoryName} | Price=${price} VND`;
     })
     .join("\n");
-  
-  console.log(`[AI-Advisor] Prepared ${products.length} products for prompt`);
 
-  const prompt = `Bạn là chuyên gia build PC thông minh. Ngân sách khách hàng: ${budget} VND. Nhu cầu: ${requirements}.
-Nhiệm vụ: Hãy tư vấn và ráp 1 cấu hình PC phù hợp nhất từ danh sách linh kiện bên dưới. 
-Bạn phải tuân thủ nghiêm ngặt các nguyên tắc sau:
-1. KHÔNG VƯỢT QUÁ NGÂN SÁCH (cho phép chênh lệch nhẹ < 5%).
-2. CHỈ chọn các linh kiện CÓ TRONG DANH SÁCH (dựa vào SKU).
-3. Linh kiện tạo thành 1 máy bộ (ít nhất Main, CPU, RAM). Cấu hình phải tương thích với nhau.
-4. Output PHẢI là định dạng RAW JSON một mảng string chứa các SKU của linh kiện đã chọn, không kèm text diễn giải. 
-Ví dụ: ["SKU_CPU", "SKU_MAIN", "SKU_RAM"]
+  return `Ban la chuyen gia build PC thong minh. Ngan sach khach hang: ${budget} VND. Nhu cau: ${requirements}.
+Nhiem vu: Hay tu van va rap 1 cau hinh PC phu hop nhat tu danh sach linh kien ben duoi.
+Ban phai tuan thu nghiem ngat cac nguyen tac sau:
+1. KHONG VUOT QUA NGAN SACH (cho phep chenh lech nhe < 5%).
+2. CHI chon cac linh kien CO TRONG DANH SACH.
+3. Linh kien tao thanh 1 may bo (it nhat Main, CPU, RAM). Cau hinh phai tuong thich voi nhau.
+4. Output PHAI la dinh dang RAW JSON mot mang so nguyen chua cac PRODUCT_ID da chon, khong kem text dien giai.
+Vi du: [12, 25, 31]
 
-Danh sách linh kiện:
+Danh sach linh kien:
 ${productListText}`;
+}
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2
-    })
+async function getDemoModeData(budget: number, requirements: string) {
+  try {
+    const suggested = await pcBuilderService.suggestBuild({
+      purpose: String(requirements || "gaming").trim().toLowerCase(),
+      budget
+    });
+
+    return {
+      budget,
+      totalPrice: Number(suggested.totalPrice || 0),
+      explanation: "DEMO MODE: He thong dang dung bo goi y noi bo de tra cau hinh trong ngan sach.",
+      items: Array.isArray(suggested.items) ? suggested.items : []
+    };
+  } catch (_error) {
+    // Fall through to a simple DB-backed demo response.
+  }
+
+  const categories = await prisma.category.findMany({ take: 7 });
+  const mockItems = [];
+
+  for (const category of categories) {
+    const product = await prisma.product.findFirst({
+      where: { category_id: category.id, is_active: true },
+      include: {
+        Category: true,
+        ProductSku: { take: 1, orderBy: { id: "asc" } }
+      }
+    });
+
+    if (product) {
+      mockItems.push(product);
+    }
+  }
+
+  const items = mockItems.map(mapSuggestedProduct);
+  const totalPrice = items.reduce((sum, item) => sum + Number(item.variant.price || 0), 0);
+
+  return {
+    budget,
+    totalPrice,
+    explanation: "DEMO MODE: He thong dang lay linh kien mau tu kho hang de minh hoa tinh nang goi y AI.",
+    items
+  };
+}
+
+export const suggestBuild = asyncHandler(async (req: Request, res: Response) => {
+  const { requirements, budget } = req.body;
+  const numericBudget = Number(budget);
+
+  if (!requirements || !Number.isFinite(numericBudget) || numericBudget <= 0) {
+    throw new AppError("Please provide valid 'requirements' and 'budget'", 400);
+  }
+
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  const products = await prisma.product.findMany({
+    where: { is_active: true },
+    include: {
+      Category: {
+        select: { name: true }
+      },
+      ProductSku: {
+        take: 1,
+        orderBy: { id: "asc" }
+      }
+    }
   });
 
+  if (!openAiApiKey) {
+    res.status(200).json({
+      success: true,
+      data: await getDemoModeData(numericBudget, String(requirements))
+    });
+    return;
+  }
+
+  let response: globalThis.Response;
+
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openAiApiKey}`
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [{ role: "user", content: buildPrompt(products, numericBudget, String(requirements)) }],
+        temperature: 0.2
+      })
+    });
+  } catch (_error) {
+    res.status(200).json({
+      success: true,
+      data: await getDemoModeData(numericBudget, String(requirements))
+    });
+    return;
+  }
+
   if (!response.ok) {
-    console.warn(`[AI-Advisor] AI Provider Error, falling back to DEMO MODE`);
-    if (process.env.NODE_ENV === "development" || true) { // Always fallback to demo mode for robust testing if API fails
-      await getDemoModeResponse();
-      return;
-    }
+    res.status(200).json({
+      success: true,
+      data: await getDemoModeData(numericBudget, String(requirements))
+    });
+    return;
   }
 
   const aiData = await response.json();
   let choiceContent = aiData.choices?.[0]?.message?.content?.trim();
 
-  // Xử lý json wrapper nếu có (ví dụ: markdown ```json)
   if (choiceContent && choiceContent.startsWith("```json")) {
     choiceContent = choiceContent.replace(/^```json/, "").replace(/```$/, "").trim();
   } else if (choiceContent && choiceContent.startsWith("```")) {
     choiceContent = choiceContent.replace(/^```/, "").replace(/```$/, "").trim();
   }
 
-  let suggestedSkus = [];
+  let suggestedProductIds: number[] = [];
+
   try {
-    suggestedSkus = JSON.parse(choiceContent);
-    if (!Array.isArray(suggestedSkus)) {
+    const parsed = JSON.parse(choiceContent);
+    if (!Array.isArray(parsed)) {
       throw new Error("Result is not an array");
     }
-  } catch (e) {
-    throw new AppError("AI trả về kết quả cấu trúc sai định dạng JSON. Cần [" + choiceContent + "]", 500);
+
+    suggestedProductIds = parsed
+      .map((value: unknown) => Number(value))
+      .filter((value: number) => Number.isInteger(value) && value > 0);
+  } catch (_error) {
+    throw new AppError(`AI returned invalid JSON payload: ${choiceContent}`, 500);
   }
 
-  // Query dữ liệu đầy đủ từ DB để trả về client
+  if (suggestedProductIds.length === 0) {
+    throw new AppError("AI did not return any valid PRODUCT_ID values", 500);
+  }
+
   const suggestedProducts = await prisma.product.findMany({
     where: {
-      id: { in: suggestedSkus.map((s: string) => parseInt(s, 10)).filter(Boolean) }
+      id: { in: suggestedProductIds }
     },
     include: {
       Category: true,
-      ProductSku: { take: 1 }
+      ProductSku: { take: 1, orderBy: { id: "asc" } }
     }
   });
 
-  const totalPrice = suggestedProducts.reduce((sum: number, p: any) => sum + Number(p.price), 0);
+  if (suggestedProducts.length === 0) {
+    throw new AppError("AI suggestion did not match any active products", 500);
+  }
 
-  const formattedItems = suggestedProducts.map((p: any) => ({
-    componentType: p.Category?.name?.toLowerCase() || "unknown",
-    product: { name: p.name },
-    variant: {
-      id: p.ProductSku?.[0]?.id || p.id,
-      sku: p.ProductSku?.[0]?.sku_code || "",
-      price: Number(p.price)
-    }
-  }));
+  const orderedProducts = suggestedProductIds
+    .map((id) => suggestedProducts.find((product) => product.id === id))
+    .filter(Boolean);
+
+  const items = orderedProducts.map(mapSuggestedProduct);
+  const totalPrice = items.reduce((sum, item) => sum + Number(item.variant.price || 0), 0);
 
   res.status(200).json({
     success: true,
     data: {
-      budget,
+      budget: numericBudget,
       totalPrice,
-      explanation: "Dựa vào hệ thống AI Advisor, đây là cấu hình máy tính tối ưu nhất với mức ngân sách và nhu cầu của bạn. Các linh kiện đã được chọn để đảm bảo tính tương thích và hiệu năng tốt nhất.",
-      items: formattedItems
+      explanation: "AI Advisor da chon cau hinh toi uu dua tren ngan sach va nhu cau su dung.",
+      items
     }
   });
 });

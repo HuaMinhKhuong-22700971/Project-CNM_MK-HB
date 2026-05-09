@@ -5,6 +5,7 @@ import axios from "axios";
 import { getProductDetail } from "../../services/catalog.service";
 import { addItemToCart } from "../../services/cart.service";
 import { useAuth } from "../../hooks/useAuth";
+import { addStoredCompareId, buildCompareUrl } from "../../utils/compare";
 
 function getErrorMessage(error, fallbackMessage) {
   if (axios.isAxiosError(error)) {
@@ -44,6 +45,7 @@ export function ProductDetailPage() {
   const skus = useMemo(() => (Array.isArray(product?.skus) ? product.skus : []), [product]);
   const variants = useMemo(() => (Array.isArray(product?.variants) ? product.variants : []), [product]);
   const attributes = useMemo(() => (Array.isArray(product?.attributes) ? product.attributes : []), [product]);
+  const productId = product?.id || product?.product_id;
 
   // Image fallback logic: Product -> First SKU -> First Variant -> Placeholder
   const displayImage = useMemo(() => {
@@ -58,6 +60,14 @@ export function ProductDetailPage() {
     if (variants.length > 0) return Number(variants[0]?.price || 0);
     return Number(product?.price || 0);
   }, [product, skus, variants]);
+
+  const availableStock = useMemo(() => {
+    if (skus.length > 0) return Number(skus[0]?.stock || 0);
+    if (variants.length > 0) return Number(variants[0]?.stock || variants[0]?.stock_quantity || 0);
+    return Number(product?.stock || product?.stock_quantity || 0);
+  }, [product, skus, variants]);
+
+  const isProductActive = product?.isActive ?? product?.is_active ?? product?.status !== "INACTIVE";
 
   useEffect(() => {
     async function loadProductDetail() {
@@ -86,13 +96,22 @@ export function ProductDetailPage() {
       setSubmitting(true);
       setActionError("");
       setSuccessMessage("");
-      await addItemToCart({ productId: product.id, quantity: 1 });
+      if (!productId) {
+        throw new Error("Không tìm thấy mã sản phẩm để thêm vào giỏ hàng.");
+      }
+      await addItemToCart({ productId, quantity: 1 });
       setSuccessMessage("Đã thêm sản phẩm vào giỏ hàng thành công!");
     } catch (error) {
       setActionError(getErrorMessage(error, "Không thể thêm vào giỏ hàng."));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleCompareProduct() {
+    if (!productId) return;
+    const compareIds = addStoredCompareId(productId);
+    navigate(buildCompareUrl(compareIds));
   }
 
   if (loading) {
@@ -369,7 +388,7 @@ export function ProductDetailPage() {
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                 }}
                 onClick={handleAddToCart}
-                disabled={submitting || !product.isActive || product.stock <= 0}
+                disabled={submitting || !isProductActive || availableStock <= 0}
               >
                  {submitting ? "ĐANG XỬ LÝ..." : "MUA NGAY - THÊM VÀO GIỎ"}
               </button>
@@ -390,6 +409,26 @@ export function ProductDetailPage() {
               }}>
                  ĐƯA VÀO PC BUILDER
               </Link>
+
+              <button
+                type="button"
+                onClick={handleCompareProduct}
+                style={{
+                  height: 56,
+                  fontSize: 15,
+                  fontWeight: 800,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(32, 120, 202, 0.08)",
+                  borderRadius: 18,
+                  border: "2px solid rgba(32, 120, 202, 0.18)",
+                  color: "var(--market-primary)",
+                  cursor: "pointer"
+                }}
+              >
+                 SO SÁNH SẢN PHẨM NÀY
+              </button>
             </div>
 
             <div style={{ marginTop: 32, padding: '24px', background: 'rgba(241, 245, 249, 0.5)', borderRadius: 24, fontSize: 13, border: '1px solid rgba(0,0,0,0.02)' }}>

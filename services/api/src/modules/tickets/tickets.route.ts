@@ -6,6 +6,7 @@ import {
   getMyTickets,
   getTicketDetail,
   patchTicket,
+  postTicketMessage,
   postMyTicket,
   ticketManageRoles
 } from "./tickets.controller";
@@ -16,6 +17,7 @@ ticketsRouter.use(authenticate);
 
 ticketsRouter.post("/", postMyTicket);
 ticketsRouter.get("/my", getMyTickets);
+ticketsRouter.post("/:id/messages", postTicketMessage);
 ticketsRouter.get("/:id", getTicketDetail);
 
 ticketsRouter.get("/", authorize(ticketManageRoles), getAllTickets);

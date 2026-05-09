@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import axios from "axios";
 
-import { getCategories, getCompareProducts, getProducts } from "../../services/catalog.service";
+import { getCategories, getCompareProducts, getProductDetail, getProducts } from "../../services/catalog.service";
+import { getStoredCompareIds, MAX_COMPARE_ITEMS, normalizeCompareIds, storeCompareIds } from "../../utils/compare";
 
 function formatCurrency(value) {
   return Number(value || 0).toLocaleString("vi-VN");
@@ -15,9 +16,46 @@ function getErrorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
-const MAX_COMPARE = 4;
+const MAX_COMPARE = MAX_COMPARE_ITEMS;
 
 const SLOT_COLORS = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981"];
+
+function getProductId(product) {
+  return String(product?.product_id || product?.id || "");
+}
+
+function getProductName(product, fallback = "Sản phẩm đang cập nhật") {
+  return product?.product_name || product?.name || fallback;
+}
+
+function getProductImage(product) {
+  return (
+    product?.image_url ||
+    product?.defaultVariant?.imageUrl ||
+    product?.primaryVariant?.image_url ||
+    product?.variants?.[0]?.image_url ||
+    product?.skus?.[0]?.image_url ||
+    ""
+  );
+}
+
+function getPrimaryVariant(product) {
+  return product?.primaryVariant || product?.variants?.[0] || product?.skus?.[0] || product?.defaultVariant || null;
+}
+
+function getProductPrice(product) {
+  const variant = getPrimaryVariant(product);
+  return Number(variant?.price ?? product?.price ?? product?.pricing?.minPrice ?? 0);
+}
+
+function getProductStock(product) {
+  const variant = getPrimaryVariant(product);
+  return Number(variant?.stock_quantity ?? variant?.stock ?? product?.stock_quantity ?? product?.stock ?? 0);
+}
+
+function getCategoryName(product) {
+  return product?.category?.name || product?.category_name || "—";
+}
 
 export function CompareProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,9 +63,11 @@ export function CompareProductsPage() {
   // Selected products to compare (array of IDs)
   const [selectedIds, setSelectedIds] = useState(() => {
     const ids = searchParams.get("ids");
-    if (!ids) return [];
-    return ids.split(",").map(s => s.trim()).filter(Boolean);
+    if (ids) return normalizeCompareIds(ids);
+    return getStoredCompareIds();
   });
+
+  const [selectedProductMap, setSelectedProductMap] = useState({});
 
   // Compare result from API
   const [compareResult, setCompareResult] = useState(null);
@@ -54,14 +94,54 @@ export function CompareProductsPage() {
 
   // Auto-compare when selectedIds change
   useEffect(() => {
+    storeCompareIds(selectedIds);
+    if (selectedIds.length > 0) {
+      setSearchParams({ ids: selectedIds.join(",") }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+
     if (selectedIds.length >= 2) {
       runCompare(selectedIds);
-      setSearchParams({ ids: selectedIds.join(",") });
     } else {
       setCompareResult(null);
-      if (selectedIds.length === 0) setSearchParams({});
     }
   }, [selectedIds]);
+
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      setSelectedProductMap({});
+      return;
+    }
+
+    let cancelled = false;
+    const missingIds = selectedIds.filter((id) => !selectedProductMap[id]);
+    if (missingIds.length === 0) return;
+
+    Promise.all(
+      missingIds.map(async (id) => {
+        try {
+          const response = await getProductDetail(id);
+          return [id, response?.data || response];
+        } catch (_error) {
+          return [id, null];
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      setSelectedProductMap((prev) => {
+        const next = { ...prev };
+        entries.forEach(([id, product]) => {
+          if (product) next[id] = product;
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedIds, selectedProductMap]);
 
   // Search products (debounced)
   useEffect(() => {
@@ -103,6 +183,16 @@ export function CompareProductsPage() {
       const res = await getCompareProducts(ids.join(","));
       const data = res?.data || res;
       setCompareResult(data);
+      if (Array.isArray(data?.items)) {
+        setSelectedProductMap((prev) => {
+          const next = { ...prev };
+          data.items.forEach((item) => {
+            const id = getProductId(item);
+            if (id) next[id] = item;
+          });
+          return next;
+        });
+      }
     } catch (err) {
       setCompareError(getErrorMessage(err, "Không thể so sánh sản phẩm. Vui lòng thử lại."));
     } finally {
@@ -111,10 +201,12 @@ export function CompareProductsPage() {
   }
 
   function addProduct(product) {
-    const id = String(product.product_id || product.id);
+    const id = getProductId(product);
+    if (!id) return;
     if (selectedIds.includes(id)) return;
     if (selectedIds.length >= MAX_COMPARE) return;
-    setSelectedIds(prev => [...prev, id]);
+    setSelectedProductMap(prev => ({ ...prev, [id]: product }));
+    setSelectedIds(prev => normalizeCompareIds([...prev, id]));
     setShowSearch(false);
     setSearchQuery("");
   }
@@ -125,6 +217,7 @@ export function CompareProductsPage() {
 
   function clearAll() {
     setSelectedIds([]);
+    setSelectedProductMap({});
     setCompareResult(null);
     setSearchParams({});
   }
@@ -185,14 +278,16 @@ export function CompareProductsPage() {
       <div style={{ maxWidth: 1200, margin: "-36px auto 0", padding: "0 20px", position: "relative", zIndex: 10 }}>
 
         {/* ── Product Slot Picker ── */}
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${MAX_COMPARE}, 1fr)`, gap: 16, marginBottom: 32 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 32 }}>
           {Array.from({ length: MAX_COMPARE }).map((_, slotIndex) => {
             const id = selectedIds[slotIndex];
-            const item = comparedItems.find(p => String(p.product_id) === String(id));
+            const item = comparedItems.find(p => getProductId(p) === String(id)) || selectedProductMap[id];
             const color = SLOT_COLORS[slotIndex];
 
             if (id && !loadingCompare) {
-              const variant = item?.primaryVariant || item?.variants?.[0];
+              const imageUrl = getProductImage(item);
+              const price = getProductPrice(item);
+              const stock = getProductStock(item);
               return (
                 <div key={slotIndex} style={{ background: "#fff", borderRadius: 24, border: `2px solid ${color}`, overflow: "hidden", boxShadow: `0 8px 24px ${color}22`, position: "relative" }}>
                   <div style={{ background: color, height: 4 }} />
@@ -205,18 +300,18 @@ export function CompareProductsPage() {
                   </button>
                   <div style={{ padding: "20px 20px 16px" }}>
                     {/* Product image or placeholder */}
-                    <div style={{ height: 120, borderRadius: 16, background: item?.image_url ? `center/cover url(${item.image_url})` : `linear-gradient(135deg, ${color}22, ${color}11)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 12 }}>
-                      {!item?.image_url && "📦"}
+                    <div style={{ height: 120, borderRadius: 16, background: imageUrl ? `center/contain no-repeat url(${imageUrl})` : `linear-gradient(135deg, ${color}22, ${color}11)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 12 }}>
+                      {!imageUrl && "📦"}
                     </div>
-                    <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{item?.category?.name || "—"}</div>
+                    <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{getCategoryName(item)}</div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", lineHeight: 1.35, marginBottom: 8 }}>
-                      {item?.product_name || `Sản phẩm #${id}`}
+                      {getProductName(item, `Sản phẩm #${id}`)}
                     </div>
                     <div style={{ fontSize: 20, fontWeight: 900, color }}>
-                      {variant?.price ? `${formatCurrency(variant.price)}đ` : "—"}
+                      {price > 0 ? `${formatCurrency(price)}đ` : "—"}
                     </div>
                     <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
-                      Tồn kho: {variant?.stock_quantity ?? "—"}
+                      Tồn kho: {stock || "—"}
                     </div>
                   </div>
                 </div>
@@ -274,9 +369,10 @@ export function CompareProductsPage() {
                 <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Không tìm thấy sản phẩm nào.</div>
               ) : (
                 searchResults.map(product => {
-                  const id = String(product.product_id || product.id);
+                  const id = getProductId(product);
                   const isSelected = selectedIds.includes(id);
                   const isFull = selectedIds.length >= MAX_COMPARE;
+                  const imageUrl = getProductImage(product);
                   return (
                     <div
                       key={id}
@@ -292,15 +388,15 @@ export function CompareProductsPage() {
                       onMouseEnter={e => { if (!isSelected && !isFull) e.currentTarget.style.background = "#f8fafc"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = isSelected ? "#f0f9ff" : "#fff"; }}
                     >
-                      <div style={{ width: 48, height: 48, borderRadius: 12, background: product.image_url ? `center/cover url(${product.image_url})` : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20 }}>
-                        {!product.image_url && "📦"}
+                      <div style={{ width: 48, height: 48, borderRadius: 12, background: imageUrl ? `center/contain no-repeat url(${imageUrl})` : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20 }}>
+                        {!imageUrl && "📦"}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {product.product_name || product.name}
+                          {getProductName(product)}
                         </div>
                         <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                          {product.category?.name || product.category_name || "—"} · ID: {id}
+                          {getCategoryName(product)} · ID: {id}
                         </div>
                       </div>
                       <div style={{ fontSize: 12, fontWeight: 800, padding: "4px 12px", borderRadius: 8, background: isSelected ? "#dbeafe" : "#f1f5f9", color: isSelected ? "#1d4ed8" : "#64748b", flexShrink: 0 }}>
@@ -344,15 +440,16 @@ export function CompareProductsPage() {
                 Tiêu chí so sánh
               </div>
               {comparedItems.map((item, i) => {
-                const variant = item.primaryVariant || item.variants?.[0];
                 const color = SLOT_COLORS[i] || "#3b82f6";
+                const price = getProductPrice(item);
+                const itemId = getProductId(item);
                 return (
-                  <div key={item.product_id} style={{ padding: "20px 20px", borderLeft: `3px solid ${color}`, background: `${color}08` }}>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{item.category?.name || "—"}</div>
-                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", lineHeight: 1.3, marginBottom: 8 }}>{item.product_name}</div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color }}>{variant?.price ? `${formatCurrency(variant.price)}đ` : "—"}</div>
+                  <div key={itemId} style={{ padding: "20px 20px", borderLeft: `3px solid ${color}`, background: `${color}08` }}>
+                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{getCategoryName(item)}</div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", lineHeight: 1.3, marginBottom: 8 }}>{getProductName(item)}</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color }}>{price > 0 ? `${formatCurrency(price)}đ` : "—"}</div>
                     <Link
-                      to={`/products/${item.product_id}`}
+                      to={`/products/${item.slug || itemId}`}
                       style={{ display: "inline-block", marginTop: 8, fontSize: 12, color, textDecoration: "none", fontWeight: 700 }}
                     >
                       Xem chi tiết →
@@ -367,15 +464,14 @@ export function CompareProductsPage() {
               {
                 label: "💰 Giá bán",
                 render: (item) => {
-                  const v = item.primaryVariant || item.variants?.[0];
-                  return <span style={{ fontWeight: 800, color: "#0f172a" }}>{v?.price ? `${formatCurrency(v.price)}đ` : "—"}</span>;
+                  const price = getProductPrice(item);
+                  return <span style={{ fontWeight: 800, color: "#0f172a" }}>{price > 0 ? `${formatCurrency(price)}đ` : "—"}</span>;
                 }
               },
               {
                 label: "📦 Tồn kho",
                 render: (item) => {
-                  const v = item.primaryVariant || item.variants?.[0];
-                  const qty = Number(v?.stock_quantity || v?.stock || 0);
+                  const qty = getProductStock(item);
                   return <span style={{ fontWeight: 700, color: qty > 0 ? "#15803d" : "#ef4444" }}>{qty > 0 ? `${qty} sản phẩm` : "Hết hàng"}</span>;
                 }
               },
@@ -385,13 +481,13 @@ export function CompareProductsPage() {
               },
               {
                 label: "📂 Danh mục",
-                render: (item) => item.category?.name || "—"
+                render: (item) => getCategoryName(item)
               }
             ].map((row, ri) => (
               <div key={ri} style={{ display: "grid", gridTemplateColumns: `220px repeat(${comparedItems.length}, 1fr)`, borderBottom: "1px solid #f1f5f9", background: ri % 2 === 0 ? "#fff" : "#fafbff" }}>
                 <div style={{ padding: "16px 24px", fontWeight: 700, fontSize: 14, color: "#374151", background: "#f8fafc", borderRight: "1px solid #f1f5f9" }}>{row.label}</div>
                 {comparedItems.map((item, ci) => (
-                  <div key={item.product_id} style={{ padding: "16px 20px", fontSize: 14, borderLeft: ci > 0 ? "1px solid #f1f5f9" : "none" }}>
+                  <div key={getProductId(item)} style={{ padding: "16px 20px", fontSize: 14, borderLeft: ci > 0 ? "1px solid #f1f5f9" : "none" }}>
                     {row.render(item)}
                   </div>
                 ))}
@@ -420,7 +516,7 @@ export function CompareProductsPage() {
                         const val = specs[key] || "—";
                         const isMissing = val === "—";
                         return (
-                          <div key={item.product_id} style={{ padding: "14px 20px", fontSize: 13, borderLeft: ci > 0 ? "1px solid #f1f5f9" : "none", color: isMissing ? "#cbd5e1" : "#0f172a", fontWeight: isMissing ? 400 : 600 }}>
+                          <div key={getProductId(item)} style={{ padding: "14px 20px", fontSize: 13, borderLeft: ci > 0 ? "1px solid #f1f5f9" : "none", color: isMissing ? "#cbd5e1" : "#0f172a", fontWeight: isMissing ? 400 : 600 }}>
                             {val}
                           </div>
                         );
@@ -436,16 +532,17 @@ export function CompareProductsPage() {
               <div style={{ padding: "20px 24px", fontWeight: 700, fontSize: 13, color: "#64748b" }}>Thao tác</div>
               {comparedItems.map((item, ci) => {
                 const color = SLOT_COLORS[ci] || "#3b82f6";
+                const itemId = getProductId(item);
                 return (
-                  <div key={item.product_id} style={{ padding: "20px 20px", borderLeft: ci > 0 ? "1px solid #e2e8f0" : "none", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div key={itemId} style={{ padding: "20px 20px", borderLeft: ci > 0 ? "1px solid #e2e8f0" : "none", display: "flex", flexDirection: "column", gap: 8 }}>
                     <Link
-                      to={`/products/${item.product_id}`}
+                      to={`/products/${item.slug || itemId}`}
                       style={{ display: "block", textAlign: "center", padding: "10px 16px", background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: "#fff", borderRadius: 12, fontWeight: 800, fontSize: 13, textDecoration: "none" }}
                     >
                       🛒 Xem & Mua
                     </Link>
                     <button
-                      onClick={() => removeProduct(item.product_id)}
+                      onClick={() => removeProduct(itemId)}
                       style={{ padding: "8px 16px", background: "none", border: "1px solid #e2e8f0", borderRadius: 12, color: "#94a3b8", fontSize: 13, cursor: "pointer", fontWeight: 600 }}
                     >
                       Xóa khỏi SS

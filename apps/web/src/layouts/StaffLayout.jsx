@@ -3,7 +3,11 @@ import { Navigate, Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const STAFF_NAV_ITEMS = [
-  { to: "/staff/orders", label: "Đơn hàng can xử lý", description: "Theo doi, cập nhật va tao vận đơn mock" }
+  {
+    to: "/staff/orders",
+    label: "Đơn hàng cần xử lý",
+    description: "Theo dõi đơn mới, cập nhật trạng thái và hoàn tất giao hàng"
+  }
 ];
 
 export function StaffLayout() {
@@ -23,7 +27,7 @@ export function StaffLayout() {
 
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(16, 185, 129, 0.15), transparent 40%), var(--color-bg)", color: "#1f2937" }}>
-      <div style={{ maxWidth: 1360, margin: "0 auto", padding: "28px 24px 40px", display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
+      <div style={{ maxWidth: 1360, margin: "0 auto", padding: "28px 24px 40px", display: "grid", gridTemplateColumns: "minmax(260px, 300px) minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
         <aside
           style={{
             position: "sticky",
@@ -32,8 +36,8 @@ export function StaffLayout() {
             gap: 18,
             padding: 24,
             borderRadius: 24,
-            background: "rgba(255, 255, 255, 0.65)",
-            border: "1px solid rgba(255, 255, 255, 0.8)",
+            background: "rgba(255, 255, 255, 0.82)",
+            border: "1px solid rgba(255, 255, 255, 0.9)",
             boxShadow: "0 20px 40px rgba(0, 0, 0, 0.04)",
             backdropFilter: "blur(24px) saturate(150%)",
             WebkitBackdropFilter: "blur(24px) saturate(150%)"
@@ -43,7 +47,7 @@ export function StaffLayout() {
             <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6b7280" }}>Sales workspace</div>
             <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>Xử lý đơn hàng</div>
             <div style={{ color: "#6b7280", lineHeight: 1.7 }}>
-              Khu v?c ri?ng cho nhân viên ban hang de xử lý don, cập nhật tr?ng th?i va ghi chu tư vấn cấu hình cho khach.
+              Khu vực dành cho nhân viên kinh doanh để tiếp nhận đơn, điều phối giao hàng và theo dõi tiến trình xử lý của khách.
             </div>
           </div>
 
@@ -83,11 +87,11 @@ export function StaffLayout() {
           <div style={{ display: "grid", gap: 10 }}>
             {role === "ADMIN" ? (
               <Link to="/admin/dashboard" style={{ display: "inline-flex", justifyContent: "center", padding: "12px 16px", borderRadius: 999, background: "#111827", color: "#ffffff", textDecoration: "none", fontWeight: 700 }}>
-                V? admin
+                Về admin
               </Link>
             ) : null}
             <Link to="/" style={{ display: "inline-flex", justifyContent: "center", padding: "12px 16px", borderRadius: 999, border: "1px solid #e5e7eb", background: "#ffffff", color: "#1f2937", textDecoration: "none" }}>
-              V? c?a h?ng
+              Về cửa hàng
             </Link>
           </div>
         </aside>
@@ -99,6 +103,3 @@ export function StaffLayout() {
     </div>
   );
 }
-
-
-

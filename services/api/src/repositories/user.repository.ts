@@ -7,13 +7,21 @@ export async function createUser(data: {
   phone?: string;
   role?: string;
 }) {
-  const { email, password, fullName, phone } = data;
-  
+  const { email, password, fullName, phone, role } = data;
+  const normalizedRoleName = String(role || "CUSTOMER").trim().toUpperCase();
+  const resolvedRole = await prisma.role.findFirst({
+    where: { name: normalizedRoleName }
+  });
+
+  if (!resolvedRole) {
+    throw new Error(`Role ${normalizedRoleName} not found`);
+  }
+
   // Use raw SQL to bypass Prisma Client sync issues with the new 'phone' field
   await prisma.$executeRawUnsafe(
-    `INSERT INTO users (email, password, full_name, phone, created_at, updated_at) 
-     VALUES (?, ?, ?, ?, NOW(), NOW())`,
-    email, password, fullName, phone
+    `INSERT INTO users (email, password, full_name, phone, role_id, created_at, updated_at) 
+     VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+    email, password, fullName, phone, resolvedRole.id
   );
 
   return prisma.user.findUnique({

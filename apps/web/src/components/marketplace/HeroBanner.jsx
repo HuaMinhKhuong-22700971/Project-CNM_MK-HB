@@ -50,7 +50,7 @@ export function HeroBanner() {
         }}>
           Chúng tôi cung cấp hướng dẫn lựa chọn linh kiện, gợi ý từ AI, so sánh giá cả và khả năng tương thích thời gian thực cho những người đam mê công nghệ.
         </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 20 }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 20, flexWrap: "wrap" }}>
           <Link to="/pc-builder" className="hover-lift" style={{ 
             background: "#3b82f6", 
             color: "#fff", 
@@ -84,6 +84,23 @@ export function HeroBanner() {
             transition: "all 0.3s ease",
           }}>
             Linh kiện PC
+          </Link>
+          <Link to="/compare" style={{
+            background: "rgba(245, 166, 35, 0.18)",
+            color: "#ffffff",
+            backdropFilter: "blur(8px)",
+            border: "1px solid rgba(245, 166, 35, 0.4)",
+            padding: "0 30px",
+            height: 56,
+            borderRadius: "14px",
+            display: "flex",
+            alignItems: "center",
+            fontWeight: 800,
+            fontSize: 18,
+            textDecoration: "none",
+            transition: "all 0.3s ease"
+          }}>
+            So sánh
           </Link>
         </div>
       </div>

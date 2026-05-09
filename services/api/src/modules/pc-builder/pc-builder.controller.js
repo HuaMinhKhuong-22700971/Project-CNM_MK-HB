@@ -7,6 +7,11 @@ const createBuild = asyncHandler(async (req, res) => {
   return sendSuccess(res, "PC build created successfully", result, 201);
 });
 
+const getCurrentBuild = asyncHandler(async (req, res) => {
+  const result = await pcBuilderService.getCurrentBuild(req.user.id);
+  return sendSuccess(res, "Current PC build fetched successfully", result);
+});
+
 const addBuildItem = asyncHandler(async (req, res) => {
   const result = await pcBuilderService.upsertBuildItem(req.user.id, req.params.buildId, req.body || {});
   return sendSuccess(res, "PC build item added successfully", result, 201);
@@ -41,12 +46,19 @@ const suggestBuild = asyncHandler(async (req, res) => {
   return sendSuccess(res, "PC build suggestion generated successfully", result);
 });
 
+const checkRawCompatibility = asyncHandler(async (req, res) => {
+  const result = await pcBuilderService.checkRawCompatibility(req.body || {});
+  return sendSuccess(res, "PC build compatibility checked successfully", result);
+});
+
 module.exports = {
   createBuild,
+  getCurrentBuild,
   addBuildItem,
   replaceBuildItem,
   getBuildDetail,
   removeBuildItem,
   saveBuild,
-  suggestBuild
+  suggestBuild,
+  checkRawCompatibility
 };

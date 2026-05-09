@@ -35,8 +35,8 @@ export async function checkBuildCompatibility(buildId) {
   return response.data;
 }
 
-export async function checkRawCompatibility(productIds) {
-  const response = await httpClient.post("/pc-builder/check-compatibility", { productIds });
+export async function checkRawCompatibility(payload) {
+  const response = await httpClient.post("/pc-builder/check-compatibility", payload);
   return response.data;
 }
 

@@ -58,6 +58,7 @@ export function AppRouter() {
         { path: routeConfig.public.ticketCreate.replace(/^\//, ""), element: <TicketCreatePage /> },
         { path: routeConfig.public.ticketDetail.replace(/^\//, ""), element: <TicketDetailPage /> },
         { path: routeConfig.public.aiChat.replace(/^\//, ""), element: <AiChatPage /> },
+        { path: routeConfig.public.aiAdvisor.replace(/^\//, ""), element: <AiChatPage /> },
         { path: routeConfig.public.pcBuilder.replace(/^\//, ""), element: <PcBuilderPage /> },
         { path: routeConfig.public.login.replace(/^\//, ""), element: <LoginPage /> },
         { path: routeConfig.public.register.replace(/^\//, ""), element: <RegisterPage /> },

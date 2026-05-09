@@ -14,7 +14,7 @@ const getStaffOrderDetail = asyncHandler(async (req, res) => {
 });
 
 const updateStaffOrderStatus = asyncHandler(async (req, res) => {
-  const result = await ordersService.updateOrderStatus(req.user, req.params.orderId, req.body?.status);
+  const result = await ordersService.updateOrderStatus(req.user, req.params.orderId, req.body || {});
   await recordAuditLog({
     actorUserId: req.user?.id,
     actorRole: req.user?.role,
@@ -22,7 +22,7 @@ const updateStaffOrderStatus = asyncHandler(async (req, res) => {
     entityType: "ORDER",
     entityId: req.params.orderId,
     description: `Staff updated order #${req.params.orderId} to ${req.body?.status}`,
-    metadata: { status: req.body?.status }
+    metadata: { status: req.body?.status, reason: req.body?.reason || null }
   });
   return sendSuccess(res, "Order status updated successfully", result);
 });

@@ -542,12 +542,20 @@ a {
   overflow: hidden;
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  display: grid;
+  grid-template-rows: 1fr auto;
 }
 
 .market-product-card:hover {
   transform: none;
   box-shadow: var(--market-shadow-hover);
   border-color: var(--market-primary);
+}
+
+.market-product-card__link {
+  display: grid;
+  color: inherit;
+  text-decoration: none;
 }
 
 .market-product-card__media {
@@ -650,6 +658,49 @@ a {
 .market-product-card__tag {
   color: var(--market-success);
   font-weight: 700;
+}
+
+.market-product-card__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.market-product-card__compare,
+.market-product-card__detail {
+  min-height: 38px;
+  border-radius: var(--market-radius-sm);
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.market-product-card__compare {
+  border: 1px solid rgba(32, 120, 202, 0.28);
+  background: var(--market-primary-soft);
+  color: var(--market-primary);
+}
+
+.market-product-card__compare:hover {
+  border-color: var(--market-primary);
+  background: #dbeafe;
+}
+
+.market-product-card__detail {
+  border: 1px solid var(--market-border);
+  background: #fff;
+  color: var(--market-text);
+  text-decoration: none;
+}
+
+.market-product-card__detail:hover {
+  border-color: var(--market-primary);
+  color: var(--market-primary);
 }
 
 .market-footer {

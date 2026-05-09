@@ -37,7 +37,7 @@ const getOrderDetail = asyncHandler(async (req, res) => {
 });
 
 const updateOrderStatus = asyncHandler(async (req, res) => {
-  const result = await ordersService.updateOrderStatus(req.user, req.params.orderId, req.body?.status);
+  const result = await ordersService.updateOrderStatus(req.user, req.params.orderId, req.body || {});
   await recordAuditLog({
     actorUserId: req.user?.id,
     actorRole: req.user?.role,

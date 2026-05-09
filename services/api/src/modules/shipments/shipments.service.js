@@ -204,9 +204,9 @@ async function syncOrderStatusForShipment(orderId, shipmentStatus) {
   let nextOrderStatus = null;
 
   if (["CREATED", "READY_TO_SHIP", "IN_TRANSIT"].includes(shipmentStatus)) {
-    nextOrderStatus = "SHIPPING";
+    nextOrderStatus = "SHIPPED";
   } else if (shipmentStatus === "DELIVERED") {
-    nextOrderStatus = "COMPLETED";
+    nextOrderStatus = "DELIVERED";
   }
 
   if (!nextOrderStatus) {

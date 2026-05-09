@@ -6,6 +6,8 @@ const controller = require("./pc-builder.controller");
 const router = express.Router();
 
 router.post("/suggestion", controller.suggestBuild);
+router.post("/check-compatibility", controller.checkRawCompatibility);
+router.get("/current", verifyToken, controller.getCurrentBuild);
 router.post("/", verifyToken, controller.createBuild);
 router.post("/:buildId/items", verifyToken, controller.addBuildItem);
 router.patch("/:buildId/items/:componentType", verifyToken, controller.replaceBuildItem);

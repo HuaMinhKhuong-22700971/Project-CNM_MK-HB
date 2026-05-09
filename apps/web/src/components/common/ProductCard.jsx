@@ -1,8 +1,11 @@
-﻿import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+
+import { addStoredCompareId, buildCompareUrl } from "../../utils/compare";
 
 const STAR_TEXT = "★★★★★";
 
 export function ProductCard({ product }) {
+  const navigate = useNavigate();
   const productId = product?.product_id || product?.id;
   const productName = product?.product_name || product?.name || "Sản phẩm đang cập nhật";
   const productSlug = product?.slug || productId;
@@ -16,33 +19,50 @@ export function ProductCard({ product }) {
   const isMall = Boolean(product?.isMall);
   const isFreeShip = Boolean(product?.isFreeShip);
 
+  function handleCompareClick() {
+    if (!productId) return;
+    const compareIds = addStoredCompareId(productId);
+    navigate(buildCompareUrl(compareIds));
+  }
+
   return (
-    <Link className="market-product-card" to={`/products/${productSlug}`}>
-      <div className="market-product-card__media">
-        {imageUrl ? <img src={imageUrl} alt={productName} /> : <span>{brandName}</span>}
-        <span className="market-product-card__discount">Giảm {discountPercent}%</span>
-        {isMall ? <span className="market-product-card__mall">Mall</span> : null}
+    <article className="market-product-card">
+      <Link className="market-product-card__link" to={`/products/${productSlug}`}>
+        <div className="market-product-card__media">
+          {imageUrl ? <img src={imageUrl} alt={productName} /> : <span>{brandName}</span>}
+          <span className="market-product-card__discount">Giảm {discountPercent}%</span>
+          {isMall ? <span className="market-product-card__mall">Mall</span> : null}
+        </div>
+
+        <div className="market-product-card__body">
+          <div className="market-product-card__name">{productName}</div>
+
+          <div className="market-product-card__price">
+            <span className="market-product-card__price-current">{price.toLocaleString("vi-VN")}đ</span>
+            <span className="market-product-card__price-old">{oldPrice.toLocaleString("vi-VN")}đ</span>
+          </div>
+
+          <div className="market-product-card__meta">
+            <span className="market-product-card__stars">{STAR_TEXT}</span>
+            <span>{rating}</span>
+            <span>Đã bán {soldCount}</span>
+          </div>
+
+          <div className="market-product-card__bottom">
+            <span className="market-product-card__tag">{brandName}</span>
+            <span className="market-product-card__tag">{isFreeShip ? "Freeship" : "Giao nhanh"}</span>
+          </div>
+        </div>
+      </Link>
+
+      <div className="market-product-card__actions">
+        <button className="market-product-card__compare" type="button" onClick={handleCompareClick}>
+          So sánh
+        </button>
+        <Link className="market-product-card__detail" to={`/products/${productSlug}`}>
+          Chi tiết
+        </Link>
       </div>
-
-      <div className="market-product-card__body">
-        <div className="market-product-card__name">{productName}</div>
-
-        <div className="market-product-card__price">
-          <span className="market-product-card__price-current">{price.toLocaleString("vi-VN")}đ</span>
-          <span className="market-product-card__price-old">{oldPrice.toLocaleString("vi-VN")}đ</span>
-        </div>
-
-        <div className="market-product-card__meta">
-          <span className="market-product-card__stars">{STAR_TEXT}</span>
-          <span>{rating}</span>
-          <span>Đã bán {soldCount}</span>
-        </div>
-
-        <div className="market-product-card__bottom">
-          <span className="market-product-card__tag">{brandName}</span>
-          <span className="market-product-card__tag">{isFreeShip ? "Freeship" : "Giao nhanh"}</span>
-        </div>
-      </div>
-    </Link>
+    </article>
   );
 }

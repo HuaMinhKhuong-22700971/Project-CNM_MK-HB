@@ -9,6 +9,7 @@ import {
   getOrdersByUser,
   listOrders,
   markOrderPaid,
+  normalizeOrderRecord,
   updateOrderStatus
 } from "./orders.repository";
 import { checkoutSchema, updateOrderStatusSchema } from "./orders.validator";
@@ -48,6 +49,19 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
       throw new AppError("Cart is empty", 400);
     }
 
+    if (payload.addressId) {
+      const address = await tx.address.findFirst({
+        where: {
+          id: payload.addressId,
+          user_id: Number(currentUser.userId)
+        }
+      });
+
+      if (!address) {
+        throw new AppError("Shipping address not found", 404);
+      }
+    }
+
     let total = 0;
     for (const item of cartWithItems.CartItem) {
       if (!item.ProductSku || !item.ProductSku.is_active) {
@@ -61,19 +75,22 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
       total += Number(item.ProductSku.price) * item.quantity;
     }
 
-    const orderUnitPriceFinal = total;
-    // Add shipping fee if provided inside the payload, but checkoutSchema doesn't have shippingFee. 
-    // Wait, the client sends shippingFee! Let's just use the cart total.
+    const shippingFee = Number(payload.shippingFee || 0);
+    const finalAmount = total + shippingFee;
     
     const order = await tx.order.create({
       data: {
         user_id: Number(currentUser.userId),
+        address_id: payload.addressId,
         total_price: total, // Just backward compat
         total_amount: total,
+        shipping_fee: shippingFee,
+        final_amount: finalAmount,
         payment_method: payload.paymentMethod,
         shipping_address: payload.shippingAddress,
         payment_status: payload.paymentMethod === "COD" ? "UNPAID" : "PENDING_GATEWAY",
         status: "PENDING",
+        note: payload.note,
         created_at: new Date(),
         updated_at: new Date()
       }
@@ -135,7 +152,7 @@ export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
 
   res.status(200).json({
     success: true,
-    data: orders
+    data: await Promise.all(orders.map((order) => normalizeOrderRecord(order)))
   });
 });
 
@@ -161,7 +178,7 @@ export const getOrderDetail = asyncHandler(async (req: Request, res: Response) =
 
   res.status(200).json({
     success: true,
-    data: order
+    data: await normalizeOrderRecord(order)
   });
 });
 
@@ -170,7 +187,7 @@ export const getAllOrders = asyncHandler(async (_req: Request, res: Response) =>
 
   res.status(200).json({
     success: true,
-    data: orders
+    data: await Promise.all(orders.map((order) => normalizeOrderRecord(order)))
   });
 });
 
@@ -188,29 +205,8 @@ export const patchOrderStatus = asyncHandler(async (req: Request, res: Response)
       // Shipment tracking can be managed via Shipment model instead
     }
 
-    // Generate warranties if moving to COMPLETED and previously not COMPLETED
-    if (payload.status === "COMPLETED" && current.status !== "COMPLETED") {
-      const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1); // 1 year warranty default
-
-      for (const item of (current as any).OrderItem || []) {
-        const warrantyCode = `BH-${Math.random().toString(36).substring(2, 10).toUpperCase()}-${item.id}`;
-        await tx.warrantyItem.create({
-          data: {
-            order_id: current.id,
-            order_item_id: item.id,
-            user_id: current.user_id!,
-            warranty_code: warrantyCode,
-            status: "ACTIVE",
-            activated_at: new Date(),
-            expires_at: endDate
-          }
-        });
-      }
-    }
-
     return await tx.order.update({
-      where: { id: req.params.id },
+      where: { id: Number(req.params.id) },
       data: { status: payload.status }
     });
   });
@@ -220,7 +216,7 @@ export const patchOrderStatus = asyncHandler(async (req: Request, res: Response)
 
   res.status(200).json({
     success: true,
-    data: finalOrder
+    data: await normalizeOrderRecord(finalOrder)
   });
 });
 
@@ -234,7 +230,7 @@ export const payOrderMock = asyncHandler(async (req: Request, res: Response) => 
 
   res.status(200).json({
     success: true,
-    data: paid,
+    data: await normalizeOrderRecord(paid),
     message: "Payment confirmed (mock)"
   });
 });

@@ -4,6 +4,15 @@ const { buildActiveCondition, getTableColumns, pickColumn } = require("../../uti
 const { ROLES, hasAnyRole, normalizeRole } = require("../../utils/role-helpers");
 
 let schemaCache = null;
+const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELED"];
+const STAFF_VISIBLE_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"];
+const ORDER_STATUS_TRANSITIONS = {
+  PENDING: ["PROCESSING", "CANCELED"],
+  PROCESSING: ["SHIPPED"],
+  SHIPPED: ["DELIVERED"],
+  DELIVERED: [],
+  CANCELED: []
+};
 
 function toMoney(value) {
   return Number(Number(value || 0).toFixed(2));
@@ -29,10 +38,9 @@ function canManageOrders(role) {
 
 function normalizeOrderStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
-  const allowedStatuses = ["PENDING", "CONFIRMED", "PACKING", "SHIPPING", "COMPLETED", "CANCELED"];
 
-  if (!allowedStatuses.includes(normalized)) {
-    throw createError(`status must be one of: ${allowedStatuses.join(", ")}`, 400);
+  if (!ORDER_STATUSES.includes(normalized)) {
+    throw createError(`status must be one of: ${ORDER_STATUSES.join(", ")}`, 400);
   }
 
   return normalized;
@@ -43,7 +51,7 @@ async function getSchemaConfig() {
     return schemaCache;
   }
 
-  const [orderColumns, orderItemColumns, cartColumns, cartItemColumns, addressColumns, variantColumns, productColumns, shipmentColumns] = await Promise.all([
+  const [orderColumns, orderItemColumns, cartColumns, cartItemColumns, addressColumns, variantColumns, productColumns, shipmentColumns, userColumns] = await Promise.all([
     getTableColumns("orders"),
     getTableColumns("order_items"),
     getTableColumns("carts"),
@@ -51,7 +59,8 @@ async function getSchemaConfig() {
     getTableColumns("addresses"),
     getTableColumns("product_variants"),
     getTableColumns("products"),
-    getTableColumns("shipments").catch(() => [])
+    getTableColumns("shipments").catch(() => []),
+    getTableColumns("users").catch(() => [])
   ]);
 
   const config = {
@@ -139,6 +148,14 @@ async function getSchemaConfig() {
       orderId: pickColumn(shipmentColumns, ["order_id"], null),
       status: pickColumn(shipmentColumns, ["status"], null),
       trackingCode: pickColumn(shipmentColumns, ["tracking_code"], null)
+    },
+    users: {
+      table: userColumns.length > 0 ? "users" : null,
+      columns: userColumns,
+      id: pickColumn(userColumns, ["id"], null),
+      email: pickColumn(userColumns, ["email"], null),
+      fullName: pickColumn(userColumns, ["full_name", "name"], null),
+      phone: pickColumn(userColumns, ["phone", "phone_number"], null)
     }
   };
 
@@ -448,6 +465,41 @@ async function getShipmentByOrderId(orderId) {
   return rows[0] || null;
 }
 
+async function getCustomerByUserId(userId) {
+  const config = await getSchemaConfig();
+
+  if (!config.users.table || !config.users.id) {
+    return null;
+  }
+
+  const rows = await query(
+    `
+      SELECT
+        u.${config.users.id} AS id,
+        ${config.users.fullName ? `u.${config.users.fullName}` : "NULL"} AS fullName,
+        ${config.users.email ? `u.${config.users.email}` : "NULL"} AS email,
+        ${config.users.phone ? `u.${config.users.phone}` : "NULL"} AS phone
+      FROM ${config.users.table} u
+      WHERE u.${config.users.id} = ?
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  const customer = rows[0];
+
+  if (!customer) {
+    return null;
+  }
+
+  return {
+    id: customer.id,
+    fullName: customer.fullName,
+    email: customer.email,
+    phone: customer.phone
+  };
+}
+
 async function getOrderItemsByOrderId(orderId) {
   const config = await getSchemaConfig();
   const rows = await query(
@@ -611,10 +663,14 @@ async function getMyOrders(userId) {
 
   const orders = [];
   for (const row of rows) {
-    const shipment = await getShipmentByOrderId(row.id);
+    const [shipment, customer] = await Promise.all([
+      getShipmentByOrderId(row.id),
+      getCustomerByUserId(row.userId)
+    ]);
     orders.push({
       ...formatOrderSummary(row),
-      shipment: formatShipment(shipment)
+      shipment: formatShipment(shipment),
+      customer
     });
   }
 
@@ -630,10 +686,14 @@ async function getAllOrders() {
 
   const orders = [];
   for (const row of rows) {
-    const shipment = await getShipmentByOrderId(row.id);
+    const [shipment, customer] = await Promise.all([
+      getShipmentByOrderId(row.id),
+      getCustomerByUserId(row.userId)
+    ]);
     orders.push({
       ...formatOrderSummary(row),
-      shipment: formatShipment(shipment)
+      shipment: formatShipment(shipment),
+      customer
     });
   }
 
@@ -643,7 +703,6 @@ async function getAllOrders() {
 async function getProcessingOrders(params = {}) {
   const config = await getSchemaConfig();
   const status = params.status ? normalizeOrderStatus(params.status) : null;
-  const defaultStatuses = ["PENDING", "CONFIRMED", "PACKING", "SHIPPING"];
   const whereClauses = [];
   const queryParams = [];
 
@@ -652,8 +711,8 @@ async function getProcessingOrders(params = {}) {
       whereClauses.push(`o.${config.orders.status} = ?`);
       queryParams.push(status);
     } else {
-      whereClauses.push(`o.${config.orders.status} IN (${defaultStatuses.map(() => "?").join(", ")})`);
-      queryParams.push(...defaultStatuses);
+      whereClauses.push(`o.${config.orders.status} IN (${STAFF_VISIBLE_STATUSES.map(() => "?").join(", ")})`);
+      queryParams.push(...STAFF_VISIBLE_STATUSES);
     }
   }
 
@@ -667,10 +726,14 @@ async function getProcessingOrders(params = {}) {
 
   const orders = [];
   for (const row of rows) {
-    const shipment = await getShipmentByOrderId(row.id);
+    const [shipment, customer] = await Promise.all([
+      getShipmentByOrderId(row.id),
+      getCustomerByUserId(row.userId)
+    ]);
     orders.push({
       ...formatOrderSummary(row),
-      shipment: formatShipment(shipment)
+      shipment: formatShipment(shipment),
+      customer
     });
   }
 
@@ -692,11 +755,13 @@ async function getOrderDetail(userOrUserId, orderId) {
     getOrderItemsByOrderId(parsedOrderId),
     getShipmentByOrderId(parsedOrderId)
   ]);
+  const customer = await getCustomerByUserId(orderRow.userId);
 
   return {
     ...formatOrderSummary(orderRow),
     items,
-    shipment: formatShipment(shipment)
+    shipment: formatShipment(shipment),
+    customer
   };
 }
 
@@ -740,9 +805,12 @@ async function cancelOrder(userId, orderId) {
   return getOrderDetail({ id: userId, role: ROLES.CUSTOMER }, parsedOrderId);
 }
 
-async function updateOrderStatus(actor, orderId, status) {
+async function updateOrderStatus(actor, orderId, statusOrPayload) {
   const parsedOrderId = toPositiveInteger(orderId, "orderId");
   const config = await getSchemaConfig();
+  const payload = typeof statusOrPayload === "object" && statusOrPayload !== null
+    ? statusOrPayload
+    : { status: statusOrPayload };
 
   if (!canManageOrders(actor.role)) {
     throw createError("Forbidden: you do not have permission to manage orders", 403);
@@ -758,9 +826,57 @@ async function updateOrderStatus(actor, orderId, status) {
     throw createError("Order not found", 404);
   }
 
-  const nextStatus = normalizeOrderStatus(status);
+  const currentStatus = normalizeOrderStatus(existingOrder.status || "PENDING");
+  const nextStatus = normalizeOrderStatus(payload.status);
+  const allowedNextStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || [];
+
+  if (currentStatus !== nextStatus && !allowedNextStatuses.includes(nextStatus)) {
+    throw createError(`Cannot change order status from ${currentStatus} to ${nextStatus}`, 400);
+  }
+
+  const existingShipment = await getShipmentByOrderId(parsedOrderId);
+
+  if (nextStatus === "SHIPPED") {
+    if (!existingShipment || !String(existingShipment.trackingCode || "").trim()) {
+      throw createError("Cannot mark order as SHIPPED without a shipment tracking code", 400);
+    }
+
+    if (config.shipments.table && config.shipments.status) {
+      await query(
+        `
+          UPDATE ${config.shipments.table}
+          SET ${config.shipments.status} = ?
+          WHERE ${config.shipments.orderId} = ?
+        `,
+        ["IN_TRANSIT", parsedOrderId]
+      );
+    }
+  }
+
+  if (nextStatus === "DELIVERED") {
+    if (!existingShipment || !String(existingShipment.trackingCode || "").trim()) {
+      throw createError("Cannot mark order as DELIVERED without a shipment tracking code", 400);
+    }
+
+    if (config.shipments.table && config.shipments.status) {
+      await query(
+        `
+          UPDATE ${config.shipments.table}
+          SET ${config.shipments.status} = ?
+          WHERE ${config.shipments.orderId} = ?
+        `,
+        ["DELIVERED", parsedOrderId]
+      );
+    }
+  }
+
   const updateParts = [`${config.orders.status} = ?`];
   const params = [nextStatus];
+
+  if (config.orders.note && payload.reason && nextStatus === "CANCELED") {
+    updateParts.push(`${config.orders.note} = ?`);
+    params.push(String(payload.reason).trim());
+  }
 
   if (config.orders.updatedAt) {
     updateParts.push(`${config.orders.updatedAt} = NOW()`);
@@ -833,7 +949,8 @@ async function createMockShipment(actor, orderId, payload = {}) {
     throw createError("Order not found", 404);
   }
 
-  const trackingCode = String(payload.trackingCode || `MOCK-${parsedOrderId}-${Date.now()}`).trim();
+  const providedTrackingCode = String(payload.trackingCode || "").trim();
+  const trackingCode = providedTrackingCode || `MOCK-${parsedOrderId}-${Date.now()}`;
   const shipmentStatus = String(payload.status || "CREATED").trim().toUpperCase() || "CREATED";
   const existingShipment = await getShipmentByOrderId(parsedOrderId);
 
@@ -883,20 +1000,6 @@ async function createMockShipment(actor, orderId, payload = {}) {
     await query(
       `INSERT INTO ${config.shipments.table} (${fields.join(", ")}) VALUES (${values.join(", ")})`,
       params
-    );
-  }
-
-  if (config.orders.status && ["PENDING", "CONFIRMED", "PACKING"].includes(String(existingOrder.status || "").toUpperCase())) {
-    const updateParts = [`${config.orders.status} = ?`];
-    const params = ["SHIPPING"];
-
-    if (config.orders.updatedAt) {
-      updateParts.push(`${config.orders.updatedAt} = NOW()`);
-    }
-
-    await query(
-      `UPDATE ${config.orders.table} SET ${updateParts.join(", ")} WHERE ${config.orders.id} = ?`,
-      [...params, parsedOrderId]
     );
   }
 

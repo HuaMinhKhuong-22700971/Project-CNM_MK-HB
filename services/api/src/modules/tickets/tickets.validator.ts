@@ -10,8 +10,12 @@ export const updateTicketSchema = z
   .object({
     status: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]).optional(),
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
-    assignedToId: z.string().min(1).nullable().optional()
+    assignedToId: z.coerce.number().int().positive().nullable().optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided"
   });
+
+export const addTicketMessageSchema = z.object({
+  message: z.string().trim().min(1).max(5000)
+});

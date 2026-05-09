@@ -22,6 +22,33 @@ function formatCurrency(value) {
   return Number(value || 0).toLocaleString("vi-VN");
 }
 
+function getOrderStatusLabel(status) {
+  const labels = {
+    PENDING: "Chờ xác nhận",
+    PROCESSING: "Đang xử lý",
+    SHIPPED: "Đã giao vận",
+    DELIVERED: "Hoàn thành",
+    CANCELED: "Đã hủy",
+    PAID: "Đã thanh toán"
+  };
+
+  return labels[String(status || "").toUpperCase()] || status || "Chưa cập nhật";
+}
+
+function getShipmentStatusLabel(status) {
+  const labels = {
+    CREATED: "Đã tạo vận đơn",
+    READY_TO_SHIP: "Sẵn sàng giao",
+    IN_TRANSIT: "Đang vận chuyển",
+    DELIVERED: "Đã giao thành công",
+    FAILED: "Giao thất bại",
+    RETURNED: "Đã hoàn hàng",
+    CANCELED: "Đã hủy vận đơn"
+  };
+
+  return labels[String(status || "").toUpperCase()] || status || "Chưa cập nhật";
+}
+
 export function OrdersPage() {
   const location = useLocation();
   const { isAuthenticated } = useAuth();
@@ -122,7 +149,7 @@ export function OrdersPage() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                 <div style={{ display: "grid", gap: 4 }}>
                   <div style={{ fontWeight: 800, fontSize: 24, letterSpacing: "-0.03em" }}>Đơn hàng #{order.id}</div>
-                  <div style={{ fontSize: 14, color: "var(--muted)" }}>Trạng thái: {order.status}</div>
+                  <div style={{ fontSize: 14, color: "var(--muted)" }}>Trạng thái: {getOrderStatusLabel(order.status)}</div>
                   <div style={{ fontSize: 14, color: "var(--muted)" }}>
                     Thanh toán: {order.paymentMethod || "Chưa cập nhật"} - {order.paymentStatus || "Chưa cập nhật"}
                   </div>
@@ -139,7 +166,7 @@ export function OrdersPage() {
                 <div>Tạm tính: {formatCurrency(order.totalAmount)} VND</div>
                 <div>Phí vận chuyển: {formatCurrency(order.shippingFee)} VND</div>
                 {order.shipment ? (
-                  <div>Vận đơn: {order.shipment.trackingCode || "Đang cập nhật"} - {order.shipment.status || "CREATED"}</div>
+                  <div>Vận đơn: {order.shipment.trackingCode || "Đang cập nhật"} - {getShipmentStatusLabel(order.shipment.status || "CREATED")}</div>
                 ) : (
                   <div>Vận đơn: Chưa tạo vận đơn</div>
                 )}

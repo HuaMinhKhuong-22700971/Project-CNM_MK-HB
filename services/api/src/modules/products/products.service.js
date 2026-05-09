@@ -10,7 +10,7 @@ function normalizeListParams(params = {}) {
     brandId: params.brand_id ? Number(params.brand_id) : null,
     minPrice: params.min_price !== undefined && params.min_price !== "" ? Number(params.min_price) : null,
     maxPrice: params.max_price !== undefined && params.max_price !== "" ? Number(params.max_price) : null,
-    keyword: String(params.keyword || "").trim() || null,
+    keyword: String(params.keyword || params.search || "").trim() || null,
     attributeValueIds: normalizeAttributeValueIds(params.attribute_value_ids || params.attributeValueIds || []),
     page: toPositiveNumber(params.page, 1),
     limit: Math.min(toPositiveNumber(params.limit, 12), 50)
@@ -180,6 +180,8 @@ async function getProducts(params = {}) {
   const filters = normalizeListParams(params);
   const config = await getProductSchema();
   const offset = (filters.page - 1) * filters.limit;
+  const safeLimit = Math.max(1, Math.min(Number(filters.limit) || 12, 50));
+  const safeOffset = Math.max(0, Number(offset) || 0);
   const { whereSql, params: whereParams } = createListConditions(filters, config);
   const brandJoin = config.brands && config.products.brandId
     ? `LEFT JOIN ${config.brands.table} b ON b.${config.brands.id} = p.${config.products.brandId}`
@@ -208,16 +210,17 @@ async function getProducts(params = {}) {
         ${whereSql}
         GROUP BY p.${config.products.id}
         ORDER BY p.${config.products.id} DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${safeLimit} OFFSET ${safeOffset}
       `,
-      [...whereParams, filters.limit, offset]
+      whereParams
     ),
     query(
       `
-        SELECT COUNT(*) AS total_items
+        SELECT COUNT(DISTINCT p.${config.products.id}) AS total_items
         FROM ${config.products.table} p
         INNER JOIN ${config.categories.table} c ON c.${config.categories.id} = p.${config.products.categoryId}
         ${brandJoin}
+        ${skuJoin}
         ${whereSql}
       `,
       whereParams

@@ -11,7 +11,7 @@ export const getEligibleWarrantyItems = asyncHandler(async (req: Request, res: R
 
   const eligibleItems = await prisma.orderItem.findMany({
     where: {
-      Order: { user_id: numericUserId, status: "COMPLETED" },
+      Order: { user_id: numericUserId, status: "DELIVERED" },
       WarrantyItem: null  // No warranty registered yet
     }
   });
@@ -70,7 +70,7 @@ export const activateWarranty = asyncHandler(async (req: Request, res: Response)
     include: { Order: true }
   });
 
-  if (!orderItem || orderItem.Order.user_id !== numericUserId || orderItem.Order.status !== "COMPLETED") {
+  if (!orderItem || orderItem.Order.user_id !== numericUserId || orderItem.Order.status !== "DELIVERED") {
     throw new AppError("Sản phẩm không hợp lệ để kích hoạt bảo hành", 400);
   }
 

@@ -223,6 +223,8 @@ async function getProductDetail(productId) {
 
 async function getProducts(params = {}) {
   const filters = normalizeListParams(params, 20, 100);
+  const safeLimit = Math.max(1, Math.min(Number(filters.limit) || 20, 100));
+  const safeOffset = Math.max(0, Number(filters.offset) || 0);
   const whereClauses = [];
   const queryParams = [];
 
@@ -263,9 +265,9 @@ async function getProducts(params = {}) {
         ${whereSql}
         GROUP BY p.id
         ORDER BY p.id DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${safeLimit} OFFSET ${safeOffset}
       `,
-      [...queryParams, filters.limit, filters.offset]
+      queryParams
     ),
     query(
       `
@@ -500,6 +502,8 @@ function formatUser(row) {
 async function getUsers(params = {}) {
   const roleIdentifierColumn = await getRoleIdentifierColumn();
   const filters = normalizeListParams(params, 20, 100);
+  const safeLimit = Math.max(1, Math.min(Number(filters.limit) || 20, 100));
+  const safeOffset = Math.max(0, Number(filters.offset) || 0);
   const whereClauses = [];
   const queryParams = [];
 
@@ -530,9 +534,9 @@ async function getUsers(params = {}) {
         LEFT JOIN roles r ON r.id = u.role_id
         ${whereSql}
         ORDER BY u.created_at DESC
-        LIMIT ? OFFSET ?
+        LIMIT ${safeLimit} OFFSET ${safeOffset}
       `,
-      [...queryParams, filters.limit, filters.offset]
+      queryParams
     ),
     query(
       `SELECT COUNT(*) AS totalItems FROM users u ${whereSql}`,

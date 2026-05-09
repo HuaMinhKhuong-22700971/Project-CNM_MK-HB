@@ -5,13 +5,14 @@ import { ROLES } from "../../constants/roles";
 import { AppError } from "../../errors/app-error";
 import { asyncHandler } from "../../utils/async-handler";
 import {
+  createTicketMessage,
   createTicket,
   getTicketById,
   getTicketsByReporter,
   listTickets,
   updateTicket
 } from "./tickets.repository";
-import { createTicketSchema, updateTicketSchema } from "./tickets.validator";
+import { addTicketMessageSchema, createTicketSchema, updateTicketSchema } from "./tickets.validator";
 
 export const postMyTicket = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
@@ -91,7 +92,8 @@ export const patchTicket = asyncHandler(async (req: Request, res: Response) => {
 
   if (payload.assignedToId) {
     const assignee = await prisma.user.findUnique({
-      where: { id: typeof payload.assignedToId === "string" ? parseInt(payload.assignedToId, 10) : payload.assignedToId }
+      where: { id: payload.assignedToId },
+      include: { Role: true }
     });
 
     if (!assignee) {
@@ -105,9 +107,46 @@ export const patchTicket = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  const updated = await updateTicket(req.params.id, payload);
+  const updated = await updateTicket(req.params.id, {
+    status: payload.status,
+    priority: payload.priority,
+    assigned_to_id: payload.assignedToId
+  });
 
   res.status(200).json({
+    success: true,
+    data: updated
+  });
+});
+
+export const postTicketMessage = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  const ticket = await getTicketById(req.params.id);
+  if (!ticket) {
+    throw new AppError("Ticket not found", 404);
+  }
+
+  const canAccess =
+    Number(ticket.user_id) === Number(req.user.userId) ||
+    req.user.role === ROLES.ADMIN ||
+    req.user.role === ROLES.TECHNICIAN ||
+    req.user.role === ROLES.SALES;
+
+  if (!canAccess) {
+    throw new AppError("Forbidden", 403);
+  }
+
+  const payload = addTicketMessageSchema.parse(req.body);
+  const updated = await createTicketMessage({
+    ticketId: req.params.id,
+    userId: req.user.userId,
+    message: payload.message
+  });
+
+  res.status(201).json({
     success: true,
     data: updated
   });

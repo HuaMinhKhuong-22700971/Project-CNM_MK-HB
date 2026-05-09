@@ -10,6 +10,7 @@ export function MainHeader() {
   const navLinks = [
     { href: "/pc-builder", label: "Lắp ráp PC", icon: "🔧" },
     { href: "/products", label: "Linh kiện PC", icon: "💻" },
+    { href: "/compare", label: "So sánh", icon: "⚖️" },
     { href: "/ai-chat", label: "AI Tư Vấn", icon: "🤖" },
     { href: "/warranties", label: "Bảo hành", icon: "🛡️" },
   ];
@@ -28,7 +29,7 @@ export function MainHeader() {
       <div className="market-container market-header__main" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, padding: "0" }}>
         
         {/* Left: Logo & Nav */}
-        <div style={{ display: "flex", alignItems: "stretch", height: "100%", gap: 32 }}>
+        <div style={{ display: "flex", alignItems: "stretch", height: "100%", gap: 24 }}>
           <Link to="/" style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "#fff" }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 2 7 12 12 22 7 12 2" />
@@ -49,7 +50,7 @@ export function MainHeader() {
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    padding: "0 20px",
+                    padding: "0 16px",
                     color: isActive ? "var(--market-warning)" : "#fff",
                     textDecoration: "none",
                     fontWeight: 700,
@@ -75,7 +76,7 @@ export function MainHeader() {
 
         {/* Right: Search & Actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div style={{ width: 280 }}>
+          <div style={{ width: 260 }}>
              <SearchBar />
           </div>
           

@@ -213,6 +213,28 @@ async function createBuild(userId, payload = {}) {
   return getBuildDetail(userId, result.insertId);
 }
 
+async function getCurrentBuild(userId) {
+  const rows = await query(
+    `
+      SELECT id, user_id AS userId, name, created_at AS createdAt
+      FROM pc_builds
+      WHERE user_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  const build = rows[0] || null;
+
+  if (!build) {
+    return null;
+  }
+
+  const items = await getBuildItems(build.id);
+  return formatBuild(build, items);
+}
+
 async function upsertBuildItem(userId, buildId, payload) {
   const parsedBuildId = toPositiveInteger(buildId, "buildId");
   const skuId = toPositiveInteger(payload.productVariantId, "productVariantId");
@@ -470,11 +492,187 @@ async function suggestBuild(payload = {}) {
   };
 }
 
+function normalizeRawComponents(payload = {}) {
+  const rawComponents = Array.isArray(payload.components)
+    ? payload.components
+    : Array.isArray(payload.productIds)
+      ? payload.productIds.map((id) => ({ variant_id: id }))
+      : [];
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const component of rawComponents) {
+    const skuId = Number(
+      component.variant_id ||
+      component.variantId ||
+      component.productVariantId ||
+      component.skuId ||
+      component.id
+    );
+
+    if (!Number.isInteger(skuId) || skuId <= 0 || seen.has(skuId)) {
+      continue;
+    }
+
+    seen.add(skuId);
+    normalized.push({
+      componentType: String(component.component_type || component.componentType || "").trim().toLowerCase(),
+      skuId
+    });
+  }
+
+  return normalized.slice(0, 10);
+}
+
+async function getRawItemsWithAttributes(components) {
+  if (components.length === 0) {
+    return [];
+  }
+
+  const placeholders = components.map(() => "?").join(", ");
+  const rows = await query(
+    `
+      SELECT
+        s.id AS skuId,
+        p.id AS productId,
+        p.name AS productName,
+        c.name AS categoryName,
+        a.id AS attributeId,
+        a.name AS attributeName,
+        av.id AS attributeValueId,
+        av.value AS attributeValue
+      FROM product_skus s
+      INNER JOIN products p ON p.id = s.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN sku_attributes sa ON sa.sku_id = s.id
+      LEFT JOIN attribute_values av ON av.id = sa.attribute_value_id
+      LEFT JOIN attributes a ON a.id = av.attribute_id
+      WHERE s.id IN (${placeholders})
+      ORDER BY s.id ASC, a.name ASC
+    `,
+    components.map((component) => component.skuId)
+  );
+
+  const componentTypeBySku = new Map(components.map((component) => [component.skuId, component.componentType]));
+  const itemMap = new Map();
+
+  for (const row of rows) {
+    if (!itemMap.has(row.skuId)) {
+      itemMap.set(row.skuId, {
+        componentType: componentTypeBySku.get(row.skuId) || String(row.categoryName || "").toLowerCase(),
+        variant: {
+          id: row.skuId,
+          sku: `SKU-${row.skuId}`
+        },
+        product: {
+          id: row.productId,
+          name: row.productName,
+          categoryName: row.categoryName
+        },
+        attributes: []
+      });
+    }
+
+    if (row.attributeId && row.attributeValueId) {
+      itemMap.get(row.skuId).attributes.push({
+        attributeId: row.attributeId,
+        attributeKey: String(row.attributeName || "").trim().toLowerCase().replace(/\s+/g, "_"),
+        attributeValueId: row.attributeValueId,
+        attributeValue: row.attributeValue
+      });
+    }
+  }
+
+  return Array.from(itemMap.values());
+}
+
+async function checkRawCompatibility(payload = {}) {
+  const components = normalizeRawComponents(payload);
+
+  if (components.length < 2) {
+    throw createError("Please provide at least 2 components to check compatibility", 400);
+  }
+
+  const [items, ruleRows] = await Promise.all([
+    getRawItemsWithAttributes(components),
+    query(
+      `
+        SELECT id, attribute_value_1 AS attributeValue1, attribute_value_2 AS attributeValue2, is_compatible AS isCompatible
+        FROM compatibility_rules
+        WHERE COALESCE(is_active, 1) = 1
+      `
+    )
+  ]);
+
+  if (items.length < 2) {
+    throw createError("Not enough valid product variants found to check compatibility", 404);
+  }
+
+  const ruleMap = new Map();
+
+  for (const rule of ruleRows) {
+    const left = Number(rule.attributeValue1);
+    const right = Number(rule.attributeValue2);
+    if (!left || !right) continue;
+    const key = left < right ? `${left}:${right}` : `${right}:${left}`;
+    ruleMap.set(key, {
+      ruleId: rule.id,
+      isCompatible: Number(rule.isCompatible) === 1
+    });
+  }
+
+  const issues = [];
+
+  for (let i = 0; i < items.length; i += 1) {
+    for (let j = i + 1; j < items.length; j += 1) {
+      for (const sourceAttribute of items[i].attributes) {
+        for (const targetAttribute of items[j].attributes) {
+          const left = Number(sourceAttribute.attributeValueId);
+          const right = Number(targetAttribute.attributeValueId);
+          const key = left < right ? `${left}:${right}` : `${right}:${left}`;
+          const rule = ruleMap.get(key);
+
+          if (rule && !rule.isCompatible) {
+            issues.push({
+              ruleId: rule.ruleId,
+              source: {
+                componentType: items[i].componentType,
+                productName: items[i].product.name,
+                sku: items[i].variant.sku,
+                attributeKey: sourceAttribute.attributeKey,
+                attributeValue: sourceAttribute.attributeValue
+              },
+              target: {
+                componentType: items[j].componentType,
+                productName: items[j].product.name,
+                sku: items[j].variant.sku,
+                attributeKey: targetAttribute.attributeKey,
+                attributeValue: targetAttribute.attributeValue
+              },
+              message: `${items[i].product.name} ${sourceAttribute.attributeValue} is not compatible with ${items[j].product.name} ${targetAttribute.attributeValue}`
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    compatible: issues.length === 0,
+    checkedRuleCount: ruleMap.size,
+    checkedComponentCount: items.length,
+    issues
+  };
+}
+
 module.exports = {
   createBuild,
+  getCurrentBuild,
   upsertBuildItem,
   getBuildDetail,
   removeBuildItem,
   saveBuild,
-  suggestBuild
+  suggestBuild,
+  checkRawCompatibility
 };

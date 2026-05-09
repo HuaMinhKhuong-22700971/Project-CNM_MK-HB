@@ -20,6 +20,9 @@ function normalizeResponse(response) {
 
 function mapDbOrderToUi(dbOrder) {
   if (!dbOrder) return null;
+
+  const shipment = dbOrder.shipment || null;
+
   return {
     id: dbOrder.id,
     status: dbOrder.status,
@@ -28,11 +31,12 @@ function mapDbOrderToUi(dbOrder) {
     shippingAddress: dbOrder.shipping_address || dbOrder.shippingAddress,
     createdAt: dbOrder.created_at || dbOrder.createdAt,
     note: dbOrder.note,
-    trackingCode: dbOrder.tracking_code || dbOrder.trackingCode,
+    trackingCode: shipment?.trackingCode || dbOrder.tracking_code || dbOrder.trackingCode,
+    shipmentStatus: shipment?.status || null,
     totalAmount: dbOrder.total_amount || dbOrder.totalAmount,
     shippingFee: dbOrder.shipping_fee || dbOrder.shippingFee || 0,
     finalAmount: dbOrder.final_amount || dbOrder.finalAmount || dbOrder.total_amount || dbOrder.totalAmount || 0,
-    items: (dbOrder.OrderItem || dbOrder.items || []).map(item => ({
+    items: (dbOrder.OrderItem || dbOrder.items || []).map((item) => ({
       id: item.id,
       productName: item.name_snapshot || item.nameSnapshot || item.productName || item.product?.name || "Sản phẩm",
       sku: item.sku_snapshot || item.skuSnapshot || item.sku,
@@ -46,6 +50,33 @@ function mapDbOrderToUi(dbOrder) {
 
 function formatCurrency(value) {
   return Number(value || 0).toLocaleString("vi-VN");
+}
+
+function getOrderStatusLabel(status) {
+  const labels = {
+    PENDING: "Chờ xác nhận",
+    PROCESSING: "Đang xử lý",
+    SHIPPED: "Đã giao vận",
+    DELIVERED: "Hoàn thành",
+    CANCELED: "Đã hủy",
+    PAID: "Đã thanh toán"
+  };
+
+  return labels[String(status || "").toUpperCase()] || status || "Chưa cập nhật";
+}
+
+function getShipmentStatusLabel(status) {
+  const labels = {
+    CREATED: "Đã tạo vận đơn",
+    READY_TO_SHIP: "Sẵn sàng giao",
+    IN_TRANSIT: "Đang vận chuyển",
+    DELIVERED: "Đã giao thành công",
+    FAILED: "Giao thất bại",
+    RETURNED: "Đã hoàn hàng",
+    CANCELED: "Đã hủy vận đơn"
+  };
+
+  return labels[String(status || "").toUpperCase()] || status || "Chưa cập nhật";
 }
 
 function InfoRow({ label, value }) {
@@ -143,7 +174,7 @@ export function OrderDetailPage() {
       </section>
 
       <section style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái đơn" value={order.status} /></div>
+        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái đơn" value={getOrderStatusLabel(order.status)} /></div>
         <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Phương thức thanh toán" value={order.paymentMethod} /></div>
         <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái thanh toán" value={order.paymentStatus} /></div>
         <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Số lượng sản phẩm" value={String(itemCount)} /></div>
@@ -189,35 +220,37 @@ export function OrderDetailPage() {
             <InfoRow label="Ghi chú" value={order.note || "Không có ghi chú"} />
           </section>
 
-          {order.trackingCode && (
+          {order.trackingCode ? (
             <section style={{ display: "grid", gap: 14, padding: 24, borderRadius: 24, background: "linear-gradient(135deg, #f0fdf4, #dcfce7)", border: "1px solid #bbf7d0", boxShadow: "0 4px 12px rgba(34, 197, 94, 0.1)" }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#22c55e", color: "#fff", display: "grid", placeItems: "center", boxShadow: "0 2px 8px rgba(34, 197, 94, 0.3)" }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, color: "#166534", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>Mã vận đơn (Theo dõi hành trình)</div>
+                  <div style={{ fontSize: 13, color: "#166534", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>Mã vận đơn</div>
                   <div style={{ fontSize: 26, fontWeight: 900, color: "#14532d", letterSpacing: "0.02em" }}>{order.trackingCode}</div>
                 </div>
               </div>
-              <p style={{ margin: 0, color: "#15803d", fontSize: 14 }}>Đơn hàng đang trên đường giao. Tra cứu mã vận đơn trên trang chủ đối tác để theo dõi lộ trình nhanh nhất.</p>
+              <p style={{ margin: 0, color: "#15803d", fontSize: 14 }}>
+                Trạng thái giao hàng: <strong>{getShipmentStatusLabel(order.shipmentStatus || "IN_TRANSIT")}</strong>. Tra cứu mã vận đơn trên đối tác vận chuyển để theo dõi lộ trình nhanh nhất.
+              </p>
             </section>
-          )}
+          ) : null}
 
           <section style={{ display: "grid", gap: 14, padding: 24, borderRadius: 24, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
             <h2 style={{ margin: 0, fontSize: 24 }}>Chi tiết thanh toán</h2>
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}>
-                 <span>Tạm tính</span>
-                 <span>{formatCurrency(order.totalAmount)} VND</span>
+                <span>Tạm tính</span>
+                <span>{formatCurrency(order.totalAmount)} VND</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)" }}>
-                 <span>Phí dịch vụ & vận chuyển</span>
-                 <span>{formatCurrency(order.shippingFee)} VND</span>
+                <span>Phí dịch vụ và vận chuyển</span>
+                <span>{formatCurrency(order.shippingFee)} VND</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 22, paddingTop: 16, marginTop: 4, borderTop: "1px dashed #cbd5e1" }}>
-                 <span>Cần thanh toán</span>
-                 <span style={{ color: "var(--primary)" }}>{formatCurrency(order.finalAmount)} VND</span>
+                <span>Cần thanh toán</span>
+                <span style={{ color: "var(--primary)" }}>{formatCurrency(order.finalAmount)} VND</span>
               </div>
             </div>
           </section>

@@ -106,7 +106,8 @@ export const postCartItem = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError("Product has no active SKU", 400);
   }
 
-  if (primarySku.stock < payload.quantity) {
+  const availableStock = Number(primarySku.stock || 0);
+  if (availableStock < payload.quantity) {
     throw new AppError("Insufficient stock", 400);
   }
 
@@ -115,7 +116,7 @@ export const postCartItem = asyncHandler(async (req: Request, res: Response) => 
 
   if (existingItem) {
     const nextQty = existingItem.quantity + payload.quantity;
-    if (nextQty > primarySku.stock) {
+    if (nextQty > availableStock) {
       throw new AppError("Requested quantity exceeds stock", 400);
     }
 
@@ -156,7 +157,7 @@ export const patchCartItem = asyncHandler(async (req: Request, res: Response) =>
 
   // Check stock of the SKU
   const sku = await prisma.productSku.findUnique({ where: { id: item.product_variant_id } });
-  if (!sku || sku.stock < payload.quantity) {
+  if (!sku || Number(sku.stock || 0) < payload.quantity) {
     throw new AppError("Insufficient stock", 400);
   }
 

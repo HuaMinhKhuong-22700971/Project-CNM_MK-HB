@@ -10,8 +10,8 @@ export async function getStaffOrderDetail(orderId) {
   return response.data;
 }
 
-export async function updateStaffOrderStatus(orderId, status) {
-  const response = await httpClient.patch(`/staff/orders/${orderId}/status`, { status });
+export async function updateStaffOrderStatus(orderId, status, payload = {}) {
+  const response = await httpClient.patch(`/staff/orders/${orderId}/status`, { status, ...payload });
   return response.data;
 }
 

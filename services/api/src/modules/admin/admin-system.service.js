@@ -23,6 +23,23 @@ async function ensureSettingsTable() {
   return columns;
 }
 
+async function hasSettingsTable() {
+  const columns = await getTableColumns("system_settings").catch(() => []);
+  return columns.length > 0;
+}
+
+function getDefaultSettings() {
+  return DEFAULT_SETTINGS.map((item, index) => ({
+    id: index + 1,
+    key: item.key,
+    value: item.value,
+    description: item.description,
+    createdAt: null,
+    updatedAt: null,
+    readonly: true
+  }));
+}
+
 async function ensureDefaultSettings() {
   await ensureSettingsTable();
 
@@ -41,6 +58,10 @@ async function ensureDefaultSettings() {
 }
 
 async function getSettings() {
+  if (!(await hasSettingsTable())) {
+    return getDefaultSettings();
+  }
+
   await ensureDefaultSettings();
   const rows = await query(
     `
@@ -67,6 +88,16 @@ async function getSettings() {
 }
 
 async function updateSettings(payload = {}) {
+  if (!(await hasSettingsTable())) {
+    const entries = Object.entries(payload).filter(([key]) => ALLOWED_KEYS.has(key));
+    const overrides = Object.fromEntries(entries);
+
+    return getDefaultSettings().map((item) => ({
+      ...item,
+      value: Object.prototype.hasOwnProperty.call(overrides, item.key) ? String(overrides[item.key] ?? "") : item.value
+    }));
+  }
+
   await ensureDefaultSettings();
   const entries = Object.entries(payload).filter(([key]) => ALLOWED_KEYS.has(key));
 
@@ -103,7 +134,6 @@ async function countIfExists(tableName) {
 }
 
 async function getSystemOverview() {
-  await ensureDefaultSettings();
   const [dbHealth, users, products, orders, tickets, payments, shipments, settings, auditLogs] = await Promise.all([
     checkDatabaseHealth(),
     countIfExists("users"),
