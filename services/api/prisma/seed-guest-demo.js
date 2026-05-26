@@ -36,7 +36,7 @@ const CATEGORY_IMAGE_MAP = {
   SSD: "/assets/products/asus-rog.png",
   PSU: "/assets/products/dell.png",
   CASE: "/assets/products/alienware.svg",
-  COOLING: "https://placehold.co/600x400/0f172a/e2e8f0?text=Cooling",
+  COOLING: "/assets/products/cooling-real/deepcool-ag400.webp",
   LAPTOP: "/assets/products/macbook.png",
   NOTEBOOK: "/assets/products/lenovo-x1.png"
 };
@@ -48,7 +48,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-DEEPCOOL-AG400",
     price: 690000,
     stock: 28,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=Deepcool+AG400",
+    imageUrl: "/assets/products/cooling-real/deepcool-ag400.webp",
     description: "Air cooler 120mm pho bien cho gaming tam trung.",
     specs: {
       cooling_type: "Air Cooler",
@@ -63,7 +63,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-THERMALRIGHT-AX120",
     price: 790000,
     stock: 24,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=Thermalright+AX120",
+    imageUrl: "/assets/products/cooling-real/thermalright-assassin-x120.jpg",
     description: "Air cooler gon, hop nhieu case mid tower.",
     specs: {
       cooling_type: "Air Cooler",
@@ -78,7 +78,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-CM-HYPER212",
     price: 990000,
     stock: 18,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=Hyper+212",
+    imageUrl: "/assets/products/cooling-real/cooler-master-hyper-212.png",
     description: "Air cooler kinh dien, de lap cho build pho thong.",
     specs: {
       cooling_type: "Air Cooler",
@@ -93,7 +93,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-DEEPCOOL-AK620",
     price: 1790000,
     stock: 15,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=Deepcool+AK620",
+    imageUrl: "/assets/products/cooling-real/deepcool-ak620.jpg",
     description: "Dual tower air cooler cho CPU hieu nang cao.",
     specs: {
       cooling_type: "Air Cooler",
@@ -108,7 +108,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-CORSAIR-H100I-240",
     price: 3290000,
     stock: 12,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=Corsair+H100i",
+    imageUrl: "/assets/products/cooling-real/corsair-h100i-240.jpg",
     description: "AIO 240mm phu hop Intel K va Ryzen X series.",
     specs: {
       cooling_type: "AIO Liquid Cooling",
@@ -123,7 +123,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-NZXT-KRAKEN-240",
     price: 3790000,
     stock: 10,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=NZXT+Kraken+240",
+    imageUrl: "/assets/products/cooling-real/nzxt-kraken-240.png",
     description: "AIO 240mm cao cap, dep va em.",
     specs: {
       cooling_type: "AIO Liquid Cooling",
@@ -138,7 +138,7 @@ const COOLING_PRODUCTS = [
     sku: "COOL-DEEPCOOL-LS720-360",
     price: 4290000,
     stock: 9,
-    imageUrl: "https://placehold.co/600x400/0f172a/e2e8f0?text=Deepcool+LS720",
+    imageUrl: "/assets/products/cooling-real/deepcool-ls720.jpg",
     description: "AIO 360mm cho gaming, render va workstation manh.",
     specs: {
       cooling_type: "AIO Liquid Cooling",
@@ -498,6 +498,8 @@ async function main() {
   const coolingCategoryId = await ensureCategory(connection, "COOLING", "Cooling products for PC Builder");
   const attributeIdByName = new Map();
   const valueIdByKey = new Map();
+  const productColumns = await getTableColumns(connection, "products");
+  const skuColumns = await getTableColumns(connection, "product_skus");
 
   for (const attr of ATTRIBUTE_DEFS) {
     const attributeId = await ensureAttribute(connection, attr.name);
@@ -509,10 +511,48 @@ async function main() {
   }
 
   for (const product of COOLING_PRODUCTS) {
-    const { skuId } = await ensureProductWithSku(connection, {
+    const { productId, skuId } = await ensureProductWithSku(connection, {
       ...product,
       categoryId: coolingCategoryId
     });
+
+    const productSets = [];
+    const productValues = [];
+    if (hasColumn(productColumns, "category_id")) {
+      productSets.push("category_id = ?");
+      productValues.push(coolingCategoryId);
+    }
+    if (hasColumn(productColumns, "price")) {
+      productSets.push("price = ?");
+      productValues.push(product.price);
+    }
+    if (hasColumn(productColumns, "stock")) {
+      productSets.push("stock = ?");
+      productValues.push(product.stock);
+    }
+    if (productSets.length > 0) {
+      productValues.push(productId);
+      await connection.execute(`UPDATE products SET ${productSets.join(", ")} WHERE id = ?`, productValues);
+    }
+
+    const skuSets = [];
+    const skuValues = [];
+    if (hasColumn(skuColumns, "image_url")) {
+      skuSets.push("image_url = ?");
+      skuValues.push(product.imageUrl);
+    }
+    if (hasColumn(skuColumns, "price")) {
+      skuSets.push("price = ?");
+      skuValues.push(product.price);
+    }
+    if (hasColumn(skuColumns, "stock")) {
+      skuSets.push("stock = ?");
+      skuValues.push(product.stock);
+    }
+    if (skuSets.length > 0) {
+      skuValues.push(skuId);
+      await connection.execute(`UPDATE product_skus SET ${skuSets.join(", ")} WHERE id = ?`, skuValues);
+    }
 
     for (const [key, value] of Object.entries(product.specs)) {
       const valueId = valueIdByKey.get(`${key}::${value}`);

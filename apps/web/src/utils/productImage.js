@@ -7,8 +7,17 @@ const CATEGORY_PLACEHOLDERS = {
   ssd: "SSD",
   psu: "PSU",
   case: "Case",
+  cooling: "Cooling",
+  cooler: "Cooling",
+  fan: "Cooling",
+  aio: "Cooling",
   laptop: "Laptop",
   default: "PC Mall"
+};
+
+const FALLBACK_IMAGES = {
+  default: "https://placehold.co/800x800/f8fafc/1e293b?text=PC+Mall",
+  cooling: "/assets/products/cooling-real/deepcool-ag400.webp"
 };
 
 function pickLabel(categoryName, productName) {
@@ -24,8 +33,31 @@ function pickLabel(categoryName, productName) {
 function isBrokenImage(url) {
   const value = String(url || "").trim();
   if (!value) return true;
+  if (value.startsWith("data:image/svg+xml")) return false;
   if (value.startsWith("data:image") && value.length < 1000) return true;
+  if (value.includes("placehold.co") && /0f172a|111827|black/i.test(value)) return true;
   return false;
+}
+
+function getProductCategoryKey(product = {}) {
+  return String(product?.category_name || product?.category?.name || product?.product_name || product?.name || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isCoolingProduct(product = {}) {
+  const key = getProductCategoryKey(product);
+  return ["cooling", "cooler", "fan", "aio", "radiator", "tản nhiệt", "tan nhiet"].some((token) => key.includes(token));
+}
+
+function getFallbackImage(product = {}, options = {}) {
+  if (options.fallbackUrl && !isBrokenImage(options.fallbackUrl)) {
+    return options.fallbackUrl;
+  }
+  if (isCoolingProduct(product) || String(options.label || "").toLowerCase().includes("cool")) {
+    return FALLBACK_IMAGES.cooling;
+  }
+  return FALLBACK_IMAGES.default;
 }
 
 /**
@@ -35,6 +67,8 @@ export function resolveProductImage(product = {}, options = {}) {
   const candidates = [
     product?.image_url,
     product?.imageUrl,
+    product?.thumbnail,
+    product?.thumbnail_url,
     product?.defaultVariant?.imageUrl,
     product?.primaryVariant?.image_url,
     product?.variants?.[0]?.image_url,
@@ -55,6 +89,9 @@ export function resolveProductImage(product = {}, options = {}) {
     return `/media/${url}`;
   }
 
+  const categoryFallback = getFallbackImage(product, options);
+  if (categoryFallback) return categoryFallback;
+
   const label = encodeURIComponent(options.label || pickLabel(product?.category_name || product?.category?.name, product?.product_name || product?.name));
-  return `https://placehold.co/600x400/f1f5f9/334155?text=${label}`;
+  return `https://placehold.co/800x800/f8fafc/334155?text=${label}`;
 }

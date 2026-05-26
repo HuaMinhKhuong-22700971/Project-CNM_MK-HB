@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" rx="64" fill="#f8fbff"/>
+  <g transform="translate(116 126)">
+    <rect x="0" y="84" width="232" height="392" rx="26" fill="#ffffff" stroke="#dbe5f4" stroke-width="10"/>
+    <rect x="252" y="84" width="232" height="392" rx="26" fill="#ffffff" stroke="#dbe5f4" stroke-width="10"/>
+    <circle cx="116" cy="280" r="92" fill="#eff6ff" stroke="#bfdbfe" stroke-width="10"/>
+    <circle cx="368" cy="280" r="92" fill="#eff6ff" stroke="#bfdbfe" stroke-width="10"/>
+    <circle cx="116" cy="280" r="22" fill="#1d4ed8"/>
+    <circle cx="368" cy="280" r="22" fill="#1d4ed8"/>
+    <path d="M116 206c32 0 52 22 62 58-32 14-74 14-116 0 8-34 28-50 54-58Z" fill="#1d4ed8"/>
+    <path d="M178 280c0 32-22 52-58 62-14-32-14-74 0-116 34 8 50 28 58 54Z" fill="#3b82f6"/>
+    <path d="M368 206c32 0 52 22 62 58-32 14-74 14-116 0 8-34 28-50 54-58Z" fill="#1d4ed8"/>
+    <path d="M430 280c0 32-22 52-58 62-14-32-14-74 0-116 34 8 50 28 58 54Z" fill="#3b82f6"/>
+    <rect x="502" y="170" width="34" height="220" rx="14" fill="#cbd5e1"/>
+    <rect x="534" y="240" width="88" height="52" rx="20" fill="#111827"/>
+  </g>
+  <text x="400" y="680" text-anchor="middle" fill="#0f172a" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">Deepcool AK620</text>
+  <text x="400" y="726" text-anchor="middle" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="26">Dual Tower Air Cooler</text>
+</svg>

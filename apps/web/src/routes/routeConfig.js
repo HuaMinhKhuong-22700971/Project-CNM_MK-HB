@@ -37,7 +37,8 @@ export const routeConfig = {
   tech: {
     root: "/tech",
     tickets: "/tech/tickets",
-    compatibility: "/tech/compatibility"
+    compatibility: "/tech/compatibility",
+    warranties: "/tech/warranties"
   },
   admin: {
     root: "/admin",

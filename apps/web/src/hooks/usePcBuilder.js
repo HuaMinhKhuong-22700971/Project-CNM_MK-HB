@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import axios from 'axios';
-import { useAuth } from '../hooks/useAuth';
-import { httpClient } from '../services/http';
+import { useState, useEffect, useMemo, useCallback } from "react";
+import axios from "axios";
+
+import { useAuth } from "../hooks/useAuth";
+import { httpClient } from "../services/http";
 import {
   addBuildItem,
   checkRawCompatibility,
@@ -9,7 +10,7 @@ import {
   removeBuildItem,
   saveBuild,
   suggestBuild as apiSuggestBuild
-} from '../services/pc-builder.service';
+} from "../services/pc-builder.service";
 import {
   createGuestBuildSlot,
   deleteGuestBuild,
@@ -21,11 +22,8 @@ import {
   saveGuestBuild,
   setGuestPcBuildStore,
   switchGuestBuild
-} from '../utils/guestStorage';
+} from "../utils/guestStorage";
 
-/**
- * Custom hook to manage PC Builder business logic and state.
- */
 export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
   const { isAuthenticated } = useAuth();
 
@@ -40,7 +38,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
   const [compatibility, setCompatibility] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
 
-  const activeBuild = useMemo(() => isAuthenticated ? build : guestBuild, [isAuthenticated, build, guestBuild]);
+  const activeBuild = useMemo(() => (isAuthenticated ? build : guestBuild), [isAuthenticated, build, guestBuild]);
   const totalPrice = useMemo(() => Number(activeBuild?.totalPrice || 0), [activeBuild]);
   const selectedItems = useMemo(() => activeBuild?.components || {}, [activeBuild]);
   const selectedCount = useMemo(() => Object.keys(selectedItems).length, [selectedItems]);
@@ -68,7 +66,9 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
       const res = await httpClient.get("/pc-builder/current");
       const data = res?.data?.data || res?.data || res;
       if (data?.id) setBuild(data);
-    } catch (_err) { /* silent */ }
+    } catch (_err) {
+      // silent
+    }
   }, [isAuthenticated]);
 
   const ensureBuild = useCallback(async () => {
@@ -101,13 +101,13 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
         });
         setBuild(resp?.data?.data || resp?.data || resp);
       } else {
-        const variant = variants.find(v => String(v.variant_id) === String(variantId));
+        const variant = variants.find((v) => String(v.variant_id) === String(variantId));
         const newComponents = { ...guestBuild.components, [componentType]: { product, variant } };
         const newTotal = Object.values(newComponents).reduce((sum, item) => sum + Number(item.variant?.price || 0), 0);
         persistGuestBuild(newComponents, newTotal);
       }
       setCompatibility(null);
-      showSuccess(`✅ Đã thêm ${componentType.toUpperCase()} thành công!`);
+      showSuccess(`Đã thêm ${componentType.toUpperCase()} thành công.`);
     } catch (err) {
       handleError(err, "Không thể thêm linh kiện.");
     } finally {
@@ -129,7 +129,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
         persistGuestBuild(newComponents, newTotal);
       }
       setCompatibility(null);
-      showSuccess(`🗑️ Đã xóa ${componentType.toUpperCase()}.`);
+      showSuccess(`Đã xóa ${componentType.toUpperCase()}.`);
     } catch (err) {
       handleError(err, "Không thể xóa linh kiện.");
     } finally {
@@ -147,12 +147,12 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
       const components = Object.entries(selectedItems).map(([type, item]) => ({
         component_type: type,
         variant_id: item.variant?.id || item.variant?.variant_id || item.variant?.skuId
-      })).filter(c => c.variant_id);
+      })).filter((c) => c.variant_id);
 
       const resp = await checkRawCompatibility({ components });
       const result = resp?.data?.data || resp?.data || resp;
       setCompatibility(result);
-      if (result?.compatible) showSuccess("✅ Cấu hình tương thích hoàn toàn!");
+      if (result?.compatible) showSuccess("Cấu hình tương thích hoàn toàn.");
     } catch (err) {
       handleError(err, "Lỗi kiểm tra tương thích.");
     } finally {
@@ -167,7 +167,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     try {
       const resp = await apiSuggestBuild({ requirements: purpose, budget });
       setSuggestion(resp?.data?.data || resp?.data || resp);
-      showSuccess("🤖 AI Advisor đã tạo gợi ý!");
+      showSuccess("AI Advisor đã tạo gợi ý.");
     } catch (err) {
       handleError(err, "Không thể tạo gợi ý AI.");
     } finally {
@@ -184,7 +184,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
       setLoading(true);
       try {
         await saveBuild(build.id, { name: buildName });
-        showSuccess("💾 Đã lưu lên tài khoản!");
+        showSuccess("Đã lưu lên tài khoản.");
       } catch (err) {
         handleError(err, "Lỗi khi lưu.");
       } finally {
@@ -194,7 +194,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     }
 
     persistGuestBuild(guestBuild.components, guestBuild.totalPrice);
-    showSuccess("💾 Đã lưu cấu hình trên trình duyệt. Đăng ký để đồng bộ đám mây.");
+    showSuccess("Đã lưu cấu hình trên trình duyệt. Đăng ký để đồng bộ lên tài khoản.");
   };
 
   const saveGuestBuildAs = useCallback((name) => {
@@ -204,14 +204,14 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     );
     setBuildName(saved.name);
     refreshGuestBuildState();
-    showSuccess("💾 Đã lưu cấu hình khách (trình duyệt).");
+    showSuccess("Đã lưu cấu hình khách trên trình duyệt.");
   }, [guestBuild, buildName, refreshGuestBuildState, showSuccess]);
 
   const createNewGuestBuild = useCallback((name) => {
     const slot = createGuestBuildSlot(name || "Cấu hình mới");
     setBuildName(slot.name);
     refreshGuestBuildState();
-    showSuccess("📁 Đã tạo cấu hình mới.");
+    showSuccess("Đã tạo cấu hình mới.");
   }, [refreshGuestBuildState, showSuccess]);
 
   const loadGuestBuildById = useCallback((buildId) => {
@@ -219,7 +219,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     if (!loaded) return;
     setBuildName(loaded.name);
     refreshGuestBuildState();
-    showSuccess(`📂 Đã mở: ${loaded.name}`);
+    showSuccess(`Đã mở: ${loaded.name}`);
   }, [refreshGuestBuildState, showSuccess]);
 
   const removeGuestBuildSlot = useCallback((buildId) => {
@@ -230,7 +230,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     }
     setBuildName(loaded.name);
     refreshGuestBuildState();
-    showSuccess("🗑️ Đã xóa cấu hình đã lưu.");
+    showSuccess("Đã xóa cấu hình đã lưu.");
   }, [refreshGuestBuildState, showSuccess]);
 
   const exportGuestBuilds = useCallback(() => {
@@ -241,7 +241,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     anchor.download = `pc-build-${Date.now()}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    showSuccess("📤 Đã tải file cấu hình.");
+    showSuccess("Đã tải file cấu hình.");
   }, [showSuccess]);
 
   const importGuestBuilds = useCallback(async (file) => {
@@ -251,7 +251,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
       const loaded = importGuestBuildsJson(text);
       setBuildName(loaded.name);
       refreshGuestBuildState();
-      showSuccess("📥 Đã nhập cấu hình từ file.");
+      showSuccess("Đã nhập cấu hình từ file.");
     } catch (err) {
       handleError(err, "Không thể nhập file cấu hình.");
     }
@@ -260,7 +260,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
   const clearAll = () => {
     if (!confirm("Xóa toàn bộ cấu hình?")) return;
     if (isAuthenticated) {
-      setBuild(prev => prev ? { ...prev, components: {}, totalPrice: 0 } : null);
+      setBuild((prev) => (prev ? { ...prev, components: {}, totalPrice: 0 } : null));
     } else {
       const store = getGuestPcBuildStore();
       store.builds[store.activeBuildId] = {
@@ -287,10 +287,18 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
   }, [fetchCurrentBuild]);
 
   return {
-    buildName, setBuildName,
-    activeBuild, totalPrice, selectedItems, selectedCount,
+    buildName,
+    setBuildName,
+    activeBuild,
+    totalPrice,
+    selectedItems,
+    selectedCount,
     guestBuildList,
-    loading, error, success, compatibility, suggestion,
+    loading,
+    error,
+    success,
+    compatibility,
+    suggestion,
     actions: {
       applyComponent,
       removeComponent,

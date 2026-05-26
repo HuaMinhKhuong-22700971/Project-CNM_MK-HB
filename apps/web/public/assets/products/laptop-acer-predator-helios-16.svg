@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0f0f"/>
+      <stop offset="100%" stop-color="#16221a"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6cff47" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#07130b" stop-opacity="0.96"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8efc62"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#020503" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="900" rx="48" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <rect x="220" y="184" width="760" height="430" rx="28" fill="#121717" stroke="#69f05c" stroke-width="6"/>
+    <rect x="248" y="212" width="704" height="374" rx="18" fill="url(#screen)"/>
+    <path d="M360 520c82-118 181-174 301-196 58-11 141-16 236 6-109 27-215 86-287 183-82-33-163-31-250 7z" fill="#7dff72" opacity="0.14"/>
+    <path d="M362 516c94-135 225-198 388-188-90 24-184 84-250 182-53-17-90-15-138 6z" fill="none" stroke="url(#accent)" stroke-width="10" stroke-linecap="round"/>
+    <text x="600" y="310" text-anchor="middle" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="54" font-weight="800">ACER PREDATOR</text>
+    <text x="600" y="362" text-anchor="middle" fill="#86efac" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">HELIOS 16</text>
+    <text x="600" y="414" text-anchor="middle" fill="#d1fae5" font-family="Segoe UI, Arial, sans-serif" font-size="24">Intel Core i7 HX  •  RTX 4060  •  16" WQHD</text>
+    <text x="600" y="456" text-anchor="middle" fill="#9ca3af" font-family="Segoe UI, Arial, sans-serif" font-size="22">Gaming laptop with green Predator styling</text>
+    <rect x="180" y="614" width="840" height="38" rx="12" fill="#1a211f"/>
+    <rect x="220" y="626" width="760" height="14" rx="7" fill="#69f05c" opacity="0.18"/>
+    <rect x="356" y="640" width="488" height="34" rx="12" fill="#0f1513"/>
+    <rect x="408" y="652" width="384" height="9" rx="4.5" fill="#86efac" opacity="0.18"/>
+  </g>
+</svg>

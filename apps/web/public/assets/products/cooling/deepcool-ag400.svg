@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" rx="64" fill="#f8fbff"/>
+  <g transform="translate(170 120)">
+    <rect x="0" y="70" width="296" height="420" rx="32" fill="#ffffff" stroke="#dbe5f4" stroke-width="10"/>
+    <rect x="116" y="18" width="64" height="80" rx="18" fill="#0f172a"/>
+    <circle cx="148" cy="280" r="116" fill="#f1f5f9" stroke="#bfdbfe" stroke-width="12"/>
+    <circle cx="148" cy="280" r="28" fill="#1d4ed8"/>
+    <path d="M148 188c46 0 74 28 84 70-46 20-92 22-138 0 10-44 38-70 54-70Z" fill="#1d4ed8"/>
+    <path d="M240 280c0 46-28 74-70 84-20-46-22-92 0-138 44 10 70 38 70 54Z" fill="#2563eb"/>
+    <path d="M148 372c-46 0-74-28-84-70 46-20 92-22 138 0-10 44-38 70-54 70Z" fill="#3b82f6"/>
+    <path d="M56 280c0-46 28-74 70-84 20 46 22 92 0 138-44-10-70-38-70-54Z" fill="#60a5fa"/>
+    <rect x="322" y="152" width="48" height="256" rx="18" fill="#cbd5e1"/>
+    <rect x="356" y="236" width="98" height="50" rx="20" fill="#0f172a"/>
+  </g>
+  <text x="400" y="680" text-anchor="middle" fill="#0f172a" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">Deepcool AG400</text>
+  <text x="400" y="726" text-anchor="middle" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="26">Air Cooler</text>
+</svg>

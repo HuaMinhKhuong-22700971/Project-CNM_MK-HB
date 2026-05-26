@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" rx="64" fill="#f8fbff"/>
+  <g transform="translate(164 118)">
+    <rect x="0" y="80" width="312" height="412" rx="28" fill="#ffffff" stroke="#dbe5f4" stroke-width="10"/>
+    <rect x="118" y="28" width="78" height="72" rx="18" fill="#111827"/>
+    <circle cx="156" cy="286" r="118" fill="#eff6ff" stroke="#bfdbfe" stroke-width="12"/>
+    <circle cx="156" cy="286" r="26" fill="#1d4ed8"/>
+    <path d="M156 192c40 4 70 24 88 72-34 18-96 18-142 0 8-38 26-60 54-72Z" fill="#2563eb"/>
+    <path d="M246 286c-4 40-24 70-72 88-18-34-18-96 0-142 38 8 60 26 72 54Z" fill="#1d4ed8"/>
+    <path d="M156 380c-40-4-70-24-88-72 34-18 96-18 142 0-8 38-26 60-54 72Z" fill="#60a5fa"/>
+    <path d="M66 286c4-40 24-70 72-88 18 34 18 96 0 142-38-8-60-26-72-54Z" fill="#3b82f6"/>
+    <rect x="336" y="172" width="42" height="234" rx="16" fill="#cbd5e1"/>
+    <rect x="368" y="248" width="96" height="46" rx="18" fill="#111827"/>
+  </g>
+  <text x="400" y="678" text-anchor="middle" fill="#0f172a" font-family="Segoe UI, Arial, sans-serif" font-size="40" font-weight="700">Thermalright Assassin X 120</text>
+  <text x="400" y="724" text-anchor="middle" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="26">Air Cooler</text>
+</svg>

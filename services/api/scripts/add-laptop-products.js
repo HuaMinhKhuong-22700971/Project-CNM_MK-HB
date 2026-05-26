@@ -5,7 +5,7 @@ const laptops = [
     name: "ASUS ROG Strix G16",
     brand: "ASUS",
     price: 45000000,
-    image_url: "https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=500",
+    image_url: "/assets/products/asus-g751-gaming.png",
     description: "Laptop gaming ASUS ROG Strix G16 với màn hình 16 inch QHD 165Hz, Intel Core i9-13980HX, RTX 4080, 32GB DDR5 RAM, 1TB NVMe SSD. Thiết kế hầm hố, tản nhiệt hiệu quả với hệ thống 3 fan 7 ống dẫn nhiệt. Phù hợp cho gaming chuyên nghiệp và đồ họa 3D.",
     specs: {
       CPU: "Intel Core i9-13980HX",
@@ -101,7 +101,7 @@ const laptops = [
     name: "Acer Predator Helios 16",
     brand: "Acer",
     price: 32000000,
-    image_url: "https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=500",
+    image_url: "/assets/products/laptop-acer-predator-helios-16.svg",
     description: "Laptop gaming Acer Predator Helios 16 với màn hình 16 inch WQHD 165Hz, Intel Core i7-13700HX, RTX 4060, 16GB DDR5 RAM, 512GB NVMe SSD. Tản nhiệt AeroBlade 3D fan, keyboard RGB custom. Giá tốt cho gaming tầm trung.",
     specs: {
       CPU: "Intel Core i7-13700HX",
@@ -136,7 +136,7 @@ const completePCs = [
     name: "PC Gaming Tầm Trung 20 Triệu",
     brand: "Custom Build",
     price: 20000000,
-    image_url: "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?w=500",
+    image_url: "/assets/products/complete-pc-gaming-mid.jpg",
     description: "Cấu hình PC gaming tầm trung với Intel Core i5-14400F, RTX 4060, 16GB DDR5 RAM, 1TB NVMe SSD, PSU 650W, Case ATX. Chơi mượt các game 1080p High settings, phù hợp cho game thủ và người dùng phổ thông.",
     specs: {
       CPU: "Intel Core i5-14400F",
@@ -152,7 +152,7 @@ const completePCs = [
     name: "PC Gaming High-End 40 Triệu",
     brand: "Custom Build",
     price: 40000000,
-    image_url: "https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=500",
+    image_url: "/assets/products/complete-pc-gaming-high.jpg",
     description: "Cấu hình PC gaming cao cấp với Intel Core i7-14700K, RTX 4070 Ti, 32GB DDR5 RAM, 2TB NVMe SSD, PSU 850W, Case ATX. Chơi mượt các game 1440p Ultra settings và 4K High, phù hợp cho gaming chuyên nghiệp và đồ họa.",
     specs: {
       CPU: "Intel Core i7-14700K",
@@ -168,7 +168,7 @@ const completePCs = [
     name: "PC Đồ Họa 50 Triệu",
     brand: "Custom Build",
     price: 50000000,
-    image_url: "https://images.unsplash.com/photo-1587831990711-23ca6441447b?w=500",
+    image_url: "/assets/products/complete-pc-design.jpg",
     description: "Cấu hình PC chuyên đồ họa với Intel Core i9-14900K, RTX 4080, 64GB DDR5 RAM, 2TB NVMe SSD, PSU 1000W, Case ATX. Xử lý mượt các tác vụ render 3D, video 4K, AI/ML. Phù hợp cho nhà thiết kế, kiến trúc sư và chuyên gia đồ họa.",
     specs: {
       CPU: "Intel Core i9-14900K",
@@ -184,7 +184,7 @@ const completePCs = [
     name: "PC Văn Phòng 10 Triệu",
     brand: "Custom Build",
     price: 10000000,
-    image_url: "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=500",
+    image_url: "/assets/products/complete-pc-office.jpg",
     description: "Cấu hình PC văn phòng với Intel Core i5-14400, Intel UHD Graphics, 16GB DDR4 RAM, 512GB NVMe SSD, PSU 450W, Case mATX. Xử lý tốt các tác vụ văn phòng, web, email. Phù hợp cho công sở và học sinh.",
     specs: {
       CPU: "Intel Core i5-14400",
@@ -200,7 +200,7 @@ const completePCs = [
     name: "PC Lập Trình 25 Triệu",
     brand: "Custom Build",
     price: 25000000,
-    image_url: "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?w=500",
+    image_url: "/assets/products/complete-pc-programming.jpg",
     description: "Cấu hình PC cho lập trình viên với AMD Ryzen 7 7700X, RTX 4060 Ti, 32GB DDR5 RAM, 1TB NVMe SSD, PSU 750W, Case ATX. Chạy mượt Docker, IDE, VM, compile code nhanh. Phù hợp cho developer full-stack và backend.",
     specs: {
       CPU: "AMD Ryzen 7 7700X",

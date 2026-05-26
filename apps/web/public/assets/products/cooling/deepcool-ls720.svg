@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <rect width="800" height="800" rx="64" fill="#f8fbff"/>
+  <g transform="translate(70 172)">
+    <rect x="0" y="96" width="500" height="188" rx="38" fill="#ffffff" stroke="#dbe5f4" stroke-width="10"/>
+    <circle cx="112" cy="190" r="66" fill="#eff6ff" stroke="#bfdbfe" stroke-width="10"/>
+    <circle cx="250" cy="190" r="66" fill="#eff6ff" stroke="#bfdbfe" stroke-width="10"/>
+    <circle cx="388" cy="190" r="66" fill="#eff6ff" stroke="#bfdbfe" stroke-width="10"/>
+    <circle cx="112" cy="190" r="16" fill="#1d4ed8"/>
+    <circle cx="250" cy="190" r="16" fill="#1d4ed8"/>
+    <circle cx="388" cy="190" r="16" fill="#1d4ed8"/>
+    <path d="M112 138c26 0 42 18 50 46-26 10-58 10-86 0 8-26 20-38 36-46Z" fill="#2563eb"/>
+    <path d="M250 138c26 0 42 18 50 46-26 10-58 10-86 0 8-26 20-38 36-46Z" fill="#2563eb"/>
+    <path d="M388 138c26 0 42 18 50 46-26 10-58 10-86 0 8-26 20-38 36-46Z" fill="#2563eb"/>
+    <circle cx="604" cy="192" r="64" fill="#0f172a"/>
+    <circle cx="604" cy="192" r="38" fill="#e0ecff" stroke="#3b82f6" stroke-width="10"/>
+    <path d="M500 170c42-10 62 0 82 22" fill="none" stroke="#94a3b8" stroke-width="16" stroke-linecap="round"/>
+    <path d="M500 204c42 10 62 0 82-22" fill="none" stroke="#cbd5e1" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  <text x="400" y="650" text-anchor="middle" fill="#0f172a" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">Deepcool LS720 360mm AIO</text>
+  <text x="400" y="698" text-anchor="middle" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="26">360mm Liquid Cooling</text>
+</svg>

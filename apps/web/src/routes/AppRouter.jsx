@@ -37,6 +37,7 @@ import { StaffOrdersPage } from "../pages/staff/StaffOrdersPage";
 import StaffChatPage from "../pages/staff/StaffChatPage";
 import { TechTicketsPage } from "../pages/tech/TechTicketsPage";
 import { TechCompatibilityPage } from "../pages/tech/TechCompatibilityPage";
+import { TechWarrantiesPage } from "../pages/tech/TechWarrantiesPage";
 import { routeConfig } from "./routeConfig";
 
 export function AppRouter() {
@@ -91,7 +92,8 @@ export function AppRouter() {
       children: [
         { index: true, element: <Navigate to={routeConfig.tech.tickets} replace /> },
         { path: routeConfig.tech.tickets.replace(/^\/tech\//, ""), element: <TechTicketsPage /> },
-        { path: routeConfig.tech.compatibility.replace(/^\/tech\//, ""), element: <TechCompatibilityPage /> }
+        { path: routeConfig.tech.compatibility.replace(/^\/tech\//, ""), element: <TechCompatibilityPage /> },
+        { path: routeConfig.tech.warranties.replace(/^\/tech\//, ""), element: <TechWarrantiesPage /> }
       ]
     },
     {

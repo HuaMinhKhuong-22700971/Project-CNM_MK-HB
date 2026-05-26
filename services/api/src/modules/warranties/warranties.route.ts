@@ -4,15 +4,18 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import path from "path";
 import { env } from "../../config/env";
-import { authenticate } from "../../middlewares/auth.middleware";
+import { authenticate, authorize, ROLES } from "../../middlewares/auth.middleware";
 import { AppError } from "../../errors/app-error";
 import {
   activateWarranty,
+  getAdminWarrantyRequests,
   getEligibleWarrantyItems,
+  getMyWarrantyNotifications,
   getMyWarrantyRequests,
   getMyWarranties,
   lookupWarranty,
-  submitWarrantyRequest
+  submitWarrantyRequest,
+  updateAdminWarrantyRequest
 } from "./warranties.controller";
 
 export const warrantiesRouter = Router();
@@ -33,17 +36,17 @@ const warrantyMediaStorage = multer.diskStorage({
 
 const uploadWarrantyMediaFile = multer({
   storage: warrantyMediaStorage,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 6 },
   fileFilter: (_req: Request, file: { mimetype: string }, cb: (error: Error | null, acceptFile?: boolean) => void) => {
-    if (/^(image|video)\//.test(file.mimetype)) {
+    if (/^(image|video)\//.test(file.mimetype) || file.mimetype === "application/pdf") {
       cb(null, true);
       return;
     }
-    cb(new AppError("Only image or video proof files are allowed", 400));
+    cb(new AppError("Only image, video or PDF proof files are allowed", 400));
   }
 });
 
-const uploadWarrantyMediaMiddleware = uploadWarrantyMediaFile.single("media");
+const uploadWarrantyMediaMiddleware = uploadWarrantyMediaFile.array("media", 6);
 
 function optionalAuthenticate(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -82,4 +85,19 @@ warrantiesRouter.use(authenticate);
 warrantiesRouter.get("/eligible", getEligibleWarrantyItems);
 warrantiesRouter.get("/my", getMyWarranties);
 warrantiesRouter.get("/requests/my", getMyWarrantyRequests);
+warrantiesRouter.get("/notifications/my", getMyWarrantyNotifications);
 warrantiesRouter.post("/activate", activateWarranty);
+warrantiesRouter.get("/admin/requests", authorize([ROLES.ADMIN, ROLES.TECH_STAFF, ROLES.SALES_STAFF]), getAdminWarrantyRequests);
+warrantiesRouter.patch("/admin/requests/:requestId", authorize([ROLES.ADMIN, ROLES.TECH_STAFF, ROLES.SALES_STAFF]), (req: Request, res: Response, next: NextFunction) => {
+  uploadWarrantyMediaMiddleware(req, res, (error: any) => {
+    if (!error) {
+      next();
+      return;
+    }
+    if (error?.code === "LIMIT_FILE_SIZE") {
+      next(new AppError("Warranty proof file must be 25MB or smaller", 400));
+      return;
+    }
+    next(error);
+  });
+}, updateAdminWarrantyRequest);

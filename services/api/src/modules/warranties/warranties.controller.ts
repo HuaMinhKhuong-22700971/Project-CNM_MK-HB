@@ -4,41 +4,82 @@ import { prisma } from "../../config/prisma";
 import { AppError } from "../../errors/app-error";
 import { asyncHandler } from "../../utils/async-handler";
 
-type WarrantyMediaFile = {
+type UploadedWarrantyFile = {
   filename: string;
+  mimetype: string;
 };
 
-const WARRANTY_STEPS = ["RECEIVED", "INSPECTING", "REPAIRING", "COMPLETED"];
+const WARRANTY_LIFECYCLE_STEPS = [
+  "RECEIVED",
+  "INSPECTING",
+  "REPAIRING",
+  "WAITING_PARTS",
+  "REPLACEMENT",
+  "COMPLETED"
+];
 
-function addOneYear(date = new Date()) {
+const REQUEST_STATUS_LABELS: Record<string, string> = {
+  RECEIVED: "Đã tiếp nhận",
+  INSPECTING: "Đang kiểm tra",
+  REPAIRING: "Đang sửa",
+  WAITING_PARTS: "Chờ linh kiện",
+  REPLACEMENT: "Đổi mới",
+  COMPLETED: "Hoàn tất"
+};
+
+const SEVERITY_LABELS: Record<string, string> = {
+  LOW: "Nhẹ",
+  MEDIUM: "Trung bình",
+  HIGH: "Nghiêm trọng",
+  CRITICAL: "Khẩn cấp"
+};
+
+function addWarrantyPeriod(date = new Date(), months = 12) {
   const expiresAt = new Date(date);
-  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  expiresAt.setMonth(expiresAt.getMonth() + months);
   return expiresAt;
+}
+
+function getWarrantyMonthsFromItem(_item: any) {
+  return 12;
 }
 
 function generateWarrantyCode(orderItemId: number) {
   return `BH-${orderItemId}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 }
 
-function buildTimeline(status = "RECEIVED") {
-  const normalized = String(status || "RECEIVED").toUpperCase();
-  const activeIndex = Math.max(WARRANTY_STEPS.indexOf(normalized), 0);
-  const labels: Record<string, string> = {
-    RECEIVED: "Đã tiếp nhận",
-    INSPECTING: "Đang kiểm tra",
-    REPAIRING: "Đang sửa",
-    COMPLETED: "Hoàn tất"
-  };
-
-  return WARRANTY_STEPS.map((step, index) => ({
-    key: step,
-    label: labels[step],
-    done: index <= activeIndex
-  }));
+function normalizeRequestStatus(status = "RECEIVED") {
+  const normalized = String(status || "RECEIVED").trim().toUpperCase();
+  return WARRANTY_LIFECYCLE_STEPS.includes(normalized) ? normalized : "RECEIVED";
 }
 
-async function ensureWarrantyRequestTable() {
-  await prisma.$executeRawUnsafe(`
+function getUserIdFromRequest(req: Request) {
+  const userId = req.user?.userId;
+  if (!userId) throw new AppError("Unauthorized", 401);
+  return Number(userId);
+}
+
+async function queryRows<T = any>(sql: string, ...params: any[]) {
+  return prisma.$queryRawUnsafe<T[]>(sql, ...params);
+}
+
+async function execute(sql: string, ...params: any[]) {
+  return prisma.$executeRawUnsafe(sql, ...params);
+}
+
+async function getTableColumns(tableName: string) {
+  const rows = await queryRows<{ Field: string }>(`SHOW COLUMNS FROM ${tableName}`);
+  return rows.map((row) => row.Field);
+}
+
+async function ensureColumn(tableName: string, columnName: string, definition: string) {
+  const columns = await getTableColumns(tableName).catch(() => [] as string[]);
+  if (columns.includes(columnName)) return;
+  await execute(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+}
+
+async function ensureWarrantyTables() {
+  await execute(`
     CREATE TABLE IF NOT EXISTS warranty_requests (
       id INT AUTO_INCREMENT PRIMARY KEY,
       warranty_id INT NULL,
@@ -46,16 +87,167 @@ async function ensureWarrantyRequestTable() {
       lookup_value VARCHAR(255) NULL,
       customer_name VARCHAR(255) NULL,
       customer_phone VARCHAR(50) NULL,
+      customer_email VARCHAR(255) NULL,
+      product_name VARCHAR(255) NULL,
+      serial_number VARCHAR(255) NULL,
+      order_id INT NULL,
+      severity VARCHAR(50) NOT NULL DEFAULT 'MEDIUM',
       issue_description TEXT NOT NULL,
-      media_url VARCHAR(255) NULL,
+      extra_note TEXT NULL,
       status VARCHAR(50) NOT NULL DEFAULT 'RECEIVED',
+      last_staff_note TEXT NULL,
+      last_email_mock TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_warranty_requests_warranty (warranty_id),
       INDEX idx_warranty_requests_user (user_id),
-      INDEX idx_warranty_requests_lookup (lookup_value)
+      INDEX idx_warranty_requests_lookup (lookup_value),
+      INDEX idx_warranty_requests_status (status)
     )
   `);
+
+  await ensureColumn("warranty_requests", "customer_email", "customer_email VARCHAR(255) NULL");
+  await ensureColumn("warranty_requests", "product_name", "product_name VARCHAR(255) NULL");
+  await ensureColumn("warranty_requests", "serial_number", "serial_number VARCHAR(255) NULL");
+  await ensureColumn("warranty_requests", "order_id", "order_id INT NULL");
+  await ensureColumn("warranty_requests", "severity", "severity VARCHAR(50) NOT NULL DEFAULT 'MEDIUM'");
+  await ensureColumn("warranty_requests", "extra_note", "extra_note TEXT NULL");
+  await ensureColumn("warranty_requests", "last_staff_note", "last_staff_note TEXT NULL");
+  await ensureColumn("warranty_requests", "last_email_mock", "last_email_mock TEXT NULL");
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS warranty_request_events (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      request_id INT NOT NULL,
+      status VARCHAR(50) NOT NULL,
+      note TEXT NULL,
+      actor_role VARCHAR(50) NULL,
+      actor_name VARCHAR(255) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_warranty_request_events_request (request_id),
+      INDEX idx_warranty_request_events_created (created_at)
+    )
+  `);
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS warranty_request_attachments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      request_id INT NOT NULL,
+      source VARCHAR(50) NOT NULL DEFAULT 'CUSTOMER',
+      file_url VARCHAR(255) NOT NULL,
+      mime_type VARCHAR(120) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_warranty_request_attachments_request (request_id)
+    )
+  `);
+
+  await execute(`
+    CREATE TABLE IF NOT EXISTS warranty_notifications (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      request_id INT NULL,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      is_read TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_warranty_notifications_user (user_id),
+      INDEX idx_warranty_notifications_read (user_id, is_read)
+    )
+  `);
+}
+
+function buildFallbackTimeline(status = "RECEIVED") {
+  const normalized = normalizeRequestStatus(status);
+  const activeIndex = Math.max(WARRANTY_LIFECYCLE_STEPS.indexOf(normalized), 0);
+  return WARRANTY_LIFECYCLE_STEPS.map((step, index) => ({
+    key: step,
+    label: REQUEST_STATUS_LABELS[step],
+    done: index <= activeIndex,
+    timestamp: null,
+    note: null,
+    actorName: null
+  }));
+}
+
+function buildTimelineFromEvents(status: string, events: any[]) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return buildFallbackTimeline(status);
+  }
+
+  const byStatus = new Map<string, any>();
+  events.forEach((event) => {
+    if (!byStatus.has(event.status)) byStatus.set(event.status, event);
+  });
+
+  const activeIndex = Math.max(WARRANTY_LIFECYCLE_STEPS.indexOf(normalizeRequestStatus(status)), 0);
+  return WARRANTY_LIFECYCLE_STEPS.map((step, index) => {
+    const event = byStatus.get(step);
+    return {
+      key: step,
+      label: REQUEST_STATUS_LABELS[step],
+      done: index <= activeIndex,
+      timestamp: event?.createdAt || null,
+      note: event?.note || null,
+      actorName: event?.actorName || null
+    };
+  });
+}
+
+async function createWarrantyNotification(userId: number | null, requestId: number | null, title: string, message: string) {
+  if (!userId) return;
+  await ensureWarrantyTables();
+  await execute(
+    `
+      INSERT INTO warranty_notifications (user_id, request_id, title, message, is_read)
+      VALUES (?, ?, ?, ?, 0)
+    `,
+    userId,
+    requestId,
+    title,
+    message
+  );
+}
+
+async function addRequestEvent(requestId: number, status: string, note: string | null, actorRole: string | null, actorName: string | null) {
+  await ensureWarrantyTables();
+  await execute(
+    `
+      INSERT INTO warranty_request_events (request_id, status, note, actor_role, actor_name)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    requestId,
+    normalizeRequestStatus(status),
+    note,
+    actorRole,
+    actorName
+  );
+}
+
+async function attachFilesToRequest(requestId: number, files: UploadedWarrantyFile[], source: "CUSTOMER" | "STAFF") {
+  if (!Array.isArray(files) || files.length === 0) return [];
+  await ensureWarrantyTables();
+
+  const attachments = files.map((file) => ({
+    fileUrl: `/uploads/warranty-requests/${file.filename}`,
+    mimeType: file.mimetype || null
+  }));
+
+  await Promise.all(
+    attachments.map((attachment) =>
+      execute(
+        `
+          INSERT INTO warranty_request_attachments (request_id, source, file_url, mime_type)
+          VALUES (?, ?, ?, ?)
+        `,
+        requestId,
+        source,
+        attachment.fileUrl,
+        attachment.mimeType
+      )
+    )
+  );
+
+  return attachments;
 }
 
 async function ensureDeliveredOrderWarrantiesForUser(userId: number) {
@@ -63,7 +255,8 @@ async function ensureDeliveredOrderWarrantiesForUser(userId: number) {
     where: {
       Order: { user_id: userId, status: "DELIVERED" },
       WarrantyItem: null
-    }
+    },
+    include: { Order: true }
   });
 
   if (deliveredItems.length === 0) return;
@@ -71,37 +264,49 @@ async function ensureDeliveredOrderWarrantiesForUser(userId: number) {
   const now = new Date();
   await Promise.all(
     deliveredItems.map((item: any) =>
-      prisma.warrantyItem
-        .create({
-          data: {
-            user_id: userId,
-            order_item_id: item.id,
-            order_id: item.order_id,
-            sku_id: item.product_variant_id,
-            warranty_code: generateWarrantyCode(item.id),
-            status: "ACTIVE",
-            activated_at: now,
-            expires_at: addOneYear(now),
-            note: "Auto-created from delivered order"
-          }
-        })
-        .catch(() => null)
+      prisma.warrantyItem.create({
+        data: {
+          user_id: userId,
+          order_item_id: item.id,
+          order_id: item.order_id,
+          sku_id: item.product_variant_id,
+          warranty_code: generateWarrantyCode(item.id),
+          status: "ACTIVE",
+          activated_at: now,
+          expires_at: addWarrantyPeriod(now, getWarrantyMonthsFromItem(item)),
+          note: "Auto-created from delivered order"
+        }
+      }).catch(() => null)
     )
   );
 }
 
-function formatWarranty(warranty: any) {
+function formatWarranty(warranty: any, latestRequest?: any) {
+  const expiresAt = warranty.expires_at ? new Date(warranty.expires_at) : null;
+  const remainingDays = expiresAt ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000)) : null;
+  const status = expiresAt && expiresAt.getTime() < Date.now() ? "EXPIRED" : warranty.status;
+
   return {
     id: warranty.id,
+    productId: warranty.OrderItem?.product_id || null,
     orderId: warranty.order_id,
     orderItemId: warranty.order_item_id,
+    skuId: warranty.sku_id,
     warrantyCode: warranty.warranty_code,
-    status: warranty.status,
+    serialNumber: warranty.OrderItem?.sku_snapshot || null,
+    status,
+    warrantyMonths: 12,
+    startDate: warranty.activated_at,
+    endDate: warranty.expires_at,
     activatedAt: warranty.activated_at,
     expiresAt: warranty.expires_at,
     note: warranty.note,
+    remainingDays,
     qrUrl: `/warranties?lookup=${encodeURIComponent(warranty.warranty_code)}`,
-    timeline: buildTimeline(warranty.status === "COMPLETED" ? "COMPLETED" : "RECEIVED"),
+    imageUrl: warranty.OrderItem?.ProductSku?.image_url || null,
+    orderNumber: warranty.order_id ? `#${warranty.order_id}` : null,
+    timeline: buildFallbackTimeline(latestRequest?.status || "RECEIVED"),
+    latestRequest: latestRequest || null,
     item: {
       productName: warranty.OrderItem?.name_snapshot,
       sku: warranty.OrderItem?.sku_snapshot,
@@ -126,16 +331,141 @@ function buildLookupWhere(value: string) {
   return { OR: clauses };
 }
 
-export const getEligibleWarrantyItems = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  if (!userId) throw new AppError("Unauthorized", 401);
+async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
+  await ensureWarrantyTables();
+  const rows = await queryRows<any>(
+    `
+      SELECT
+        wr.id,
+        wr.warranty_id AS warrantyId,
+        wr.user_id AS userId,
+        wr.lookup_value AS lookupValue,
+        wr.customer_name AS customerName,
+        wr.customer_phone AS customerPhone,
+        wr.customer_email AS customerEmail,
+        wr.product_name AS productName,
+        wr.serial_number AS serialNumber,
+        wr.order_id AS orderId,
+        wr.severity,
+        wr.issue_description AS issueDescription,
+        wr.extra_note AS extraNote,
+        wr.status,
+        wr.last_staff_note AS lastStaffNote,
+        wr.last_email_mock AS lastEmailMock,
+        wr.created_at AS createdAt,
+        wr.updated_at AS updatedAt,
+        w.warranty_code AS warrantyCode,
+        w.expires_at AS warrantyExpiresAt,
+        oi.name_snapshot AS orderItemProductName,
+        oi.sku_snapshot AS orderItemSku,
+        ps.image_url AS productImage,
+        u.email AS accountEmail,
+        u.full_name AS accountName,
+        u.phone AS accountPhone
+      FROM warranty_requests wr
+      LEFT JOIN warranties w ON w.id = wr.warranty_id
+      LEFT JOIN order_items oi ON oi.id = COALESCE(w.order_item_id, NULL)
+      LEFT JOIN product_skus ps ON ps.id = COALESCE(w.sku_id, oi.product_variant_id)
+      LEFT JOIN users u ON u.id = wr.user_id
+      WHERE ${whereSql}
+      ORDER BY wr.updated_at DESC, wr.created_at DESC
+    `,
+    ...params
+  );
 
-  const numericUserId = parseInt(userId, 10);
-  await ensureDeliveredOrderWarrantiesForUser(numericUserId);
+  if (rows.length === 0) return [];
+
+  const requestIds = rows.map((row) => row.id);
+  const placeholders = requestIds.map(() => "?").join(", ");
+  const attachments = await queryRows<any>(
+    `
+      SELECT id, request_id AS requestId, source, file_url AS fileUrl, mime_type AS mimeType, created_at AS createdAt
+      FROM warranty_request_attachments
+      WHERE request_id IN (${placeholders})
+      ORDER BY created_at ASC, id ASC
+    `,
+    ...requestIds
+  );
+  const events = await queryRows<any>(
+    `
+      SELECT id, request_id AS requestId, status, note, actor_role AS actorRole, actor_name AS actorName, created_at AS createdAt
+      FROM warranty_request_events
+      WHERE request_id IN (${placeholders})
+      ORDER BY created_at ASC, id ASC
+    `,
+    ...requestIds
+  );
+
+  const attachmentMap = new Map<number, any[]>();
+  attachments.forEach((attachment) => {
+    const bucket = attachmentMap.get(attachment.requestId) || [];
+    bucket.push(attachment);
+    attachmentMap.set(attachment.requestId, bucket);
+  });
+
+  const eventMap = new Map<number, any[]>();
+  events.forEach((event) => {
+    const bucket = eventMap.get(event.requestId) || [];
+    bucket.push(event);
+    eventMap.set(event.requestId, bucket);
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    warrantyId: row.warrantyId,
+    userId: row.userId,
+    lookupValue: row.lookupValue,
+    customerName: row.customerName || row.accountName || null,
+    customerPhone: row.customerPhone || row.accountPhone || null,
+    customerEmail: row.customerEmail || row.accountEmail || null,
+    productName: row.productName || row.orderItemProductName || "Sản phẩm",
+    serialNumber: row.serialNumber || row.orderItemSku || null,
+    orderId: row.orderId,
+    severity: row.severity,
+    severityLabel: SEVERITY_LABELS[String(row.severity || "MEDIUM").toUpperCase()] || "Trung bình",
+    issueDescription: row.issueDescription,
+    extraNote: row.extraNote,
+    status: normalizeRequestStatus(row.status),
+    statusLabel: REQUEST_STATUS_LABELS[normalizeRequestStatus(row.status)],
+    lastStaffNote: row.lastStaffNote,
+    lastEmailMock: row.lastEmailMock,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    warrantyCode: row.warrantyCode,
+    warrantyExpiresAt: row.warrantyExpiresAt,
+    productImage: row.productImage || null,
+    attachments: attachmentMap.get(row.id) || [],
+    timeline: buildTimelineFromEvents(row.status, eventMap.get(row.id) || [])
+  }));
+}
+
+async function getLatestRequestMapByWarrantyIds(warrantyIds: number[]) {
+  if (warrantyIds.length === 0) return new Map<number, any>();
+  await ensureWarrantyTables();
+  const placeholders = warrantyIds.map(() => "?").join(", ");
+  const rows = await queryRows<any>(
+    `
+      SELECT wr.*
+      FROM warranty_requests wr
+      INNER JOIN (
+        SELECT warranty_id, MAX(id) AS latest_id
+        FROM warranty_requests
+        WHERE warranty_id IN (${placeholders})
+        GROUP BY warranty_id
+      ) latest ON latest.latest_id = wr.id
+    `,
+    ...warrantyIds
+  );
+  return new Map<number, any>(rows.map((row) => [row.warranty_id, row]));
+}
+
+export const getEligibleWarrantyItems = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getUserIdFromRequest(req);
+  await ensureDeliveredOrderWarrantiesForUser(userId);
 
   const eligibleItems = await prisma.orderItem.findMany({
     where: {
-      Order: { user_id: numericUserId, status: "DELIVERED" },
+      Order: { user_id: userId, status: "DELIVERED" },
       WarrantyItem: null
     }
   });
@@ -151,26 +481,27 @@ export const getEligibleWarrantyItems = asyncHandler(async (req: Request, res: R
 });
 
 export const getMyWarranties = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  if (!userId) throw new AppError("Unauthorized", 401);
-
-  const numericUserId = parseInt(userId, 10);
-  await ensureDeliveredOrderWarrantiesForUser(numericUserId);
+  const userId = getUserIdFromRequest(req);
+  await ensureDeliveredOrderWarrantiesForUser(userId);
 
   const warranties = await prisma.warrantyItem.findMany({
-    where: { user_id: numericUserId },
-    include: { OrderItem: true },
+    where: { user_id: userId },
+    include: {
+      OrderItem: { include: { ProductSku: true } },
+      Order: true
+    },
     orderBy: { created_at: "desc" }
   });
 
-  res.status(200).json({ success: true, data: warranties.map(formatWarranty) });
+  const latestRequestMap = await getLatestRequestMapByWarrantyIds(warranties.map((item) => item.id));
+  res.status(200).json({
+    success: true,
+    data: warranties.map((warranty) => formatWarranty(warranty, latestRequestMap.get(warranty.id) || null))
+  });
 });
 
 export const activateWarranty = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  if (!userId) throw new AppError("Unauthorized", 401);
-
-  const numericUserId = parseInt(userId, 10);
+  const userId = getUserIdFromRequest(req);
   const { orderItemId, note } = req.body;
   if (!orderItemId) throw new AppError("Thiếu orderItemId", 400);
 
@@ -180,7 +511,7 @@ export const activateWarranty = asyncHandler(async (req: Request, res: Response)
     include: { Order: true }
   });
 
-  if (!orderItem || orderItem.Order.user_id !== numericUserId || orderItem.Order.status !== "DELIVERED") {
+  if (!orderItem || orderItem.Order.user_id !== userId || orderItem.Order.status !== "DELIVERED") {
     throw new AppError("Sản phẩm không hợp lệ để kích hoạt bảo hành", 400);
   }
 
@@ -192,7 +523,7 @@ export const activateWarranty = asyncHandler(async (req: Request, res: Response)
   const now = new Date();
   const warranty = await prisma.warrantyItem.create({
     data: {
-      user_id: numericUserId,
+      user_id: userId,
       order_item_id: id,
       order_id: orderItem.order_id,
       sku_id: orderItem.product_variant_id,
@@ -200,9 +531,9 @@ export const activateWarranty = asyncHandler(async (req: Request, res: Response)
       note: note || null,
       status: "ACTIVE",
       activated_at: now,
-      expires_at: addOneYear(now)
+      expires_at: addWarrantyPeriod(now, getWarrantyMonthsFromItem(orderItem))
     },
-    include: { OrderItem: true }
+    include: { OrderItem: { include: { ProductSku: true } }, Order: true }
   });
 
   res.status(201).json({ success: true, data: formatWarranty(warranty) });
@@ -214,88 +545,189 @@ export const lookupWarranty = asyncHandler(async (req: Request, res: Response) =
 
   const warranty = await prisma.warrantyItem.findFirst({
     where: buildLookupWhere(lookupValue),
-    include: { OrderItem: true }
+    include: { OrderItem: { include: { ProductSku: true } }, Order: true, User: true }
   });
 
   if (!warranty) {
-    throw new AppError("Không tìm thấy thông tin bảo hành cho thông tin này", 404);
+    throw new AppError("Không tìm thấy thông tin bảo hành cho dữ liệu này", 404);
   }
+
+  const requestRows = await getWarrantyRequestsBase("wr.warranty_id = ?", [warranty.id]);
+  const latestRequest = requestRows[0] || null;
 
   res.status(200).json({
     success: true,
     data: {
-      ...formatWarranty(warranty),
+      ...formatWarranty(warranty, latestRequest),
       productName: warranty.OrderItem?.name_snapshot,
-      sku: warranty.OrderItem?.sku_snapshot
+      sku: warranty.OrderItem?.sku_snapshot,
+      request: latestRequest
     }
   });
 });
 
 export const submitWarrantyRequest = asyncHandler(async (req: Request, res: Response) => {
-  await ensureWarrantyRequestTable();
+  await ensureWarrantyTables();
 
-  const file = (req as Request & { file?: WarrantyMediaFile }).file;
+  const files = (((req as Request & { files?: UploadedWarrantyFile[] }).files) || []) as UploadedWarrantyFile[];
   const lookupValue = String(req.body?.lookupValue || req.body?.warrantyCode || req.body?.serial || req.body?.orderId || "").trim();
   const issueDescription = String(req.body?.issueDescription || req.body?.description || "").trim();
+  const severity = String(req.body?.severity || "MEDIUM").toUpperCase();
+  const extraNote = String(req.body?.extraNote || req.body?.additionalNote || "").trim() || null;
 
   if (!issueDescription) {
     throw new AppError("Vui lòng mô tả lỗi cần bảo hành", 400);
   }
 
   let warrantyId: number | null = req.body?.warrantyId ? Number(req.body.warrantyId) : null;
+  let warranty: any = null;
   if (!warrantyId && lookupValue) {
-    const warranty = await prisma.warrantyItem.findFirst({ where: buildLookupWhere(lookupValue) });
+    warranty = await prisma.warrantyItem.findFirst({
+      where: buildLookupWhere(lookupValue),
+      include: { OrderItem: { include: { ProductSku: true } }, User: true }
+    });
     warrantyId = warranty?.id || null;
+  } else if (warrantyId) {
+    warranty = await prisma.warrantyItem.findFirst({
+      where: { id: warrantyId },
+      include: { OrderItem: { include: { ProductSku: true } }, User: true }
+    });
   }
 
-  const mediaUrl = file ? `/uploads/warranty-requests/${file.filename}` : null;
-  const userId = req.user?.userId ? Number(req.user.userId) : null;
+  const userId = req.user?.userId ? Number(req.user.userId) : warranty?.user_id || null;
+  const customerName = String(req.body?.customerName || req.body?.fullName || warranty?.User?.full_name || "").trim() || null;
+  const customerPhone = String(req.body?.customerPhone || req.body?.phone || warranty?.User?.phone || "").trim() || null;
+  const customerEmail = String(req.body?.customerEmail || req.body?.email || warranty?.User?.email || "").trim() || null;
+  const productName = String(req.body?.productName || warranty?.OrderItem?.name_snapshot || "").trim() || null;
+  const serialNumber = String(req.body?.serialNumber || warranty?.OrderItem?.sku_snapshot || lookupValue || "").trim() || null;
+  const orderId = req.body?.orderId ? Number(req.body.orderId) : warranty?.order_id || null;
 
-  await prisma.$executeRawUnsafe(
+  await execute(
     `
       INSERT INTO warranty_requests
-        (warranty_id, user_id, lookup_value, customer_name, customer_phone, issue_description, media_url, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
+        (warranty_id, user_id, lookup_value, customer_name, customer_phone, customer_email, product_name, serial_number, order_id, severity, issue_description, extra_note, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED')
     `,
     warrantyId,
     userId,
     lookupValue || null,
-    String(req.body?.customerName || "").trim() || null,
-    String(req.body?.customerPhone || "").trim() || null,
+    customerName,
+    customerPhone,
+    customerEmail,
+    productName,
+    serialNumber,
+    orderId,
+    severity,
     issueDescription,
-    mediaUrl
+    extraNote
   );
 
+  const insertedRow = await queryRows<{ id: number }>("SELECT LAST_INSERT_ID() AS id");
+  const requestId = Number(insertedRow[0]?.id || 0);
+  await attachFilesToRequest(requestId, files, "CUSTOMER");
+  await addRequestEvent(requestId, "RECEIVED", issueDescription, "CUSTOMER", customerName || "Khách hàng");
+  await createWarrantyNotification(userId, requestId, "Yêu cầu bảo hành đã được tiếp nhận", `Yêu cầu bảo hành cho ${productName || "sản phẩm"} đã được ghi nhận.`);
+
+  const requests = await getWarrantyRequestsBase("wr.id = ?", [requestId]);
   res.status(201).json({
     success: true,
-    data: {
+    data: requests[0] || {
+      id: requestId,
       warrantyId,
       lookupValue,
-      mediaUrl,
       status: "RECEIVED",
-      timeline: buildTimeline("RECEIVED")
+      timeline: buildFallbackTimeline("RECEIVED")
     }
   });
 });
 
 export const getMyWarrantyRequests = asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  if (!userId) throw new AppError("Unauthorized", 401);
-  await ensureWarrantyRequestTable();
+  const userId = getUserIdFromRequest(req);
+  const rows = await getWarrantyRequestsBase("wr.user_id = ?", [userId]);
+  res.status(200).json({ success: true, data: rows });
+});
 
-  const rows = await prisma.$queryRawUnsafe<any[]>(
+export const getMyWarrantyNotifications = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getUserIdFromRequest(req);
+  await ensureWarrantyTables();
+  const rows = await queryRows<any>(
     `
-      SELECT id, warranty_id AS warrantyId, lookup_value AS lookupValue, issue_description AS issueDescription,
-             media_url AS mediaUrl, status, created_at AS createdAt, updated_at AS updatedAt
-      FROM warranty_requests
+      SELECT id, request_id AS requestId, title, message, is_read AS isRead, created_at AS createdAt
+      FROM warranty_notifications
       WHERE user_id = ?
       ORDER BY created_at DESC
+      LIMIT 20
     `,
-    Number(userId)
+    userId
+  );
+  res.status(200).json({ success: true, data: rows });
+});
+
+export const getAdminWarrantyRequests = asyncHandler(async (req: Request, res: Response) => {
+  await ensureWarrantyTables();
+  const status = String(req.query.status || "").trim().toUpperCase();
+  const keyword = String(req.query.q || req.query.keyword || "").trim();
+
+  const clauses = ["1 = 1"];
+  const params: any[] = [];
+
+  if (status) {
+    clauses.push("wr.status = ?");
+    params.push(status);
+  }
+  if (keyword) {
+    clauses.push("(wr.customer_name LIKE CONCAT('%', ?, '%') OR wr.customer_phone LIKE CONCAT('%', ?, '%') OR wr.product_name LIKE CONCAT('%', ?, '%') OR wr.lookup_value LIKE CONCAT('%', ?, '%') OR wr.serial_number LIKE CONCAT('%', ?, '%'))");
+    params.push(keyword, keyword, keyword, keyword, keyword);
+  }
+
+  const rows = await getWarrantyRequestsBase(clauses.join(" AND "), params);
+  res.status(200).json({ success: true, data: rows });
+});
+
+export const updateAdminWarrantyRequest = asyncHandler(async (req: Request, res: Response) => {
+  await ensureWarrantyTables();
+  const requestId = Number(req.params.requestId);
+  if (!requestId) throw new AppError("Thiếu requestId", 400);
+
+  const status = req.body?.status ? normalizeRequestStatus(req.body.status) : "";
+  const note = String(req.body?.note || req.body?.technicianNote || "").trim() || null;
+  const actorName = String(req.user?.email || "tech@pcmall.local");
+  const actorRole = String(req.user?.role || "TECH_STAFF");
+  const files = (((req as Request & { files?: UploadedWarrantyFile[] }).files) || []) as UploadedWarrantyFile[];
+
+  const existing = await getWarrantyRequestsBase("wr.id = ?", [requestId]);
+  const current = existing[0];
+  if (!current) throw new AppError("Không tìm thấy yêu cầu bảo hành", 404);
+
+  const nextStatus = status || current.status;
+  const emailMock = `Mock email sent to ${current.customerEmail || current.customerPhone || "customer"}: ${REQUEST_STATUS_LABELS[nextStatus]} - ${note || "Yêu cầu của bạn đang được cập nhật."}`;
+
+  await execute(
+    `
+      UPDATE warranty_requests
+      SET status = ?, last_staff_note = ?, last_email_mock = ?
+      WHERE id = ?
+    `,
+    nextStatus,
+    note,
+    emailMock,
+    requestId
   );
 
+  if (note || status) {
+    await addRequestEvent(requestId, nextStatus, note, actorRole, actorName);
+  }
+  await attachFilesToRequest(requestId, files, "STAFF");
+  await createWarrantyNotification(current.userId || null, requestId, "Cập nhật bảo hành", `${current.productName}: ${REQUEST_STATUS_LABELS[nextStatus]}`);
+
+  const updated = await getWarrantyRequestsBase("wr.id = ?", [requestId]);
   res.status(200).json({
     success: true,
-    data: rows.map((row) => ({ ...row, timeline: buildTimeline(row.status) }))
+    data: updated[0],
+    notification: {
+      title: "Cập nhật bảo hành",
+      message: `${current.productName}: ${REQUEST_STATUS_LABELS[nextStatus]}`
+    },
+    emailMock
   });
 });

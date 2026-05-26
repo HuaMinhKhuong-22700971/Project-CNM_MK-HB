@@ -492,7 +492,14 @@ export function ProductDetailPage() {
             <div className="similar-grid">
               {similarProducts.length > 0 ? similarProducts.map((item) => (
                 <Link key={getProductId(item)} to={routeConfig.public.productDetail.replace(":idOrSlug", String(item.slug || getProductId(item)))}>
-                  <img src={resolveProductImage(item)} alt={getProductName(item)} />
+                  <img
+                    src={resolveProductImage(item)}
+                    alt={getProductName(item)}
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.src = resolveProductImage({ category_name: getProductCategory(item) || "COOLING" });
+                    }}
+                  />
                   <strong>{getProductName(item)}</strong>
                   <span>{formatCurrency(getSimilarPrice(item))}đ</span>
                 </Link>
