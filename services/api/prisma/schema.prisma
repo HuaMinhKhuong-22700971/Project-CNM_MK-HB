@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/client"
 }
 
 datasource db {
@@ -33,6 +32,36 @@ model AiChat {
 
   @@index([user_id], map: "user_id")
   @@map("ai_chats")
+}
+
+model ChatSession {
+  id            Int          @id @default(autoincrement())
+  session_id    String       @unique @db.VarChar(255)
+  status        String       @default("waiting") @db.VarChar(50)
+  customer_name String       @default("Khách hàng") @db.VarChar(255)
+  staff_name    String?      @db.VarChar(255)
+  linked_order_id Int?
+  created_at    DateTime     @default(now()) @db.Timestamp(0)
+  updated_at    DateTime     @default(now()) @db.Timestamp(0)
+  messages      ChatMessage[]
+
+  @@index([status], map: "idx_chat_sessions_status")
+  @@index([linked_order_id], map: "idx_chat_sessions_order")
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id         Int         @id @default(autoincrement())
+  session_id Int
+  sender     String      @db.VarChar(50)
+  text       String      @db.Text
+  build_data String?     @db.Text
+  created_at DateTime    @default(now()) @db.Timestamp(0)
+  session    ChatSession @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_chat_messages_session")
+
+  @@index([session_id], map: "fk_chat_messages_session")
+  @@index([session_id, created_at], map: "idx_chat_messages_session_created")
+  @@map("chat_messages")
 }
 
 model AiMessage {

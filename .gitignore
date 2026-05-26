@@ -28,6 +28,9 @@ Thumbs.db
 # Prisma / DB
 services/api/prisma/dev.db
 
+# Demo chat persistence (staff)
+services/api/src/data/chat-sessions.json
+
 # Frontend
 apps/web/.vite/
 

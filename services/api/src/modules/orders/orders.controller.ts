@@ -5,15 +5,23 @@ import { ROLES } from "../../constants/roles";
 import { AppError } from "../../errors/app-error";
 import { asyncHandler } from "../../utils/async-handler";
 import {
+  ensurePaymentProofColumn,
   getOrderById,
   getOrdersByUser,
   listOrders,
+  markOrderPaymentCancelled,
   markOrderPaid,
   normalizeOrderRecord,
+  saveOrderPaymentProof,
   updateOrderStatus
 } from "./orders.repository";
 import { checkoutSchema, updateOrderStatusSchema } from "./orders.validator";
 import { generateVnpayUrl, verifyVnpayReturn } from "../../utils/vnpay";
+import { env } from "../../config/env";
+
+type UploadedPaymentProofFile = {
+  filename: string;
+};
 
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
@@ -245,15 +253,14 @@ export const createVnpayUrl = asyncHandler(async (req: Request, res: Response) =
     throw new AppError("Order already paid", 400);
   }
 
-  const tmnCode = process.env.VNPAY_TMN_CODE;
-  const secretKey = process.env.VNPAY_HASH_SECRET;
-  const vnpUrl = process.env.VNPAY_URL || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  const tmnCode = env.vnpayTmnCode || process.env.VNPAY_TMN_CODE;
+  const secretKey = env.vnpayHashSecret || process.env.VNPAY_HASH_SECRET;
+  const frontendUrl = env.frontendUrl || process.env.FRONTEND_URL || "http://localhost:5173";
+  const shouldUseMockPayment = env.paymentMockMode || ((!tmnCode || !secretKey) && env.nodeEnv !== "production");
 
-  // Use mock flow if VNPAY credentials are not configured or mock mode is enabled
-  if (!tmnCode || !secretKey || process.env.PAYMENT_MOCK_MODE === "true") {
-    // Return a local mock URL that simulates the VNPAY flow within the app
-    const mockUrl = `${frontendUrl}/payment/mock?orderId=${order.id}&amount=${order.total_amount}`;
+  if (shouldUseMockPayment) {
+    const payAmount = Number(order.final_amount || order.total_amount || 0);
+    const mockUrl = `${frontendUrl}/payment/mock?orderId=${order.id}&amount=${payAmount}`;
     res.status(200).json({
       success: true,
       data: { paymentUrl: mockUrl, isMock: true }
@@ -261,11 +268,15 @@ export const createVnpayUrl = asyncHandler(async (req: Request, res: Response) =
     return;
   }
 
+  if (!tmnCode || !secretKey) {
+    throw new AppError("VNPay is not configured", 503);
+  }
+
   const ipAddr = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1";
   const url = generateVnpayUrl(
     ipAddr as string,
     String(order.id),
-    Number(order.total_amount),
+    Number(order.final_amount || order.total_amount || 0),
     `Thanh toan don hang ${order.id}`
   );
 
@@ -290,6 +301,108 @@ export const confirmMockPayment = asyncHandler(async (req: Request, res: Respons
   });
 });
 
+export const cancelMockPayment = asyncHandler(async (req: Request, res: Response) => {
+  const order = await getOrderById(req.params.id);
+  if (!order || order.user_id !== Number(req.user?.userId)) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.payment_status === "PAID") {
+    throw new AppError("Order already paid", 400);
+  }
+
+  await markOrderPaymentCancelled(req.params.id);
+
+  res.status(200).json({
+    success: true,
+    message: "Payment cancelled (mock)",
+    data: { orderId: req.params.id, paymentStatus: "PAYMENT_CANCELLED" }
+  });
+});
+
+export const uploadPaymentProof = asyncHandler(async (req: Request, res: Response) => {
+  const file = (req as Request & { file?: UploadedPaymentProofFile }).file;
+  const order = await getOrderById(req.params.id);
+
+  if (!order || order.user_id !== Number(req.user?.userId)) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.payment_method !== "BANK_TRANSFER") {
+    throw new AppError("Payment proof upload is only available for QR Banking orders", 400);
+  }
+
+  if (order.payment_status === "PAID") {
+    throw new AppError("Order already paid", 400);
+  }
+
+  if (!file) {
+    throw new AppError("Payment proof image is required", 400);
+  }
+
+  const proofUrl = `/uploads/payment-proofs/${file.filename}`;
+  await saveOrderPaymentProof(req.params.id, proofUrl);
+
+  const updatedOrder = await getOrderById(req.params.id);
+
+  res.status(200).json({
+    success: true,
+    message: "Payment proof uploaded successfully",
+    data: {
+      ...(await normalizeOrderRecord(updatedOrder)),
+      paymentProof: proofUrl,
+      paymentStatus: "AWAITING_ADMIN_CONFIRMATION"
+    }
+  });
+});
+
+export const approvePaymentProof = asyncHandler(async (req: Request, res: Response) => {
+  const order = await getOrderById(req.params.id);
+
+  if (!order) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.payment_method !== "BANK_TRANSFER") {
+    throw new AppError("Payment approval is only available for QR Banking orders", 400);
+  }
+
+  await ensurePaymentProofColumn();
+
+  const approved = Boolean(req.body?.approved);
+  if (approved) {
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE orders
+        SET payment_status = 'PAID',
+            status = 'PROCESSING',
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      Number(req.params.id)
+    );
+  } else {
+    await prisma.$executeRawUnsafe(
+      `
+        UPDATE orders
+        SET payment_status = 'REJECTED',
+            status = 'PENDING',
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      Number(req.params.id)
+    );
+  }
+
+  const updatedOrder = await getOrderById(req.params.id);
+
+  res.status(200).json({
+    success: true,
+    message: approved ? "Payment approved" : "Payment rejected",
+    data: await normalizeOrderRecord(updatedOrder)
+  });
+});
+
 export const vnpayReturn = asyncHandler(async (req: Request, res: Response) => {
   const vnp_Params = req.query;
   const isSecure = verifyVnpayReturn(vnp_Params);
@@ -306,21 +419,37 @@ export const vnpayIpn = asyncHandler(async (req: Request, res: Response) => {
   const vnp_Params = req.query;
   const isSecure = verifyVnpayReturn(vnp_Params);
 
-  if (isSecure) {
-    const orderId = vnp_Params["vnp_TxnRef"] as string;
-    const responseCode = vnp_Params["vnp_ResponseCode"];
-
-    if (responseCode === "00") {
-      const order = await getOrderById(orderId);
-      if (order && order.payment_status !== "PAID") {
-        await markOrderPaid(orderId);
-      }
-    }
-    
-    res.status(200).json({ RspCode: "00", Message: "Confirm Success" });
-  } else {
+  if (!isSecure) {
+    console.error("[VNPay IPN] Invalid checksum for params:", vnp_Params);
     res.status(200).json({ RspCode: "97", Message: "Invalid checksum" });
+    return;
   }
+
+  const orderId = vnp_Params["vnp_TxnRef"] as string;
+  const responseCode = vnp_Params["vnp_ResponseCode"];
+  const vnpTxnNo = vnp_Params["vnp_TransactionNo"] as string;
+
+  console.log(`[VNPay IPN] Order: ${orderId}, Code: ${responseCode}, TxnNo: ${vnpTxnNo}`);
+
+  if (responseCode === "00") {
+    const order = await getOrderById(orderId);
+    if (!order) {
+      console.error(`[VNPay IPN] Order not found: ${orderId}`);
+      res.status(200).json({ RspCode: "01", Message: "Order not found" });
+      return;
+    }
+
+    if (order.payment_status === "PAID") {
+      console.log(`[VNPay IPN] Order already paid: ${orderId}, idempotent`);
+      res.status(200).json({ RspCode: "00", Message: "Confirm Success (Already Paid)" });
+      return;
+    }
+
+    await markOrderPaid(orderId);
+    console.log(`[VNPay IPN] Order marked as paid: ${orderId}`);
+  }
+
+  res.status(200).json({ RspCode: "00", Message: "Confirm Success" });
 });
 
 export const cancelMyOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -376,4 +505,3 @@ export const cancelMyOrder = asyncHandler(async (req: Request, res: Response) =>
     message: "Order canceled successfully"
   });
 });
-

@@ -9,6 +9,29 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: cnm_mk_hb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/cnm_mk_hb
+      JWT_ACCESS_SECRET: ci_access_secret
+      JWT_REFRESH_SECRET: ci_refresh_secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:5173
+      RUN_API_INTEGRATION: "1"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,8 +45,16 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Import database schema
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq mysql-client
+          mysql -h 127.0.0.1 -P 3306 -u root -proot cnm_mk_hb < "cnm_ecommerce (1).sql"
+
+      - name: Seed production accounts
+        run: npm run seed:production -w services/api
+
       - name: Build
         run: npm run build
 
-      - name: Test
-        run: npm run test
+      - name: Test API
+        run: npm run test:api

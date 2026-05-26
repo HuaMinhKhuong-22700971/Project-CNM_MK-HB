@@ -19,6 +19,12 @@ export function listCategories() {
   });
 }
 
+export function listBrands() {
+  return prisma.brand.findMany({
+    orderBy: { name: "asc" }
+  });
+}
+
 export function createCategory(data: {
   name: string;
   description?: string;

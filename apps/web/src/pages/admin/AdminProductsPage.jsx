@@ -1,7 +1,21 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 
+import {
+  AdminAlerts,
+  AdminBadge,
+  AdminBtn,
+  AdminCard,
+  AdminEmpty,
+  AdminField,
+  AdminForm,
+  AdminPage,
+  AdminPageHead,
+  AdminTableWrap,
+  AdminWorkspace,
+  useAdminToast
+} from "../../components/admin/AdminUi";
 import { getBrands, getCategories, getProductDetail } from "../../services/catalog.service";
+import { getAdminErrorMessage, normalizeAdminList } from "../../utils/adminUi";
 import {
   changeAdminProductStatus,
   createAdminProduct,
@@ -9,23 +23,6 @@ import {
   updateAdminProduct
 } from "../../services/admin-products.service";
 
-function getErrorMessage(error, fallbackMessage) {
-  if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || fallbackMessage;
-  }
-
-  return error.message || fallbackMessage;
-}
-
-function normalizeProductsResponse(response) {
-  const payload = response?.data || response;
-
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  return Array.isArray(payload?.items) ? payload.items : [];
-}
 
 function normalizeEntityList(response) {
   const payload = response?.data || response;
@@ -88,33 +85,6 @@ function validateForm(values) {
   return errors;
 }
 
-function getStatusChipStyle(status) {
-  if (status === "ACTIVE") {
-    return { background: "rgba(15, 76, 63, 0.12)", color: "#0f4c3f" };
-  }
-
-  return { background: "rgba(95, 108, 106, 0.12)", color: "#5f6c6a" };
-}
-
-const panelStyle = {
-  padding: 24,
-  borderRadius: 28,
-  border: "1px solid var(--color-line)",
-  background: "rgba(255, 255, 255, 0.88)",
-  boxShadow: "var(--shadow-soft)",
-  backdropFilter: "blur(14px)"
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: "13px 14px",
-  borderRadius: 16,
-  border: "1px solid var(--color-line)",
-  background: "#fffdf9",
-  color: "var(--color-ink)",
-  font: "inherit"
-};
-
 export function AdminProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -129,6 +99,8 @@ export function AdminProductsPage() {
   const [statusLoadingId, setStatusLoadingId] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  useAdminToast(successMessage, () => setSuccessMessage(""));
 
   const filteredProducts = useMemo(() => {
     const normalizedKeyword = String(searchKeyword || "").trim().toLowerCase();
@@ -155,11 +127,11 @@ export function AdminProductsPage() {
           getBrands()
         ]);
 
-        setProducts(normalizeProductsResponse(productsResponse).map(normalizeProductRow));
+        setProducts(normalizeAdminList(productsResponse).map(normalizeProductRow));
         setCategories(normalizeEntityList(categoriesResponse));
         setBrands(normalizeEntityList(brandsResponse));
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Không thể tải dữ liệu sản phẩm."));
+        setErrorMessage(getAdminErrorMessage(error, "Không thể tải dữ liệu sản phẩm."));
       } finally {
         setLoading(false);
       }
@@ -223,7 +195,7 @@ export function AdminProductsPage() {
       });
       setFormErrors({});
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết sản phẩm."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể tải chi tiết sản phẩm."));
     } finally {
       setSubmitting(false);
     }
@@ -269,7 +241,7 @@ export function AdminProductsPage() {
       setSuccessMessage(editingProductId ? "Đã cập nhật sản phẩm." : "Đã tạo sản phẩm mới.");
       resetForm();
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể lưu sản phẩm."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể lưu sản phẩm."));
     } finally {
       setSubmitting(false);
     }
@@ -289,256 +261,132 @@ export function AdminProductsPage() {
       setProducts((prevState) => prevState.map((item) => (item.id === updatedProduct.id ? updatedProduct : item)));
       setSuccessMessage(`Đã chuyển trạng thái sản phẩm sang ${nextStatus}.`);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể cập nhật trạng thái sản phẩm."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể cập nhật trạng thái sản phẩm."));
     } finally {
       setStatusLoadingId(null);
     }
   }
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <section
-        style={{
-          ...panelStyle,
-          display: "grid",
-          gap: 10,
-          background: "linear-gradient(135deg, rgba(15, 76, 63, 0.08), rgba(255, 248, 237, 0.95))"
-        }}
-      >
-        <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--color-muted)" }}>
-          Quản trị sản phẩm
-        </div>
-        <h1 style={{ margin: 0, fontSize: 42, lineHeight: 1.02 }}>Danh mục bán hàng</h1>
-        <p style={{ margin: 0, maxWidth: 760, color: "var(--color-muted)", lineHeight: 1.8 }}>
-          Quản lý tên sản phẩm, slug, danh mục, thương hiệu và trạng thái hiển thị trong một màn hình rõ ràng. Form và bảng được đặt cạnh nhau để thao tác nhanh khi demo.
-        </p>
-      </section>
+    <AdminPage>
+      <AdminPageHead
+        eyebrow="Catalog"
+        title="Danh mục sản phẩm"
+        description="Quản lý tên, slug, danh mục, thương hiệu và trạng thái hiển thị. Tiếp theo gán SKU tại module SKU."
+      />
 
-      {errorMessage ? (
-        <div style={{ padding: 16, borderRadius: 18, background: "rgba(185, 28, 28, 0.08)", border: "1px solid rgba(185, 28, 28, 0.16)", color: "#991b1b" }}>
-          {errorMessage}
-        </div>
-      ) : null}
+      <AdminAlerts errorMessage={errorMessage} successMessage={successMessage} />
 
-      {successMessage ? (
-        <div style={{ padding: 16, borderRadius: 18, background: "rgba(15, 76, 63, 0.08)", border: "1px solid rgba(15, 76, 63, 0.16)", color: "#0f4c3f" }}>
-          {successMessage}
-        </div>
-      ) : null}
-
-      <div style={{ display: "grid", gridTemplateColumns: "380px minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
-        <section style={{ ...panelStyle, display: "grid", gap: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <div>
-              <h2 style={{ margin: "0 0 4px", fontSize: 28 }}>{editingProductId ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm mới"}</h2>
-              <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>
-                Điền thông tin cơ bản trước khi bổ sung thêm SKU và thuộc tính nâng cao.
-              </div>
+      <AdminWorkspace columns="form-list">
+        <AdminCard>
+          <div className="admin-panel-head">
+            <div className="admin-section-title">
+              <h3>{editingProductId ? "Chỉnh sửa sản phẩm" : "Thêm sản phẩm"}</h3>
+              <p>Thông tin cơ bản trước khi tạo biến thể SKU.</p>
             </div>
             {editingProductId ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 999,
-                  border: "1px solid var(--color-line)",
-                  background: "var(--color-surface)",
-                  color: "var(--color-ink)",
-                  fontWeight: 700
-                }}
-              >
+              <AdminBtn variant="secondary" onClick={resetForm}>
                 Tạo mới
-              </button>
+              </AdminBtn>
             ) : null}
           </div>
-
-          <form onSubmit={handleSubmitForm} style={{ display: "grid", gap: 14 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <label htmlFor="name" style={{ fontWeight: 700 }}>Tên sản phẩm</label>
-              <input id="name" name="name" value={formValues.name} onChange={handleFormChange} style={inputStyle} />
-              {formErrors.name ? <span style={{ color: "#b91c1c", fontSize: 14 }}>{formErrors.name}</span> : null}
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <label htmlFor="slug" style={{ fontWeight: 700 }}>Slug</label>
-              <input id="slug" name="slug" value={formValues.slug} onChange={handleFormChange} style={inputStyle} />
-              {formErrors.slug ? <span style={{ color: "#b91c1c", fontSize: 14 }}>{formErrors.slug}</span> : null}
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <label htmlFor="description" style={{ fontWeight: 700 }}>Mô tả ngắn</label>
-              <textarea id="description" name="description" rows={5} value={formValues.description} onChange={handleFormChange} style={{ ...inputStyle, resize: "vertical" }} />
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <label htmlFor="categoryId" style={{ fontWeight: 700 }}>Danh mục</label>
-              <select id="categoryId" name="categoryId" value={formValues.categoryId} onChange={handleFormChange} style={inputStyle}>
+          <AdminForm onSubmit={handleSubmitForm}>
+            <AdminField label="Tên sản phẩm" htmlFor="name" error={formErrors.name}>
+              <input id="name" name="name" className="admin-input" value={formValues.name} onChange={handleFormChange} />
+            </AdminField>
+            <AdminField label="Slug" htmlFor="slug" error={formErrors.slug}>
+              <input id="slug" name="slug" className="admin-input" value={formValues.slug} onChange={handleFormChange} />
+            </AdminField>
+            <AdminField label="Mô tả" htmlFor="description">
+              <textarea id="description" name="description" className="admin-input" rows={4} value={formValues.description} onChange={handleFormChange} />
+            </AdminField>
+            <AdminField label="Danh mục" htmlFor="categoryId" error={formErrors.categoryId}>
+              <select id="categoryId" name="categoryId" className="admin-input" value={formValues.categoryId} onChange={handleFormChange}>
                 <option value="">Chọn danh mục</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
-              {formErrors.categoryId ? <span style={{ color: "#b91c1c", fontSize: 14 }}>{formErrors.categoryId}</span> : null}
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <label htmlFor="brandId" style={{ fontWeight: 700 }}>Thương hiệu</label>
-              <select id="brandId" name="brandId" value={formValues.brandId} onChange={handleFormChange} style={inputStyle}>
+            </AdminField>
+            <AdminField label="Thương hiệu" htmlFor="brandId" error={formErrors.brandId}>
+              <select id="brandId" name="brandId" className="admin-input" value={formValues.brandId} onChange={handleFormChange}>
                 <option value="">Chọn thương hiệu</option>
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.name}</option>
+                {brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
                 ))}
               </select>
-              {formErrors.brandId ? <span style={{ color: "#b91c1c", fontSize: 14 }}>{formErrors.brandId}</span> : null}
-            </div>
+            </AdminField>
+            <AdminBtn type="submit" variant="primary" disabled={submitting}>
+              {submitting ? "Đang lưu…" : editingProductId ? "Cập nhật" : "Thêm sản phẩm"}
+            </AdminBtn>
+          </AdminForm>
+        </AdminCard>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                padding: "14px 18px",
-                borderRadius: 18,
-                border: "none",
-                background: "var(--color-accent)",
-                color: "#ffffff",
-                fontWeight: 800,
-                fontSize: 16,
-                cursor: submitting ? "wait" : "pointer",
-                opacity: submitting ? 0.72 : 1
-              }}
-            >
-              {submitting ? "Đang lưu..." : editingProductId ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}
-            </button>
-          </form>
-        </section>
-
-        <section style={{ ...panelStyle, display: "grid", gap: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 16, flexWrap: "wrap" }}>
-            <div>
-              <h2 style={{ margin: "0 0 4px", fontSize: 30 }}>Danh sách sản phẩm</h2>
-              <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>
-                Tìm nhanh theo tên, slug, danh mục hoặc thương hiệu. Bảng hiển thị tối ưu để quan sát khi demo trên màn hình lớn.
-              </div>
+        <AdminCard>
+          <div className="admin-panel-head">
+            <div className="admin-section-title">
+              <h3>Danh sách ({filteredProducts.length})</h3>
+              <p>Tìm theo tên, slug, danh mục hoặc thương hiệu.</p>
             </div>
-            <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="Tìm theo tên, slug, danh mục, thương hiệu"
-                style={{ ...inputStyle, minWidth: 300 }}
-              />
-              <button
-                type="submit"
-                style={{
-                  padding: "13px 18px",
-                  borderRadius: 16,
-                  border: "none",
-                  background: "var(--color-ink)",
-                  color: "#ffffff",
-                  fontWeight: 700
-                }}
-              >
-                Tìm kiếm
-              </button>
+            <form onSubmit={handleSearchSubmit} className="admin-search-row">
+              <input className="admin-input" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Tìm sản phẩm…" />
+              <AdminBtn type="submit" variant="dark">
+                Tìm
+              </AdminBtn>
             </form>
           </div>
-
           {loading ? (
-            <div style={{ padding: 20, borderRadius: 18, background: "rgba(255, 248, 237, 0.8)", color: "var(--color-muted)" }}>
-              Đang tải danh sách sản phẩm...
-            </div>
+            <AdminEmpty>Đang tải…</AdminEmpty>
           ) : filteredProducts.length === 0 ? (
-            <div style={{ padding: 20, borderRadius: 18, background: "rgba(255, 248, 237, 0.8)", color: "var(--color-muted)" }}>
-              Không tìm thấy sản phẩm phù hợp.
-            </div>
+            <AdminEmpty>Không có sản phẩm phù hợp.</AdminEmpty>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+            <AdminTableWrap>
+              <table className="admin-table">
                 <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)", color: "var(--color-muted)", textTransform: "uppercase", fontSize: 12, letterSpacing: "0.08em" }}>
-                    <th style={{ padding: "12px 10px" }}>Sản phẩm</th>
-                    <th style={{ padding: "12px 10px" }}>Slug</th>
-                    <th style={{ padding: "12px 10px" }}>Danh mục</th>
-                    <th style={{ padding: "12px 10px" }}>Thương hiệu</th>
-                    <th style={{ padding: "12px 10px" }}>Trạng thái</th>
-                    <th style={{ padding: "12px 10px" }}>Tác vụ</th>
+                  <tr>
+                    <th>Sản phẩm</th>
+                    <th>Slug</th>
+                    <th>Danh mục</th>
+                    <th>Thương hiệu</th>
+                    <th>TT</th>
+                    <th>Tác vụ</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProducts.map((product) => {
-                    const statusStyle = getStatusChipStyle(product.status);
-
-                    return (
-                      <tr key={product.id} style={{ borderBottom: "1px solid rgba(214, 208, 196, 0.7)" }}>
-                        <td style={{ padding: "16px 10px" }}>
-                          <div style={{ display: "grid", gap: 4 }}>
-                            <div style={{ fontWeight: 800 }}>{product.name}</div>
-                            <div style={{ fontSize: 14, color: "var(--color-muted)", lineHeight: 1.6 }}>
-                              {product.description || "Chưa có mô tả ngắn cho sản phẩm này."}
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ padding: "16px 10px", color: "var(--color-muted)" }}>{product.slug || "-"}</td>
-                        <td style={{ padding: "16px 10px" }}>{product.categoryName || "Chưa gắn"}</td>
-                        <td style={{ padding: "16px 10px" }}>{product.brandName || "Chưa gắn"}</td>
-                        <td style={{ padding: "16px 10px" }}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              padding: "7px 12px",
-                              borderRadius: 999,
-                              fontSize: 12,
-                              fontWeight: 800,
-                              ...statusStyle
-                            }}
-                          >
-                            {product.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: "16px 10px" }}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => handleEditProduct(product.id)}
-                              style={{
-                                padding: "9px 12px",
-                                borderRadius: 14,
-                                border: "1px solid rgba(15, 76, 63, 0.16)",
-                                background: "rgba(15, 76, 63, 0.08)",
-                                color: "#0f4c3f",
-                                fontWeight: 700
-                              }}
-                            >
-                              Chỉnh sửa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(product)}
-                              disabled={statusLoadingId === product.id}
-                              style={{
-                                padding: "9px 12px",
-                                borderRadius: 14,
-                                border: "1px solid var(--color-line)",
-                                background: "var(--color-surface)",
-                                color: "var(--color-ink)",
-                                fontWeight: 700,
-                                opacity: statusLoadingId === product.id ? 0.72 : 1
-                              }}
-                            >
-                              {statusLoadingId === product.id ? "Đang đổi..." : product.status === "ACTIVE" ? "Chuyển sang ẩn" : "Kích hoạt lại"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredProducts.map((product) => (
+                    <tr key={product.id}>
+                      <td>
+                        <strong>{product.name}</strong>
+                        <div style={{ fontSize: 13, color: "#64748b" }}>{product.description || "—"}</div>
+                      </td>
+                      <td>{product.slug || "—"}</td>
+                      <td>{product.categoryName || "—"}</td>
+                      <td>{product.brandName || "—"}</td>
+                      <td>
+                        <AdminBadge tone={product.status === "ACTIVE" ? "success" : "neutral"}>{product.status}</AdminBadge>
+                      </td>
+                      <td>
+                        <div className="admin-action-row">
+                          <AdminBtn variant="secondary" onClick={() => handleEditProduct(product.id)}>
+                            Sửa
+                          </AdminBtn>
+                          <AdminBtn variant="secondary" disabled={statusLoadingId === product.id} onClick={() => handleToggleStatus(product)}>
+                            {product.status === "ACTIVE" ? "Ẩn" : "Bật"}
+                          </AdminBtn>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableWrap>
           )}
-        </section>
-      </div>
-    </div>
+        </AdminCard>
+      </AdminWorkspace>
+    </AdminPage>
   );
 }

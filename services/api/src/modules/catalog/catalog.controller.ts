@@ -12,6 +12,7 @@ import {
   getProductById,
   getProductBySku,
   getProductBySlug,
+  listBrands,
   listCategories,
   listProducts,
   updateProduct
@@ -32,6 +33,15 @@ export const getCategories = asyncHandler(async (_req: Request, res: Response) =
   });
 });
 
+export const getBrands = asyncHandler(async (_req: Request, res: Response) => {
+  const brands = await listBrands();
+
+  res.status(200).json({
+    success: true,
+    data: brands
+  });
+});
+
 const mapProduct = (p: any) => {
   const sku = p.ProductSku?.[0];
   const variant = p.ProductVariant?.[0];
@@ -46,19 +56,32 @@ const mapProduct = (p: any) => {
   const attributes: any[] = [];
   const seenKeys = new Set();
 
+  const processSkuAttrs = (s: any) => {
+    if (Array.isArray(s.SkuAttribute)) {
+      s.SkuAttribute.forEach((sa: any) => {
+        const key = sa.AttributeValue?.Attribute?.name;
+        const value = sa.AttributeValue?.value;
+        if (key && value && !seenKeys.has(key)) {
+          attributes.push({ key, value });
+          seenKeys.add(key);
+        }
+      });
+    }
+  };
+
   if (Array.isArray(p.ProductSku)) {
-    p.ProductSku.forEach((s: any) => {
-      if (Array.isArray(s.SkuAttribute)) {
-        s.SkuAttribute.forEach((sa: any) => {
-          const key = sa.AttributeValue?.Attribute?.name;
-          const value = sa.AttributeValue?.value;
-          if (key && value && !seenKeys.has(key)) {
-            attributes.push({ key, value });
-            seenKeys.add(key);
+    p.ProductSku.forEach(processSkuAttrs);
+  }
+
+  // Also check product_variants for consistency if needed, but primary is Sku
+  if (attributes.length === 0 && p.attributes && Array.isArray(p.attributes)) {
+      // Fallback for some legacy data structure
+      p.attributes.forEach((attr: any) => {
+          if (attr.key && attr.value && !seenKeys.has(attr.key)) {
+              attributes.push(attr);
+              seenKeys.add(attr.key);
           }
-        });
-      }
-    });
+      });
   }
 
   return {

@@ -1,29 +1,27 @@
-﻿import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import axios from "axios";
+import { useEffect, useState } from "react";
 
+import {
+  AdminAlerts,
+  AdminLinkBtn,
+  AdminMetric,
+  AdminMetrics,
+  AdminPage,
+  AdminPageHead,
+  AdminQuickLinks
+} from "../../components/admin/AdminUi";
 import { getAdminSystemOverview } from "../../services/admin-system.service";
+import { formatAdminNumber, getAdminEnvelopeData, getAdminErrorMessage, formatAdminDateTime } from "../../utils/adminUi";
 
-function getErrorMessage(error, fallbackMessage) {
-  if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || fallbackMessage;
-  }
-
-  return error?.message || fallbackMessage;
-}
-
-function StatCard({ title, value, tone = "default" }) {
-  const palette = tone === "success"
-    ? { background: "#ecfdf5", border: "#a7f3d0", color: "#047857" }
-    : { background: "rgba(255, 255, 255, 0.88)", border: "var(--color-line)", color: "var(--color-ink)" };
-
-  return (
-    <div style={{ padding: 20, borderRadius: 22, border: `1px solid ${palette.border}`, background: palette.background, boxShadow: "var(--shadow-soft)", display: "grid", gap: 8 }}>
-      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--color-muted)" }}>{title}</div>
-      <div style={{ fontSize: 32, fontWeight: 800, color: palette.color }}>{value}</div>
-    </div>
-  );
-}
+const QUICK_LINKS = [
+  { to: "/admin/products", title: "Sản phẩm", desc: "Danh mục, slug, thương hiệu và trạng thái hiển thị.", icon: "🏷️" },
+  { to: "/admin/skus", title: "SKU & tồn kho", desc: "Biến thể, giá, ảnh và gán thuộc tính kỹ thuật.", icon: "📦" },
+  { to: "/admin/attributes", title: "Thuộc tính", desc: "Socket, RAM, chipset… phục vụ bộ lọc và PC Builder.", icon: "✨" },
+  { to: "/admin/users", title: "Người dùng", desc: "Vai trò, trạng thái tài khoản và phân quyền.", icon: "👥" },
+  { to: "/admin/compatibility-rules", title: "Luật tương thích", desc: "Quy tắc kiểm tra cấu hình PC Builder.", icon: "🔗" },
+  { to: "/admin/system", title: "Hệ thống", desc: "Health check, cấu hình sandbox và audit log.", icon: "⚙️" },
+  { to: "/staff/orders", title: "Đơn hàng (Sales)", desc: "Giám sát luồng xử lý đơn của nhân viên kinh doanh.", icon: "🛒" },
+  { to: "/tech/tickets", title: "Ticket kỹ thuật", desc: "Giám sát hỗ trợ khách từ bộ phận kỹ thuật.", icon: "🎫" }
+];
 
 export function AdminDashboardPage() {
   const [overview, setOverview] = useState(null);
@@ -36,121 +34,85 @@ export function AdminDashboardPage() {
         setLoading(true);
         setErrorMessage("");
         const response = await getAdminSystemOverview();
-        setOverview(response?.data || response);
+        setOverview(getAdminEnvelopeData(response, null));
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Không thể tải dashboard admin."));
+        setErrorMessage(getAdminErrorMessage(error, "Không thể tải tổng quan hệ thống."));
       } finally {
         setLoading(false);
       }
     }
-
     loadOverview();
   }, []);
 
-  const modules = [
-    {
-      title: "Hệ thống",
-      description: "Xem health check, system settings và các metric tổng quan.",
-      action: "/admin/system"
-    },
-    {
-      title: "Sản phẩm",
-      description: "Quản lý danh mục hiển thị, slug, thương hiệu, danh mục và trạng thái active/inactive.",
-      action: "/admin/products"
-    },
-    {
-      title: "Người dùng",
-      description: "Theo dõi vai trò, tìm kiếm tài khoản và cập nhật trạng thái truy cập của người dùng.",
-      action: "/admin/users"
-    },
-    {
-      title: "Luật tương thích",
-      description: "Cấu hình các luật đối chiếu giữa CPU, RAM, mainboard và các nhóm linh kiện khác.",
-      action: "/admin/compatibility-rules"
-    }
-  ];
-
   const metrics = overview?.metrics || {};
   const health = overview?.health || {};
+  const apiUp = health?.api?.status === "UP";
+  const dbUp = health?.database?.status === "UP";
+  const auditLogs = overview?.auditLogs || [];
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <section
-        style={{
-          padding: 28,
-          borderRadius: 30,
-          border: "1px solid var(--color-line)",
-          background: "linear-gradient(135deg, rgba(15, 76, 63, 0.08), rgba(255, 248, 237, 0.95))",
-          boxShadow: "var(--shadow-soft)",
-          display: "grid",
-          gap: 10
-        }}
-      >
-        <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--color-muted)" }}>
-          Admin dashboard
+    <AdminPage>
+      <AdminPageHead
+        eyebrow="Quản trị hệ thống"
+        title="Tổng quan điều hành"
+        description="Theo dõi sức khỏe dịch vụ, số liệu vận hành và truy cập nhanh mọi module quản trị từ một màn hình."
+        actions={
+          <AdminLinkBtn to="/admin/system" variant="primary">
+            Cấu hình hệ thống
+          </AdminLinkBtn>
+        }
+      />
+
+      <AdminAlerts errorMessage={errorMessage} />
+
+      <div className={`admin-health-banner${apiUp && dbUp ? " admin-health-banner--up" : " admin-health-banner--down"}`}>
+        <div>
+          <strong>{apiUp && dbUp ? "Hệ thống hoạt động bình thường" : "Cần kiểm tra hệ thống"}</strong>
+          <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            API: {health?.api?.status || "—"} · Database: {health?.database?.status || "—"}
+          </p>
         </div>
-        <h1 style={{ margin: 0, fontSize: 46, lineHeight: 0.98 }}>Khu vực quản trị để demo nghiệp vụ</h1>
-        <p style={{ margin: 0, maxWidth: 820, color: "var(--color-muted)", lineHeight: 1.8 }}>
-          Tổng quan nhanh tình trạng hệ thống, các metric quan trọng và những module cần dùng trong quá trình demo đồ án.
-        </p>
-      </section>
+        {!loading ? (
+          <span className="admin-badge admin-badge--success">Live</span>
+        ) : (
+          <span className="admin-badge admin-badge--neutral">Đang tải…</span>
+        )}
+      </div>
 
-      {errorMessage ? (
-        <div style={{ padding: 16, borderRadius: 18, background: "#fef2f2", color: "#b91c1c", border: "1px solid #fecaca" }}>{errorMessage}</div>
-      ) : null}
+      <AdminMetrics>
+        <AdminMetric label="Người dùng" value={formatAdminNumber(metrics.users)} tone="primary" hint="Bảng users" />
+        <AdminMetric label="Sản phẩm" value={formatAdminNumber(metrics.products)} hint="Catalog" />
+        <AdminMetric label="Đơn hàng" value={formatAdminNumber(metrics.orders)} hint="Orders" />
+        <AdminMetric label="Ticket" value={formatAdminNumber(metrics.tickets)} hint="Hỗ trợ" />
+        <AdminMetric label="Thanh toán" value={formatAdminNumber(metrics.payments)} hint="Payments" />
+        <AdminMetric label="Vận đơn" value={formatAdminNumber(metrics.shipments)} hint="Shipments" />
+      </AdminMetrics>
 
-      {loading ? (
-        <div style={{ padding: 22, borderRadius: 20, background: "#fff", border: "1px solid var(--color-line)" }}>Đang tải số liệu dashboard...</div>
-      ) : (
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
-          <StatCard title="API" value={health?.api?.status || "UNKNOWN"} tone={health?.api?.status === "UP" ? "success" : "default"} />
-          <StatCard title="Database" value={health?.database?.status || "UNKNOWN"} tone={health?.database?.status === "UP" ? "success" : "default"} />
-          <StatCard title="Users" value={metrics.users ?? 0} />
-          <StatCard title="Products" value={metrics.products ?? 0} />
-          <StatCard title="Orders" value={metrics.orders ?? 0} />
-          <StatCard title="Tickets" value={metrics.tickets ?? 0} />
-          <StatCard title="Payments" value={metrics.payments ?? 0} />
-          <StatCard title="Shipments" value={metrics.shipments ?? 0} />
-        </section>
-      )}
+      <AdminQuickLinks items={QUICK_LINKS} />
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18 }}>
-        {modules.map((module) => (
-          <div
-            key={module.title}
-            style={{
-              padding: 24,
-              borderRadius: 26,
-              border: "1px solid var(--color-line)",
-              background: "rgba(255, 255, 255, 0.88)",
-              boxShadow: "var(--shadow-soft)",
-              display: "grid",
-              gap: 14
-            }}
-          >
-            <div style={{ fontSize: 26, fontWeight: 800 }}>{module.title}</div>
-            <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>{module.description}</div>
-            <div>
-              <Link
-                to={module.action}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "12px 16px",
-                  borderRadius: 16,
-                  textDecoration: "none",
-                  background: "var(--color-accent)",
-                  color: "#ffffff",
-                  fontWeight: 800
-                }}
-              >
-                Mở module
-              </Link>
-            </div>
+      {auditLogs.length > 0 ? (
+        <section className="admin-card">
+          <div className="admin-section-title">
+            <h3>Nhật ký gần đây</h3>
+            <p>12 thao tác mới nhất từ audit log.</p>
           </div>
-        ))}
-      </section>
-    </div>
+          <div className="admin-audit-list">
+            {auditLogs.slice(0, 6).map((log) => (
+              <div key={log.id} className="admin-audit-item">
+                <div className="admin-audit-item__head">
+                  <strong>{log.action}</strong>
+                  <span>{formatAdminDateTime(log.createdAt)}</span>
+                </div>
+                <div>{log.description || "—"}</div>
+                <span>
+                  {log.entityType}
+                  {log.entityId ? ` #${log.entityId}` : ""} · {log.actorRole || "SYSTEM"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </AdminPage>
   );
 }

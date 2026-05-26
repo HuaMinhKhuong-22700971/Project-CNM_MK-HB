@@ -1,3 +1,6 @@
+/**
+ * @deprecated Dùng `npm run seed:production` (MySQL roles/users chuẩn README).
+ */
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
@@ -19,14 +22,12 @@ async function main() {
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
-      fullName: "System Admin",
-      role: "ADMIN"
+      full_name: "System Admin",
     },
     create: {
       email: adminEmail,
       password: adminPassword,
-      fullName: "System Admin",
-      role: "ADMIN"
+      full_name: "System Admin",
     }
   });
 
@@ -36,14 +37,12 @@ async function main() {
   await prisma.user.upsert({
     where: { email: techEmail },
     update: {
-      fullName: "Technician One",
-      role: "TECHNICIAN"
+      full_name: "Technician One",
     },
     create: {
       email: techEmail,
       password: techPassword,
-      fullName: "Technician One",
-      role: "TECHNICIAN"
+      full_name: "Technician One",
     }
   });
 

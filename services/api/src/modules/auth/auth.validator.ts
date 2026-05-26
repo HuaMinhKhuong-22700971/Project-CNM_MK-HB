@@ -9,13 +9,17 @@ const fullNameSchema = z
   .min(2)
   .max(120)
   .transform((value) => value.trim());
+const phoneSchema = z
+  .string()
+  .trim()
+  .regex(/^(0|\+84)(\d{9,10})$/, "Số điện thoại Việt Nam không hợp lệ");
 
 export const registerSchema = z.object({
   email: emailSchema,
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  password: z.string().min(8, "Mật khẩu phải có ít nhất 8 ký tự"),
   full_name: fullNameSchema.optional(),
   fullName: fullNameSchema.optional(),
-  phone: z.string().trim().optional()
+  phone: phoneSchema
 });
 
 export const loginSchema = z.object({
@@ -23,11 +27,16 @@ export const loginSchema = z.object({
   password: z.string().min(1)
 });
 
+export const refreshSchema = z.object({
+  refreshToken: z.string().min(1, "Refresh token is required")
+});
+
 export const adminCreateUserSchema = z.object({
   email: emailSchema,
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(8, "Mật khẩu phải có ít nhất 8 ký tự"),
   fullName: fullNameSchema.optional(),
   role: z
     .enum([ROLES.CUSTOMER, ROLES.SALES, ROLES.TECHNICIAN, ROLES.ADMIN])
     .default(ROLES.CUSTOMER)
 });
+

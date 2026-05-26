@@ -5,8 +5,18 @@ export async function login(payload) {
   return response.data;
 }
 
+export async function refreshAuthToken(payload) {
+  const response = await httpClient.post("/auth/refresh", payload);
+  return response.data;
+}
+
 export async function register(payload) {
   const response = await httpClient.post("/auth/register", payload);
+  return response.data;
+}
+
+export async function checkEmailAvailability(email) {
+  const response = await httpClient.get("/auth/check-email", { params: { email } });
   return response.data;
 }
 

@@ -139,6 +139,26 @@ exports.Prisma.AiChatScalarFieldEnum = {
   created_at: 'created_at'
 };
 
+exports.Prisma.ChatSessionScalarFieldEnum = {
+  id: 'id',
+  session_id: 'session_id',
+  status: 'status',
+  customer_name: 'customer_name',
+  staff_name: 'staff_name',
+  linked_order_id: 'linked_order_id',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
+exports.Prisma.ChatMessageScalarFieldEnum = {
+  id: 'id',
+  session_id: 'session_id',
+  sender: 'sender',
+  text: 'text',
+  build_data: 'build_data',
+  created_at: 'created_at'
+};
+
 exports.Prisma.AiMessageScalarFieldEnum = {
   id: 'id',
   chat_id: 'chat_id',
@@ -380,6 +400,19 @@ exports.Prisma.AddressOrderByRelevanceFieldEnum = {
   province: 'province'
 };
 
+exports.Prisma.ChatSessionOrderByRelevanceFieldEnum = {
+  session_id: 'session_id',
+  status: 'status',
+  customer_name: 'customer_name',
+  staff_name: 'staff_name'
+};
+
+exports.Prisma.ChatMessageOrderByRelevanceFieldEnum = {
+  sender: 'sender',
+  text: 'text',
+  build_data: 'build_data'
+};
+
 exports.Prisma.AiMessageOrderByRelevanceFieldEnum = {
   sender: 'sender',
   message: 'message'
@@ -491,6 +524,8 @@ exports.Prisma.WarrantyItemOrderByRelevanceFieldEnum = {
 exports.Prisma.ModelName = {
   Address: 'Address',
   AiChat: 'AiChat',
+  ChatSession: 'ChatSession',
+  ChatMessage: 'ChatMessage',
   AiMessage: 'AiMessage',
   AttributeValue: 'AttributeValue',
   Attribute: 'Attribute',

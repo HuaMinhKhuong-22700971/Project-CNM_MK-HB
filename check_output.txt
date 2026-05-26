@@ -1,0 +1,40 @@
+
+========================================
+   PC Mall — Full System Check (5 Actor)
+========================================
+
+[PASS] [SYSTEM] API Health | online
+
+== GUEST ==
+[FAIL] [GUEST] Danh sách sản phẩm | Route not found
+[PASS] [GUEST] Chi tiết sản phẩm | id=110
+[FAIL] [GUEST] Categories | Route not found
+[FAIL] [GUEST] Brands | Route not found
+[FAIL] [GUEST] Compatibility rules (public) | Route not found
+
+== CUSTOMER ==
+[FAIL] [CUSTOMER] Đăng nhập | FAIL - check credentials
+
+== SALES STAFF ==
+[FAIL] [SALES] Đăng nhập Sales | Fail
+
+== TECH STAFF ==
+[FAIL] [TECH] Đăng nhập Tech | Fail
+
+== ADMIN ==
+[FAIL] [ADMIN] Đăng nhập Admin | Fail
+
+========================================
+TONG KET: 2 PASS | 8 FAIL | 10 total
+
+FAILED:
+  [GUEST] Danh sách sản phẩm => Route not found
+  [GUEST] Categories => Route not found
+  [GUEST] Brands => Route not found
+  [GUEST] Compatibility rules (public) => Route not found
+  [CUSTOMER] Đăng nhập => FAIL - check credentials
+  [SALES] Đăng nhập Sales => Fail
+  [TECH] Đăng nhập Tech => Fail
+  [ADMIN] Đăng nhập Admin => Fail
+========================================
+

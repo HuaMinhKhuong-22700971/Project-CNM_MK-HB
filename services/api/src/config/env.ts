@@ -14,7 +14,11 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().min(1).default("7d"),
   VNPAY_TMN_CODE: z.string().optional(),
   VNPAY_HASH_SECRET: z.string().optional(),
-  VNPAY_URL: z.string().optional()
+  VNPAY_URL: z.string().optional(),
+  PAYMENT_MOCK_MODE: z.coerce.boolean().default(false),
+  SHIPPING_MOCK_MODE: z.coerce.boolean().default(false),
+  SHIPPING_PROVIDER: z.string().default("manual"),
+  CHAT_STORAGE_PATH: z.string().default("./data/chat-sessions.json")
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -34,5 +38,9 @@ export const env = {
   jwtRefreshExpiresIn: parsedEnv.data.JWT_REFRESH_EXPIRES_IN,
   vnpayTmnCode: parsedEnv.data.VNPAY_TMN_CODE,
   vnpayHashSecret: parsedEnv.data.VNPAY_HASH_SECRET,
-  vnpayUrl: parsedEnv.data.VNPAY_URL
+  vnpayUrl: parsedEnv.data.VNPAY_URL,
+  paymentMockMode: parsedEnv.data.PAYMENT_MOCK_MODE,
+  shippingMockMode: parsedEnv.data.SHIPPING_MOCK_MODE,
+  chatStoragePath: parsedEnv.data.CHAT_STORAGE_PATH,
+  shippingProvider: parsedEnv.data.SHIPPING_PROVIDER
 };

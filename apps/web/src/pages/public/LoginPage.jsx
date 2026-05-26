@@ -84,7 +84,13 @@ export function LoginPage() {
         password: formValues.password
       });
 
-      navigate(result.redirectPath, { replace: true });
+      const returnPath = location.state?.from?.pathname || result.redirectPath;
+      const state =
+        result.onboarding?.buildsMigrated > 0
+          ? { buildsMigrated: result.onboarding.buildsMigrated }
+          : undefined;
+
+      navigate(returnPath, { replace: true, state });
     } catch (error) {
       if (axios.isAxiosError(error)) {
         setServerError(error.response?.data?.message || "Đăng nhập thất bại");

@@ -76,31 +76,31 @@ const infoContent = {
     )
   },
   '/guide': {
-    title: 'Hướng dẫn mua sắm & Lắp ráp PC',
+    title: 'Hướng dẫn Demo 100% — Khách vãng lai',
     content: (
       <>
-        <div style={{ background: '#f1f5f9', padding: 25, borderRadius: 16, marginBottom: 30 }}>
-          <h2 style={{ margin: '0 0 15px' }}>Bắt đầu cuộc hành trình build PC của bạn</h2>
-          <p>Việc mua sắm tại PC Mall cực kỳ đơn giản với 3 lộ trình chính:</p>
+        <div style={{ background: 'linear-gradient(135deg, #ecfdf5, #eff6ff)', padding: 25, borderRadius: 16, marginBottom: 30, border: '1px solid #bbf7d0' }}>
+          <h2 style={{ margin: '0 0 12px', color: '#065f46' }}>Demo không cần đăng nhập</h2>
+          <p style={{ margin: 0, lineHeight: 1.7 }}>
+            Trước buổi demo, admin chạy: <code>npm run seed:guest-demo</code>. Sau đó mở trang chủ và làm lần lượt 5 bước dưới đây.
+          </p>
         </div>
 
-        <h3>Lộ trình 1: Bạn đã biết mình cần mua gì</h3>
-        <p>Chọn mục <strong>"Linh kiện PC"</strong>, sử dụng bộ lọc (Filter) theo hãng, giá tiền và thông số kỹ thuật. Sau đó nhấn "Thêm vào giỏ" và thanh toán.</p>
+        <ol style={{ lineHeight: 2, paddingLeft: 24 }}>
+          <li><Link to="/products"><strong>Danh mục & lọc</strong></Link> — chọn Socket LGA1700 hoặc Loại RAM DDR5, áp dụng bộ lọc.</li>
+          <li><Link to="/compare"><strong>So sánh</strong></Link> — thêm 2–4 sản phẩm từ nút So sánh trên thẻ.</li>
+          <li><Link to="/pc-builder"><strong>Build PC</strong></Link> — chọn linh kiện, kiểm tra tương thích, lưu trình duyệt, xuất file JSON.</li>
+          <li><Link to="/ai-chat"><strong>AI tư vấn</strong></Link> — chat thử, F5 kiểm tra lịch sử, hoặc Gặp nhân viên.</li>
+          <li><Link to="/register"><strong>Đăng ký</strong></Link> — form email hoặc Google (nhãn DEMO).</li>
+        </ol>
 
-        <h3>Lộ trình 2: Bạn cần build máy từ đầu</h3>
-        <p>Chọn mục <strong>"Lắp ráp PC"</strong>. Hệ thống sẽ liệt kê từng bước:</p>
-        <ul style={{ lineHeight: 2 }}>
-          <li><strong>Step 1</strong>: Chọn CPU (Bộ vi xử lý).</li>
-          <li><strong>Step 2</strong>: Chọn Mainboard tương thích tự động.</li>
-          <li><strong>Step 3</strong>: Chọn RAM, SSD, Case và Nguồn đủ công suất.</li>
-          <li><strong>Step 4</strong>: Kiểm tra tổng thể và nhấn "Mua ngay".</li>
-        </ul>
-
-        <h3>Lộ trình 3: Bạn cần AI tư vấn</h3>
-        <p>Sử dụng <strong>AI Advisor</strong> bằng cách nhập nhu cầu (ví dụ: "Tôi muốn máy chơi game 20 triệu"). AI sẽ tự động chọn cấu hình tối ưu nhất cho bạn.</p>
-        
-        <div style={{ marginTop: 30, borderLeft: '4px solid #3b82f6', paddingLeft: 20 }}>
-          <p><strong>Lưu ý về thanh toán:</strong> Bạn nên chọn VNPay để được hưởng các voucher giảm giá trực tiếp từ ngân hàng.</p>
+        <div style={{ marginTop: 28, padding: 20, background: '#f8fafc', borderRadius: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Ghi chú khi báo cáo</h3>
+          <ul style={{ lineHeight: 1.9 }}>
+            <li>Google Sign-In: tích hợp <strong>demo</strong>, không OAuth production.</li>
+            <li>Cấu hình PC khách: lưu <strong>localStorage</strong> + import/export JSON.</li>
+            <li>Chat AI khách: lưu lịch sử trên trình duyệt (tối đa 80 tin).</li>
+          </ul>
         </div>
       </>
     )

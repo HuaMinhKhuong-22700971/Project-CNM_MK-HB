@@ -1,7 +1,8 @@
-﻿import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getCurrentProfile, login as loginRequest } from "../services/auth.service";
 import { clearAuthState, getAuthState, setAuthState, subscribeAuth } from "../store/authStore";
+import { runCustomerOnboarding } from "../utils/customerOnboarding";
 
 function getRedirectPathByRole(role) {
   const normalizedRole = String(role || "").trim().toUpperCase();
@@ -14,7 +15,7 @@ function getRedirectPathByRole(role) {
     return "/staff/orders";
   }
 
-  if (normalizedRole === "TECH_STAFF") {
+  if (normalizedRole === "TECH_STAFF" || normalizedRole === "TECHNICIAN") {
     return "/tech/tickets";
   }
 
@@ -24,13 +25,12 @@ function getRedirectPathByRole(role) {
 export function useAuth() {
   const [authState, setLocalAuthState] = useState(getAuthState());
 
-  useEffect(() => {
-    return subscribeAuth(setLocalAuthState);
-  }, []);
+  useEffect(() => subscribeAuth(setLocalAuthState), []);
 
-  async function login(credentials) {
+  const login = useCallback(async (credentials) => {
     const response = await loginRequest(credentials);
     const accessToken = response?.data?.accessToken || "";
+    const refreshToken = response?.data?.refreshToken || "";
     const user = response?.data?.user || null;
 
     if (!accessToken || !user) {
@@ -39,17 +39,29 @@ export function useAuth() {
 
     setAuthState({
       accessToken,
+      refreshToken,
       user
     });
 
+    let onboarding = { buildsMigrated: 0 };
+    if (String(user.role || "").toUpperCase() === "CUSTOMER") {
+      try {
+        onboarding = await runCustomerOnboarding();
+      } catch (_error) {
+        onboarding = { buildsMigrated: 0 };
+      }
+    }
+
     return {
       accessToken,
+      refreshToken,
       user,
-      redirectPath: getRedirectPathByRole(user.role)
+      redirectPath: getRedirectPathByRole(user.role),
+      onboarding
     };
-  }
+  }, []);
 
-  async function refreshProfile() {
+  const refreshProfile = useCallback(async () => {
     if (!getAuthState()?.accessToken) {
       return null;
     }
@@ -60,13 +72,14 @@ export function useAuth() {
 
     setAuthState({
       accessToken: current.accessToken,
+      refreshToken: current.refreshToken || "",
       user
     });
 
     return user;
-  }
+  }, []);
 
-  function loginAsDemo() {
+  const loginAsDemo = useCallback(() => {
     const demoUser = {
       id: 1,
       fullName: "Demo User",
@@ -75,6 +88,7 @@ export function useAuth() {
 
     setAuthState({
       accessToken: "demo-access-token",
+      refreshToken: "",
       user: demoUser
     });
 
@@ -83,11 +97,11 @@ export function useAuth() {
       user: demoUser,
       redirectPath: "/"
     };
-  }
+  }, []);
 
-  function logout() {
+  const logout = useCallback(() => {
     clearAuthState();
-  }
+  }, []);
 
   return {
     authState,

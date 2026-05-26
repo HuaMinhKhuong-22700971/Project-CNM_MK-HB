@@ -31,11 +31,13 @@ export const routeConfig = {
   },
   staff: {
     root: "/staff",
-    orders: "/staff/orders"
+    orders: "/staff/orders",
+    chat: "/staff/chat"
   },
   tech: {
     root: "/tech",
-    tickets: "/tech/tickets"
+    tickets: "/tech/tickets",
+    compatibility: "/tech/compatibility"
   },
   admin: {
     root: "/admin",
@@ -45,6 +47,7 @@ export const routeConfig = {
     attributes: "/admin/attributes",
     skus: "/admin/skus",
     compatibilityRules: "/admin/compatibility-rules",
-    users: "/admin/users"
+    users: "/admin/users",
+    paymentApproval: "/admin/payment-approval"
   }
 };

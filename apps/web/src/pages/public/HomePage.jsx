@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { CategoryGrid } from "../../components/marketplace/CategoryGrid";
+
+import { MemberHubStrip } from "../../components/marketplace/MemberHubStrip";
+import { useAuth } from "../../hooks/useAuth";
 import { HeroBanner } from "../../components/marketplace/HeroBanner";
 import { ProductSection } from "../../components/marketplace/ProductSection";
 import { getCategories, getProducts } from "../../services/catalog.service";
@@ -34,6 +37,7 @@ function enrichProducts(products) {
 }
 
 export function HomePage() {
+  const { isAuthenticated } = useAuth();
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +73,7 @@ export function HomePage() {
       <HeroBanner />
       
       <div className="market-container">
+        {isAuthenticated && <MemberHubStrip />}
         <CategoryGrid categories={categories} />
 
       {loading ? (

@@ -3,6 +3,7 @@ import { Router } from "express";
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import {
   catalogAdminRoles,
+  getBrands,
   getCategories,
   getProductDetail,
   getProducts,
@@ -14,6 +15,7 @@ import {
 export const catalogRouter = Router();
 
 catalogRouter.get("/categories", getCategories);
+catalogRouter.get("/brands", getBrands);
 catalogRouter.get("/products", getProducts);
 catalogRouter.get("/products/:id", getProductDetail);
 

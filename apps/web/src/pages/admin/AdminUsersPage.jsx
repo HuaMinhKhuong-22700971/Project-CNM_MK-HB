@@ -1,29 +1,26 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import axios from "axios";
 
-import { useAuth } from "../../hooks/useAuth";
+import {
+  AdminAlerts,
+  AdminBadge,
+  AdminBtn,
+  AdminCard,
+  AdminEmpty,
+  AdminPage,
+  AdminPageHead,
+  AdminTableWrap,
+  useAdminToast
+} from "../../components/admin/AdminUi";
 import { changeAdminUserStatus, getAdminUsers } from "../../services/admin-users.service";
+import {
+  formatAdminDateTime,
+  getAdminErrorMessage,
+  getRoleMeta,
+  getStatusMeta,
+  normalizeAdminList
+} from "../../utils/adminUi";
 
 const STATUS_OPTIONS = ["ACTIVE", "BLOCKED", "INACTIVE"];
-
-function getErrorMessage(error, fallbackMessage) {
-  if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || fallbackMessage;
-  }
-
-  return error.message || fallbackMessage;
-}
-
-function normalizeUsersResponse(response) {
-  const payload = response?.data || response;
-
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  return Array.isArray(payload?.items) ? payload.items : [];
-}
 
 function normalizeUser(user) {
   return {
@@ -36,39 +33,7 @@ function normalizeUser(user) {
   };
 }
 
-function getStatusStyle(status) {
-  if (status === "ACTIVE") {
-    return { background: "rgba(15, 76, 63, 0.12)", color: "#0f4c3f" };
-  }
-
-  if (status === "BLOCKED") {
-    return { background: "rgba(185, 28, 28, 0.12)", color: "#991b1b" };
-  }
-
-  return { background: "rgba(95, 108, 106, 0.12)", color: "#5f6c6a" };
-}
-
-const panelStyle = {
-  padding: 24,
-  borderRadius: 28,
-  border: "1px solid var(--color-line)",
-  background: "rgba(255, 255, 255, 0.88)",
-  boxShadow: "var(--shadow-soft)",
-  backdropFilter: "blur(14px)"
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: "13px 14px",
-  borderRadius: 16,
-  border: "1px solid var(--color-line)",
-  background: "#fffdf9",
-  color: "var(--color-ink)",
-  font: "inherit"
-};
-
 export function AdminUsersPage() {
-  const { authState, isAuthenticated } = useAuth();
   const [users, setUsers] = useState([]);
   const [keyword, setKeyword] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -77,42 +42,29 @@ export function AdminUsersPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const isAdmin = String(authState?.user?.role || "").toUpperCase() === "ADMIN";
+  useAdminToast(successMessage, () => setSuccessMessage(""));
 
   const filteredUsers = useMemo(() => {
-    const normalizedKeyword = String(searchKeyword || "").trim().toLowerCase();
-
-    if (!normalizedKeyword) {
-      return users;
-    }
-
-    return users.filter((user) => {
-      const haystack = [user.fullName, user.email].join(" ").toLowerCase();
-      return haystack.includes(normalizedKeyword);
-    });
+    const q = searchKeyword.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => [u.fullName, u.email, u.role].join(" ").toLowerCase().includes(q));
   }, [searchKeyword, users]);
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) {
-      setLoading(false);
-      return;
-    }
-
     async function loadUsers() {
       try {
         setLoading(true);
         setErrorMessage("");
-        const response = await getAdminUsers({ keyword: searchKeyword || undefined, page: 1, limit: 100 });
-        setUsers(normalizeUsersResponse(response).map(normalizeUser));
+        const response = await getAdminUsers({ keyword: searchKeyword || undefined, page: 1, limit: 200 });
+        setUsers(normalizeAdminList(response).map(normalizeUser));
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Không thể tải danh sách người dùng."));
+        setErrorMessage(getAdminErrorMessage(error, "Không thể tải danh sách người dùng."));
       } finally {
         setLoading(false);
       }
     }
-
     loadUsers();
-  }, [isAdmin, isAuthenticated, searchKeyword]);
+  }, [searchKeyword]);
 
   function handleSearchSubmit(event) {
     event.preventDefault();
@@ -120,168 +72,117 @@ export function AdminUsersPage() {
   }
 
   async function handleChangeStatus(user, nextStatus) {
-    if (!nextStatus || nextStatus === user.status) {
-      return;
-    }
-
+    if (!nextStatus || nextStatus === user.status) return;
     try {
       setStatusLoadingId(user.id);
       setErrorMessage("");
-      setSuccessMessage("");
-
       const response = await changeAdminUserStatus(user.id, nextStatus);
-      const updatedUser = normalizeUser(response?.data || response);
-
-      setUsers((prevState) => prevState.map((item) => (item.id === updatedUser.id ? updatedUser : item)));
-      setSuccessMessage(`Đã đổi trạng thái tài khoản sang ${nextStatus}.`);
+      const updated = normalizeUser(response?.data || response);
+      setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSuccessMessage(`Đã đổi trạng thái sang ${getStatusMeta(nextStatus).label}.`);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể cập nhật trạng thái tài khoản."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể cập nhật trạng thái."));
     } finally {
       setStatusLoadingId(null);
     }
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div style={{ ...panelStyle, display: "grid", gap: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 34 }}>Quản lý người dùng</h1>
-        <p style={{ margin: 0, color: "var(--color-muted)", lineHeight: 1.7 }}>
-          Bạn cần đăng nhập bằng tài khoản ADMIN để truy cập khu vực này.
-        </p>
-        <div>
-          <Link to="/login" style={{ color: "var(--color-accent)", fontWeight: 700 }}>Đi đến trang đăng nhập</Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div style={{ ...panelStyle, display: "grid", gap: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 34 }}>Quản lý người dùng</h1>
-        <p style={{ margin: 0, color: "#991b1b", lineHeight: 1.7 }}>
-          Chỉ tài khoản ADMIN mới được phép vào trang quản trị người dùng.
-        </p>
-        <div>
-          <Link to="/" style={{ color: "var(--color-accent)", fontWeight: 700 }}>Quay về cửa hàng</Link>
-        </div>
-      </div>
-    );
-  }
+  const roleStats = useMemo(() => {
+    const counts = {};
+    users.forEach((u) => {
+      counts[u.role] = (counts[u.role] || 0) + 1;
+    });
+    return counts;
+  }, [users]);
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <section
-        style={{
-          ...panelStyle,
-          display: "grid",
-          gap: 10,
-          background: "linear-gradient(135deg, rgba(15, 76, 63, 0.08), rgba(255, 248, 237, 0.95))"
-        }}
-      >
-        <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--color-muted)" }}>
-          Quản trị người dùng
+    <AdminPage>
+      <AdminPageHead
+        eyebrow="Quản trị người dùng"
+        title="Tài khoản & phân quyền"
+        description="Theo dõi vai trò CUSTOMER, SALES_STAFF, TECH_STAFF, ADMIN và khóa/mở tài khoản khi cần."
+      />
+
+      <AdminAlerts errorMessage={errorMessage} successMessage={successMessage} />
+
+      <section className="admin-metrics">
+        <div className="admin-metric">
+          <span>Tổng tài khoản</span>
+          <strong>{users.length}</strong>
         </div>
-        <h1 style={{ margin: 0, fontSize: 42, lineHeight: 1.02 }}>Tài khoản và quyền truy cập</h1>
-        <p style={{ margin: 0, maxWidth: 760, color: "var(--color-muted)", lineHeight: 1.8 }}>
-          Theo dõi nhanh danh sách tài khoản, vai trò, trạng thái và thời điểm tạo để giải thích luồng phân quyền một cách rõ ràng khi demo.
-        </p>
+        {Object.entries(roleStats).map(([role, count]) => (
+          <div key={role} className="admin-metric">
+            <span>{getRoleMeta(role).label}</span>
+            <strong>{count}</strong>
+          </div>
+        ))}
       </section>
 
-      {errorMessage ? (
-        <div style={{ padding: 16, borderRadius: 18, background: "rgba(185, 28, 28, 0.08)", border: "1px solid rgba(185, 28, 28, 0.16)", color: "#991b1b" }}>
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {successMessage ? (
-        <div style={{ padding: 16, borderRadius: 18, background: "rgba(15, 76, 63, 0.08)", border: "1px solid rgba(15, 76, 63, 0.16)", color: "#0f4c3f" }}>
-          {successMessage}
-        </div>
-      ) : null}
-
-      <section style={{ ...panelStyle, display: "grid", gap: 18 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <h2 style={{ margin: "0 0 4px", fontSize: 30 }}>Danh sách người dùng</h2>
-            <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>
-              Tìm theo họ tên hoặc email, sau đó đổi trạng thái ngay trên bảng danh sách.
-            </div>
+      <AdminCard>
+        <div className="admin-panel-head">
+          <div className="admin-section-title">
+            <h3>Danh sách người dùng</h3>
+            <p>Tìm theo họ tên hoặc email, đổi trạng thái trực tiếp trên bảng.</p>
           </div>
-          <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <form onSubmit={handleSearchSubmit} className="admin-search-row">
             <input
+              className="admin-input"
               value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
+              onChange={(e) => setKeyword(e.target.value)}
               placeholder="Tìm theo tên hoặc email"
-              style={{ ...inputStyle, minWidth: 320 }}
             />
-            <button
-              type="submit"
-              style={{
-                padding: "13px 18px",
-                borderRadius: 16,
-                border: "none",
-                background: "var(--color-ink)",
-                color: "#ffffff",
-                fontWeight: 700
-              }}
-            >
+            <AdminBtn type="submit" variant="dark">
               Tìm kiếm
-            </button>
+            </AdminBtn>
           </form>
         </div>
 
         {loading ? (
-          <div style={{ padding: 20, borderRadius: 18, background: "rgba(255, 248, 237, 0.8)", color: "var(--color-muted)" }}>
-            Đang tải danh sách người dùng...
-          </div>
+          <AdminEmpty>Đang tải…</AdminEmpty>
         ) : filteredUsers.length === 0 ? (
-          <div style={{ padding: 20, borderRadius: 18, background: "rgba(255, 248, 237, 0.8)", color: "var(--color-muted)" }}>
-            Không tìm thấy người dùng phù hợp.
-          </div>
+          <AdminEmpty>Không tìm thấy người dùng phù hợp.</AdminEmpty>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+          <AdminTableWrap>
+            <table className="admin-table">
               <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)", color: "var(--color-muted)", textTransform: "uppercase", fontSize: 12, letterSpacing: "0.08em" }}>
-                  <th style={{ padding: "12px 10px" }}>Người dùng</th>
-                  <th style={{ padding: "12px 10px" }}>Email</th>
-                  <th style={{ padding: "12px 10px" }}>Vai trò</th>
-                  <th style={{ padding: "12px 10px" }}>Trạng thái</th>
-                  <th style={{ padding: "12px 10px" }}>Ngày tạo</th>
-                  <th style={{ padding: "12px 10px" }}>Cập nhật</th>
+                <tr>
+                  <th>Người dùng</th>
+                  <th>Email</th>
+                  <th>Vai trò</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày tạo</th>
+                  <th>Cập nhật</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.map((user) => {
-                  const statusStyle = getStatusStyle(user.status);
-
+                  const roleMeta = getRoleMeta(user.role);
+                  const statusMeta = getStatusMeta(user.status);
                   return (
-                    <tr key={user.id} style={{ borderBottom: "1px solid rgba(214, 208, 196, 0.7)" }}>
-                      <td style={{ padding: "16px 10px", fontWeight: 800 }}>{user.fullName || "Chưa cập nhật"}</td>
-                      <td style={{ padding: "16px 10px", color: "var(--color-muted)" }}>{user.email || "-"}</td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <span style={{ display: "inline-flex", padding: "7px 12px", borderRadius: 999, background: "rgba(201, 169, 97, 0.16)", color: "#855d14", fontSize: 12, fontWeight: 800 }}>
-                          {user.role}
-                        </span>
+                    <tr key={user.id}>
+                      <td>
+                        <strong>{user.fullName || "Chưa cập nhật"}</strong>
                       </td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <span style={{ display: "inline-flex", padding: "7px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, ...statusStyle }}>
-                          {user.status}
-                        </span>
+                      <td>{user.email || "—"}</td>
+                      <td>
+                        <AdminBadge tone={roleMeta.tone}>{roleMeta.label}</AdminBadge>
                       </td>
-                      <td style={{ padding: "16px 10px", color: "var(--color-muted)" }}>
-                        {user.createdAt ? new Date(user.createdAt).toLocaleString("vi-VN") : "-"}
+                      <td>
+                        <AdminBadge tone={statusMeta.tone}>{statusMeta.label}</AdminBadge>
                       </td>
-                      <td style={{ padding: "16px 10px" }}>
+                      <td>{formatAdminDateTime(user.createdAt)}</td>
+                      <td>
                         <select
+                          className="admin-input"
                           value={user.status}
-                          onChange={(event) => handleChangeStatus(user, event.target.value)}
+                          onChange={(e) => handleChangeStatus(user, e.target.value)}
                           disabled={statusLoadingId === user.id}
-                          style={{ ...inputStyle, minWidth: 170, opacity: statusLoadingId === user.id ? 0.72 : 1 }}
+                          style={{ minWidth: 140 }}
                         >
                           {STATUS_OPTIONS.map((status) => (
-                            <option key={status} value={status}>{status}</option>
+                            <option key={status} value={status}>
+                              {getStatusMeta(status).label}
+                            </option>
                           ))}
                         </select>
                       </td>
@@ -290,9 +191,9 @@ export function AdminUsersPage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </AdminTableWrap>
         )}
-      </section>
-    </div>
+      </AdminCard>
+    </AdminPage>
   );
 }

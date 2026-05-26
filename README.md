@@ -63,9 +63,9 @@ Project-CNM_MK-HB/
 |---|---|---|---|
 | **Guest** | — (chưa login) | `/` | Xem sản phẩm, so sánh, tra bảo hành, Build PC thử |
 | **Customer** | `CUSTOMER` | `/` | Mua hàng, quản lý đơn, tạo ticket, lưu Build PC |
-| **Sales Staff** | `SALES_STAFF` | `/staff/orders` | Xử lý đơn hàng, cập nhật trạng thái vận chuyển |
-| **Tech Staff** | `TECH_STAFF` | `/tech/tickets` | Nhận và xử lý ticket kỹ thuật từ khách hàng |
-| **Admin** | `ADMIN` | `/admin/dashboard` | Quản lý toàn bộ hệ thống |
+| **Sales Staff** | `SALES_STAFF` | `/staff/orders` | Xử lý đơn, vận đơn mock, tư vấn chat + gửi cấu hình PC |
+| **Tech Staff** | `TECH_STAFF` | `/tech/tickets` | Ticket hỗ trợ, luật tương thích PC Builder, tra bảo hành |
+| **Admin** | `ADMIN` | `/admin/dashboard` | Trung tâm điều hành: catalog, users, hệ thống, giám sát staff/tech |
 
 ---
 
@@ -165,10 +165,17 @@ FRONTEND_URL=http://localhost:5173
 ```bash
 npm run prisma:generate -w services/api
 npm run prisma:migrate:dev -w services/api -- --name init
-npm run seed -w services/api
+npm run seed:production -w services/api
+npm run seed:guest-demo -w services/api
 ```
 
-> **Hoặc** import trực tiếp file SQL: `cnm_ecommerce_new.sql` vào database
+> **Tài khoản demo:** `seed:production` tạo admin/sales/tech/customer theo bảng bên dưới (idempotent).
+
+> **Demo khách vãng lai 100%:** lệnh `seed:guest-demo` gắn thuộc tính kỹ thuật (socket, RAM…), ảnh sản phẩm và dữ liệu lọc. Xem checklist: [docs/GUEST_DEMO_100.md](docs/GUEST_DEMO_100.md)
+
+> **Demo khách thành viên 100%:** hủy đơn PENDING, thanh toán VNPay mock/sandbox, đồng bộ build PC sau login. Checklist: [docs/CUSTOMER_DEMO_100.md](docs/CUSTOMER_DEMO_100.md). Đặt `PAYMENT_MOCK_MODE=true` trong `services/api/.env` để dùng cổng thanh toán demo.
+
+> **Hoặc** import SQL: `cnm_ecommerce (1).sql` rồi `npm run seed:production` — xem [database/README.md](database/README.md)
 
 ### Bước 5 – Chạy dự án
 
@@ -185,8 +192,16 @@ npm run dev:web      # Frontend: http://localhost:5173
 |---|---|
 | Frontend | http://localhost:5173 |
 | Backend API | http://localhost:4000/api |
-| Health Check | http://localhost:4000/api/health |
+| Health Check | http://localhost:4000/api/health (kèm ping DB) |
 | Adminer (DB) | http://localhost:8080 |
+
+### Kiểm tra API (P0)
+
+```bash
+npm run test:api
+# Smoke login + products (cần DB đã import + seed:production):
+# PowerShell: $env:RUN_API_INTEGRATION="1"; npm run test:api
+```
 
 ---
 
@@ -197,7 +212,7 @@ npm run dev:web      # Frontend: http://localhost:5173
 | Admin | `admin@cnm.local` | `Admin@123` |
 | Sales Staff | `sales@cnm.local` | `Sales@123` |
 | Tech Staff | `tech1@cnm.local` | `Tech@123` |
-| Customer | Tự đăng ký tại `/register` | — |
+| Customer | `customer@cnm.local` | `Customer@123` (hoặc đăng ký tại `/register`) |
 
 > Có thể đổi role người dùng qua **Admin Panel → /admin/users**
 
@@ -292,11 +307,13 @@ addresses      – địa chỉ giao hàng
 
 **Customer:** `/register` → `/login` → thêm giỏ hàng → `/checkout` → `/orders`
 
-**Sales Staff:** đăng nhập tài khoản SALES_STAFF → `/staff/orders` → xử lý đơn
+**Sales Staff:** `sales@cnm.local` → `/staff/orders` + `/staff/chat` — xem `docs/STAFF_DEMO_100.md`
 
-**Tech Staff:** đăng nhập TECH_STAFF → `/tech/tickets` → phản hồi ticket
+**Tech Staff:** `tech1@cnm.local` / `Tech@123` → `/tech/tickets` + `/tech/compatibility` — xem `docs/TECH_DEMO_100.md`
 
-**Admin:** đăng nhập ADMIN → `/admin/dashboard` → `/admin/products` → `/admin/users`
+**Admin:** `admin@cnm.local` / `Admin@123` → `/admin/dashboard` — xem `docs/ADMIN_DEMO_100.md`
+
+**Lộ trình production:** xem [`docs/PRODUCTION_ROADMAP.md`](docs/PRODUCTION_ROADMAP.md)
 
 ### Kiểm thử API
 

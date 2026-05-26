@@ -20,6 +20,11 @@ export async function getManageTickets(params = {}) {
   return response.data;
 }
 
+export async function getTicketStats() {
+  const response = await httpClient.get("/tickets/stats");
+  return response.data;
+}
+
 export async function updateTicket(ticketId, payload) {
   const response = await httpClient.patch(`/tickets/${ticketId}`, payload);
   return response.data;

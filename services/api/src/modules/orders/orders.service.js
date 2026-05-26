@@ -2,6 +2,7 @@ const { getDbPool, query } = require("../../config/database");
 const { createError, toNonNegativeNumber, toPositiveInteger } = require("../../utils/service-helpers");
 const { buildActiveCondition, getTableColumns, pickColumn } = require("../../utils/schema-helpers");
 const { ROLES, hasAnyRole, normalizeRole } = require("../../utils/role-helpers");
+const { env } = require("../../config/env");
 
 let schemaCache = null;
 const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELED"];
@@ -950,6 +951,12 @@ async function createMockShipment(actor, orderId, payload = {}) {
   }
 
   const providedTrackingCode = String(payload.trackingCode || "").trim();
+  const canGenerateMockTracking = env.shippingMockMode || env.nodeEnv !== "production";
+
+  if (!providedTrackingCode && !canGenerateMockTracking) {
+    throw createError("Tracking code is required when shipping mock mode is disabled", 503);
+  }
+
   const trackingCode = providedTrackingCode || `MOCK-${parsedOrderId}-${Date.now()}`;
   const shipmentStatus = String(payload.status || "CREATED").trim().toUpperCase() || "CREATED";
   const existingShipment = await getShipmentByOrderId(parsedOrderId);
@@ -1045,6 +1052,103 @@ async function updateConsultationNote(actor, orderId, note) {
   return getOrderDetail(actor, parsedOrderId);
 }
 
+async function uploadPaymentProof(userId, orderId, file) {
+  const parsedOrderId = toPositiveInteger(orderId, "orderId");
+  const config = await getSchemaConfig();
+
+  const existingOrder = await getOrderRowByIdAny(parsedOrderId);
+
+  if (!existingOrder) {
+    throw createError("Order not found", 404);
+  }
+
+  if (existingOrder[config.orders.userId] !== userId) {
+    throw createError("You can only upload payment proof for your own orders", 403);
+  }
+
+  if (existingOrder[config.orders.paymentMethod] !== "BANK_TRANSFER") {
+    throw createError("Payment proof upload is only available for bank transfer orders", 400);
+  }
+
+  // Save the file and get the public URL
+  const paymentProofUrl = file ? `/uploads/payment-proofs/${file.filename}` : null;
+
+  // Update order with payment proof URL
+  const updateParts = [`${config.orders.paymentStatus} = ?`];
+  const updateParams = ["PENDING_VERIFICATION"];
+
+  if (paymentProofUrl) {
+    // Add payment_proof column if it exists
+    const paymentProofColumn = pickColumn(config.orders.columns, ["payment_proof", "paymentProof"], null);
+    if (paymentProofColumn) {
+      updateParts.push(`${paymentProofColumn} = ?`);
+      updateParams.push(paymentProofUrl);
+    }
+  }
+
+  if (config.orders.updatedAt) {
+    updateParts.push(`${config.orders.updatedAt} = NOW()`);
+  }
+
+  await query(
+    `
+      UPDATE ${config.orders.table}
+      SET ${updateParts.join(", ")}
+      WHERE ${config.orders.id} = ?
+    `,
+    [...updateParams, parsedOrderId]
+  );
+
+  return {
+    orderId: parsedOrderId,
+    paymentProof: paymentProofUrl,
+    paymentStatus: "PENDING_VERIFICATION"
+  };
+}
+
+async function approvePaymentProof(actor, orderId, body) {
+  const parsedOrderId = toPositiveInteger(orderId, "orderId");
+  const config = await getSchemaConfig();
+
+  if (!canManageOrders(actor.role)) {
+    throw createError("Forbidden: you do not have permission to approve payments", 403);
+  }
+
+  const existingOrder = await getOrderRowByIdAny(parsedOrderId);
+
+  if (!existingOrder) {
+    throw createError("Order not found", 404);
+  }
+
+  const { approved, rejectionReason } = body || {};
+  const isApproved = Boolean(approved);
+
+  // Update payment status
+  const updateParts = [`${config.orders.paymentStatus} = ?`];
+  const updateParams = [isApproved ? "PAID" : "REJECTED"];
+
+  if (config.orders.updatedAt) {
+    updateParts.push(`${config.orders.updatedAt} = NOW()`);
+  }
+
+  // If approved and order is still PENDING, move to PROCESSING
+  if (isApproved && existingOrder[config.orders.status] === "PENDING") {
+    updateParts.push(`${config.orders.status} = ?`);
+    updateParams.push("PROCESSING");
+  }
+
+  await query(
+    `
+      UPDATE ${config.orders.table}
+      SET ${updateParts.join(", ")}
+      WHERE ${config.orders.id} = ?
+    `,
+    [...updateParams, parsedOrderId]
+  );
+
+  return getOrderDetail(actor, parsedOrderId);
+}
+
 module.exports = {
   createOrderFromCart,
   getMyOrders,
@@ -1055,7 +1159,9 @@ module.exports = {
   updateOrderStatus,
   markOrderPaid,
   createMockShipment,
-  updateConsultationNote
+  updateConsultationNote,
+  uploadPaymentProof,
+  approvePaymentProof
 };
 
 

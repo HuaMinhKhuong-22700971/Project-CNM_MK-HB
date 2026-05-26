@@ -1,7 +1,21 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 
+import {
+  AdminAlerts,
+  AdminBadge,
+  AdminBtn,
+  AdminCard,
+  AdminEmpty,
+  AdminField,
+  AdminForm,
+  AdminPage,
+  AdminPageHead,
+  AdminTableWrap,
+  AdminWorkspace,
+  useAdminToast
+} from "../../components/admin/AdminUi";
 import { getAdminAttributes } from "../../services/admin-attributes.service";
+import { getAdminErrorMessage, normalizeAdminList } from "../../utils/adminUi";
 import {
   createAdminSku,
   deleteAdminSku,
@@ -10,41 +24,6 @@ import {
   updateAdminSku
 } from "../../services/admin-skus.service";
 import { getAdminProducts } from "../../services/admin-products.service";
-
-const panelStyle = {
-  padding: 24,
-  borderRadius: 28,
-  border: "1px solid var(--color-line)",
-  background: "rgba(255, 255, 255, 0.88)",
-  boxShadow: "var(--shadow-soft)",
-  backdropFilter: "blur(14px)"
-};
-
-const inputStyle = {
-  width: "100%",
-  padding: "13px 14px",
-  borderRadius: 16,
-  border: "1px solid var(--color-line)",
-  background: "#fffdf9",
-  color: "var(--color-ink)",
-  font: "inherit"
-};
-
-function getErrorMessage(error, fallbackMessage) {
-  if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || fallbackMessage;
-  }
-
-  return error.message || fallbackMessage;
-}
-
-function normalizeItems(response) {
-  const payload = response?.data || response;
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  return Array.isArray(payload?.items) ? payload.items : [];
-}
 
 function createInitialSkuForm() {
   return {
@@ -79,6 +58,8 @@ export function AdminSkusPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  useAdminToast(successMessage, () => setSuccessMessage(""));
+
   const filteredSkus = useMemo(() => {
     const normalizedKeyword = String(searchKeyword || "").trim().toLowerCase();
     if (!normalizedKeyword) {
@@ -98,11 +79,11 @@ export function AdminSkusPage() {
         getAdminAttributes()
       ]);
 
-      setSkus(normalizeItems(skuResponse));
-      setProducts(normalizeItems(productResponse));
-      setAttributes(normalizeItems(attributeResponse));
+      setSkus(normalizeAdminList(skuResponse));
+      setProducts(normalizeAdminList(productResponse));
+      setAttributes(normalizeAdminList(attributeResponse));
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể tải dữ liệu SKU."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể tải dữ liệu SKU."));
     } finally {
       setLoading(false);
     }
@@ -152,7 +133,7 @@ export function AdminSkusPage() {
       setErrorMessage("");
       setSuccessMessage("");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết SKU."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể tải chi tiết SKU."));
     } finally {
       setSubmitting(false);
     }
@@ -187,7 +168,7 @@ export function AdminSkusPage() {
       resetForm();
       await loadInitialData();
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể lưu SKU."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể lưu SKU."));
     } finally {
       setSubmitting(false);
     }
@@ -204,137 +185,145 @@ export function AdminSkusPage() {
         resetForm();
       }
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể xóa SKU."));
+      setErrorMessage(getAdminErrorMessage(error, "Không thể xóa SKU."));
     }
   }
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <section style={{ ...panelStyle, display: "grid", gap: 10, background: "linear-gradient(135deg, rgba(15, 76, 63, 0.08), rgba(255, 248, 237, 0.95))" }}>
-        <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--color-muted)" }}>
-          Quản trị SKU và biến thể
-        </div>
-        <h1 style={{ margin: 0, fontSize: 42, lineHeight: 1.02 }}>Product SKUs</h1>
-        <p style={{ margin: 0, maxWidth: 760, color: "var(--color-muted)", lineHeight: 1.8 }}>
-          Mỗi SKU đại diện cho một cấu hình hoặc biến thể có giá, tồn kho và bộ thuộc tính riêng. Đây là lớp dữ liệu trực tiếp phục vụ cho trang chi tiết sản phẩm, bộ lọc và PC Builder.
-        </p>
-      </section>
-
-      {errorMessage ? <div style={{ padding: 16, borderRadius: 18, background: "rgba(185, 28, 28, 0.08)", border: "1px solid rgba(185, 28, 28, 0.16)", color: "#991b1b" }}>{errorMessage}</div> : null}
-      {successMessage ? <div style={{ padding: 16, borderRadius: 18, background: "rgba(15, 76, 63, 0.08)", border: "1px solid rgba(15, 76, 63, 0.16)", color: "#0f4c3f" }}>{successMessage}</div> : null}
-
-      <div style={{ display: "grid", gridTemplateColumns: "420px minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
-        <section style={{ ...panelStyle, display: "grid", gap: 16 }}>
-          <div>
-            <h2 style={{ margin: "0 0 6px", fontSize: 28 }}>{editingSkuId ? "Sửa SKU" : "Thêm SKU"}</h2>
-            <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>Chọn sản phẩm, cập nhật giá, tồn kho và gán đúng bộ giá trị thuộc tính cho SKU này.</div>
+    <AdminPage>
+      <AdminPageHead
+        eyebrow="Catalog"
+        title="SKU & biến thể"
+        description="Giá, tồn kho, ảnh và gán thuộc tính kỹ thuật — lớp dữ liệu cho cửa hàng và PC Builder."
+      />
+      <AdminAlerts errorMessage={errorMessage} successMessage={successMessage} />
+      <AdminWorkspace columns="form-list">
+        <AdminCard>
+          <div className="admin-section-title">
+            <h3>{editingSkuId ? "Sửa SKU" : "Thêm SKU"}</h3>
+            <p>Chọn sản phẩm và gán thuộc tính (socket, RAM…).</p>
           </div>
-
-          <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-            <select name="productId" value={formValues.productId} onChange={handleChange} style={inputStyle}>
+          <AdminForm onSubmit={handleSubmit}>
+            <select name="productId" className="admin-input" value={formValues.productId} onChange={handleChange}>
               <option value="">Chọn sản phẩm</option>
-              {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
-            <input name="sku" value={formValues.sku} onChange={handleChange} placeholder="Mã SKU" style={inputStyle} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <input name="price" value={formValues.price} onChange={handleChange} placeholder="Giá" style={inputStyle} />
-              <input name="stock" value={formValues.stock} onChange={handleChange} placeholder="Tồn kho" style={inputStyle} />
+            <input name="sku" className="admin-input" value={formValues.sku} onChange={handleChange} placeholder="Mã SKU" />
+            <div className="admin-form admin-form--grid">
+              <input name="price" className="admin-input" value={formValues.price} onChange={handleChange} placeholder="Giá" />
+              <input name="stock" className="admin-input" value={formValues.stock} onChange={handleChange} placeholder="Tồn kho" />
             </div>
-            <input name="imageUrl" value={formValues.imageUrl} onChange={handleChange} placeholder="Image URL (tùy chọn)" style={inputStyle} />
-            <select name="status" value={formValues.status} onChange={handleChange} style={inputStyle}>
+            <input name="imageUrl" className="admin-input" value={formValues.imageUrl} onChange={handleChange} placeholder="URL ảnh" />
+            <select name="status" className="admin-input" value={formValues.status} onChange={handleChange}>
               <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
             </select>
-
-            <div style={{ display: "grid", gap: 12, paddingTop: 8 }}>
-              <div style={{ fontWeight: 800 }}>Gán thuộc tính cho SKU</div>
-              {attributes.map((attribute) => {
-                const selectedValueId = attribute.values?.find((value) => formValues.attributeValueIds.includes(Number(value.id)))?.id || "";
-                return (
-                  <div key={attribute.id} style={{ display: "grid", gap: 6, padding: 12, borderRadius: 16, background: "rgba(255, 248, 237, 0.68)", border: "1px solid var(--color-line)" }}>
-                    <div style={{ fontWeight: 700 }}>{attribute.name}</div>
-                    <select value={selectedValueId} onChange={(event) => handleAttributeSelect(attribute, event.target.value)} style={inputStyle}>
-                      <option value="">Không gán</option>
-                      {(attribute.values || []).map((value) => <option key={value.id} value={value.id}>{value.value}</option>)}
-                    </select>
-                  </div>
-                );
-              })}
+            {attributes.map((attribute) => {
+              const selectedValueId =
+                attribute.values?.find((v) => formValues.attributeValueIds.includes(Number(v.id)))?.id || "";
+              return (
+                <div key={attribute.id} className="admin-attribute-block">
+                  <strong>{attribute.name}</strong>
+                  <select className="admin-input" value={selectedValueId} onChange={(e) => handleAttributeSelect(attribute, e.target.value)}>
+                    <option value="">Không gán</option>
+                    {(attribute.values || []).map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+            <div className="admin-action-row">
+              <AdminBtn type="submit" variant="primary" disabled={submitting}>
+                {editingSkuId ? "Cập nhật" : "Thêm SKU"}
+              </AdminBtn>
+              {editingSkuId ? (
+                <AdminBtn variant="secondary" onClick={resetForm}>
+                  Bỏ chọn
+                </AdminBtn>
+              ) : null}
             </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button type="submit" disabled={submitting} style={{ padding: "13px 18px", borderRadius: 16, border: "none", background: "var(--color-accent)", color: "#fff", fontWeight: 800 }}>
-                {editingSkuId ? "Cập nhật SKU" : "Thêm SKU"}
-              </button>
-              {editingSkuId ? <button type="button" onClick={resetForm} style={{ padding: "13px 18px", borderRadius: 16, border: "1px solid var(--color-line)", background: "#fff", fontWeight: 700 }}>Bỏ chọn</button> : null}
+          </AdminForm>
+        </AdminCard>
+        <AdminCard>
+          <div className="admin-panel-head">
+            <div className="admin-section-title">
+              <h3>Danh sách SKU</h3>
             </div>
-          </form>
-        </section>
-
-        <section style={{ ...panelStyle, display: "grid", gap: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 16, flexWrap: "wrap" }}>
-            <div>
-              <h2 style={{ margin: "0 0 4px", fontSize: 30 }}>Danh sách SKU</h2>
-              <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>SKU được hiển thị kèm bộ thuộc tính để admin kiểm tra nhanh khả năng tương thích và bộ lọc.</div>
-            </div>
-            <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: 10 }}>
-              <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo SKU hoặc tên sản phẩm" style={{ ...inputStyle, minWidth: 280 }} />
-              <button type="submit" style={{ padding: "13px 18px", borderRadius: 16, border: "none", background: "var(--color-ink)", color: "#fff", fontWeight: 700 }}>Tìm</button>
+            <form onSubmit={handleSearchSubmit} className="admin-search-row">
+              <input className="admin-input" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Tìm SKU…" />
+              <AdminBtn type="submit" variant="dark">
+                Tìm
+              </AdminBtn>
             </form>
           </div>
-
           {loading ? (
-            <div style={{ padding: 20, borderRadius: 18, background: "rgba(255, 248, 237, 0.8)", color: "var(--color-muted)" }}>Đang tải danh sách SKU...</div>
+            <AdminEmpty>Đang tải…</AdminEmpty>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
+            <AdminTableWrap>
+              <table className="admin-table">
                 <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-line)", color: "var(--color-muted)", textTransform: "uppercase", fontSize: 12, letterSpacing: "0.08em" }}>
-                    <th style={{ padding: "12px 10px" }}>SKU</th>
-                    <th style={{ padding: "12px 10px" }}>Sản phẩm</th>
-                    <th style={{ padding: "12px 10px" }}>Giá / tồn</th>
-                    <th style={{ padding: "12px 10px" }}>Thuộc tính</th>
-                    <th style={{ padding: "12px 10px" }}>Trạng thái</th>
-                    <th style={{ padding: "12px 10px" }}>Tác vụ</th>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Sản phẩm</th>
+                    <th>Giá / tồn</th>
+                    <th>Thuộc tính</th>
+                    <th>TT</th>
+                    <th>Tác vụ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredSkus.map((sku) => (
-                    <tr key={sku.id} style={{ borderBottom: "1px solid rgba(214, 208, 196, 0.7)" }}>
-                      <td style={{ padding: "16px 10px", fontWeight: 800 }}>{sku.sku}</td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <div style={{ display: "grid", gap: 4 }}>
-                          <div style={{ fontWeight: 700 }}>{sku.product?.name}</div>
-                          <div style={{ color: "var(--color-muted)", fontSize: 14 }}>{sku.product?.categoryName || "-"} · {sku.product?.brandName || "-"}</div>
+                    <tr key={sku.id}>
+                      <td>
+                        <strong>{sku.sku}</strong>
+                      </td>
+                      <td>
+                        {sku.product?.name}
+                        <div style={{ fontSize: 13, color: "#64748b" }}>
+                          {sku.product?.categoryName} · {sku.product?.brandName}
                         </div>
                       </td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <div style={{ fontWeight: 700 }}>{Number(sku.price || 0).toLocaleString("vi-VN")} đ</div>
-                        <div style={{ color: "var(--color-muted)", fontSize: 14 }}>Tồn: {Number(sku.stock || 0)}</div>
+                      <td>
+                        {Number(sku.price || 0).toLocaleString("vi-VN")} đ<br />
+                        <small>Tồn: {sku.stock}</small>
                       </td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {(sku.attributes || []).map((attribute) => <span key={`${sku.id}-${attribute.attributeValueId}`} style={{ display: "inline-flex", padding: "6px 10px", borderRadius: 999, background: "rgba(15, 76, 63, 0.08)", color: "#0f4c3f", fontSize: 13, fontWeight: 700 }}>{attribute.label}</span>)}
-                          {(!sku.attributes || sku.attributes.length === 0) ? <span style={{ color: "var(--color-muted)", fontSize: 14 }}>Chưa gắn thuộc tính</span> : null}
+                      <td>
+                        <div className="admin-tag-list">
+                          {(sku.attributes || []).map((a) => (
+                            <span key={`${sku.id}-${a.attributeValueId}`} className="admin-tag">
+                              {a.label}
+                            </span>
+                          ))}
                         </div>
                       </td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <span style={{ display: "inline-flex", padding: "6px 10px", borderRadius: 999, background: sku.status === "ACTIVE" ? "rgba(15, 76, 63, 0.12)" : "rgba(95, 108, 106, 0.12)", color: sku.status === "ACTIVE" ? "#0f4c3f" : "#5f6c6a", fontSize: 12, fontWeight: 800 }}>{sku.status}</span>
+                      <td>
+                        <AdminBadge tone={sku.status === "ACTIVE" ? "success" : "neutral"}>{sku.status}</AdminBadge>
                       </td>
-                      <td style={{ padding: "16px 10px" }}>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button type="button" onClick={() => handleEditSku(sku.id)} style={{ padding: "9px 12px", borderRadius: 14, border: "1px solid rgba(15, 76, 63, 0.16)", background: "rgba(15, 76, 63, 0.08)", color: "#0f4c3f", fontWeight: 700 }}>Sửa</button>
-                          <button type="button" onClick={() => handleDeleteSku(sku.id)} style={{ padding: "9px 12px", borderRadius: 14, border: "1px solid rgba(185, 28, 28, 0.18)", background: "rgba(185, 28, 28, 0.08)", color: "#991b1b", fontWeight: 700 }}>Xóa</button>
+                      <td>
+                        <div className="admin-action-row">
+                          <AdminBtn variant="secondary" onClick={() => handleEditSku(sku.id)}>
+                            Sửa
+                          </AdminBtn>
+                          <AdminBtn variant="danger" onClick={() => handleDeleteSku(sku.id)}>
+                            Xóa
+                          </AdminBtn>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableWrap>
           )}
-        </section>
-      </div>
-    </div>
+        </AdminCard>
+      </AdminWorkspace>
+    </AdminPage>
   );
 }

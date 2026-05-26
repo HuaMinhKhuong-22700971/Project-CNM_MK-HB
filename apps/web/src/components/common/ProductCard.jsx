@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 
 import { addStoredCompareId, buildCompareUrl } from "../../utils/compare";
+import { resolveProductImage } from "../../utils/productImage";
 
 const STAR_TEXT = "★★★★★";
 
@@ -15,7 +16,7 @@ export function ProductCard({ product }) {
   const discountPercent = Number(product?.discountPercent || 12);
   const rating = Number(product?.rating || 4.8).toFixed(1);
   const soldCount = Number(product?.soldCount || 120);
-  const imageUrl = product?.image_url || product?.defaultVariant?.imageUrl || "";
+  const imageUrl = resolveProductImage(product);
   const isMall = Boolean(product?.isMall);
   const isFreeShip = Boolean(product?.isFreeShip);
 
@@ -29,7 +30,7 @@ export function ProductCard({ product }) {
     <article className="market-product-card">
       <Link className="market-product-card__link" to={`/products/${productSlug}`}>
         <div className="market-product-card__media">
-          {imageUrl ? <img src={imageUrl} alt={productName} /> : <span>{brandName}</span>}
+          <img src={imageUrl} alt={productName} loading="lazy" onError={(e) => { e.currentTarget.src = resolveProductImage({}, { label: brandName }); }} />
           <span className="market-product-card__discount">Giảm {discountPercent}%</span>
           {isMall ? <span className="market-product-card__mall">Mall</span> : null}
         </div>

@@ -1,21 +1,61 @@
+import { useEffect, useState } from "react";
 import { Navigate, Link, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
+import { getChatQueueStats } from "../services/chat.service";
 
 const STAFF_NAV_ITEMS = [
   {
     to: "/staff/orders",
-    label: "Đơn hàng cần xử lý",
-    description: "Theo dõi đơn mới, cập nhật trạng thái và hoàn tất giao hàng"
+    label: "Đơn hàng",
+    icon: "📦"
+  },
+  {
+    to: "/staff/chat",
+    label: "Tư vấn khách",
+    icon: "💬",
+    showQueueBadge: true
   }
 ];
+
+const ROLE_LABELS = {
+  ADMIN: "Quản trị viên",
+  SALES_STAFF: "Nhân viên kinh doanh"
+};
+
+function getStatsData(response) {
+  if (response && typeof response === "object" && "data" in response) {
+    return response.data ?? null;
+  }
+  return response ?? null;
+}
 
 export function StaffLayout() {
   const location = useLocation();
   const { authState, isAuthenticated } = useAuth();
+  const [chatWaiting, setChatWaiting] = useState(0);
   const role = String(authState?.user?.role || "").toUpperCase();
   const staffName = authState?.user?.fullName || authState?.user?.email || "Nhân viên";
+  const roleLabel = ROLE_LABELS[role] || role || "Nhân viên";
   const canAccess = ["ADMIN", "SALES_STAFF"].includes(role);
+
+  useEffect(() => {
+    if (!canAccess) return undefined;
+
+    async function loadStats() {
+      try {
+        const response = await getChatQueueStats();
+        const stats = getStatsData(response);
+        setChatWaiting(Number(stats?.waiting || 0));
+      } catch {
+        setChatWaiting(0);
+      }
+    }
+
+    loadStats();
+    const interval = setInterval(loadStats, 12000);
+    return () => clearInterval(interval);
+  }, [canAccess]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -26,80 +66,58 @@ export function StaffLayout() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top right, rgba(16, 185, 129, 0.15), transparent 40%), var(--color-bg)", color: "#1f2937" }}>
-      <div style={{ maxWidth: 1360, margin: "0 auto", padding: "28px 24px 40px", display: "grid", gridTemplateColumns: "minmax(260px, 300px) minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
-        <aside
-          style={{
-            position: "sticky",
-            top: 24,
-            display: "grid",
-            gap: 18,
-            padding: 24,
-            borderRadius: 24,
-            background: "rgba(255, 255, 255, 0.82)",
-            border: "1px solid rgba(255, 255, 255, 0.9)",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.04)",
-            backdropFilter: "blur(24px) saturate(150%)",
-            WebkitBackdropFilter: "blur(24px) saturate(150%)"
-          }}
-        >
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6b7280" }}>Sales workspace</div>
-            <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>Xử lý đơn hàng</div>
-            <div style={{ color: "#6b7280", lineHeight: 1.7 }}>
-              Khu vực dành cho nhân viên kinh doanh để tiếp nhận đơn, điều phối giao hàng và theo dõi tiến trình xử lý của khách.
-            </div>
-          </div>
+    <div className="staff-shell">
+      <header className="staff-topbar">
+        <div className="staff-topbar__inner">
+          <Link to="/" className="staff-brand">
+            <span className="staff-brand__mark">PC</span>
+            <span>
+              <span className="staff-brand__name">PC Mall</span>
+              <span className="staff-brand__sub">Khu vực kinh doanh</span>
+            </span>
+          </Link>
 
-          <div style={{ padding: 16, borderRadius: 18, background: "linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(37, 99, 235, 0.1))", border: "1px solid rgba(16, 185, 129, 0.15)", display: "grid", gap: 4 }}>
-            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "#047857" }}>Đăng nhập với</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{staffName}</div>
-            <div style={{ color: "#7c2d12" }}>Vai trò: {role}</div>
-          </div>
-
-          <nav style={{ display: "grid", gap: 10 }}>
+          <nav className="staff-nav" aria-label="Sales staff navigation">
             {STAFF_NAV_ITEMS.map((item) => {
               const isActive = location.pathname === item.to;
+              const badge = item.showQueueBadge && chatWaiting > 0 ? chatWaiting : 0;
 
               return (
                 <Link
                   key={item.to}
                   to={item.to}
-                  style={{
-                    display: "grid",
-                    gap: 4,
-                    padding: "14px 16px",
-                    borderRadius: 16,
-                    textDecoration: "none",
-                    background: isActive ? "rgba(16, 185, 129, 0.1)" : "transparent",
-                    border: isActive ? "1px solid rgba(16, 185, 129, 0.2)" : "1px solid transparent",
-                    color: "#1f2937",
-                    transition: "0.2s ease"
-                  }}
+                  className={`staff-nav__link${isActive ? " staff-nav__link--active" : ""}`}
                 >
-                  <span style={{ fontWeight: 700 }}>{item.label}</span>
-                  <span style={{ fontSize: 14, color: "#6b7280" }}>{item.description}</span>
+                  <span className="staff-nav__icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  {item.label}
+                  {badge > 0 ? <span className="staff-nav__badge">{badge}</span> : null}
                 </Link>
               );
             })}
           </nav>
 
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="staff-account">
+            <div>
+              <div className="staff-account__name">{staffName}</div>
+              <div className="staff-account__role">{roleLabel}</div>
+            </div>
             {role === "ADMIN" ? (
-              <Link to="/admin/dashboard" style={{ display: "inline-flex", justifyContent: "center", padding: "12px 16px", borderRadius: 999, background: "#111827", color: "#ffffff", textDecoration: "none", fontWeight: 700 }}>
-                Về admin
+              <Link className="staff-account__link" to="/admin/dashboard">
+                Admin
               </Link>
             ) : null}
-            <Link to="/" style={{ display: "inline-flex", justifyContent: "center", padding: "12px 16px", borderRadius: 999, border: "1px solid #e5e7eb", background: "#ffffff", color: "#1f2937", textDecoration: "none" }}>
-              Về cửa hàng
+            <Link className="staff-account__link" to="/">
+              Cửa hàng
             </Link>
           </div>
-        </aside>
+        </div>
+      </header>
 
-        <main style={{ minWidth: 0 }}>
-          <Outlet />
-        </main>
-      </div>
+      <main className="staff-content">
+        <Outlet />
+      </main>
     </div>
   );
 }

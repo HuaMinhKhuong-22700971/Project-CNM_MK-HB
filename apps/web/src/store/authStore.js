@@ -2,6 +2,7 @@ import { clearStoredAuth, getStoredAuth, setStoredAuth } from "../utils/storage"
 
 let authState = getStoredAuth() || {
   accessToken: "",
+  refreshToken: "",
   user: null
 };
 
@@ -24,6 +25,7 @@ export function setAuthState(nextState) {
 export function clearAuthState() {
   authState = {
     accessToken: "",
+    refreshToken: "",
     user: null
   };
   clearStoredAuth();

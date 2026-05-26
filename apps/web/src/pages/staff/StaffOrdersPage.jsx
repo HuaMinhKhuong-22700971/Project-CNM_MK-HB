@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 
 import {
@@ -10,15 +11,38 @@ import {
 } from "../../services/staff.service";
 
 const STATUS_META = {
-  PENDING: { label: "Chờ xử lý", color: "#b45309", background: "#fef3c7" },
-  PROCESSING: { label: "Đang xử lý", color: "#1d4ed8", background: "#dbeafe" },
-  SHIPPED: { label: "Đã giao vận", color: "#0f766e", background: "#ccfbf1" },
-  DELIVERED: { label: "Hoàn thành", color: "#166534", background: "#dcfce7" },
-  CANCELED: { label: "Đã hủy", color: "#b91c1c", background: "#fee2e2" }
+  PENDING: { label: "Chờ xử lý", tone: "warning" },
+  PROCESSING: { label: "Đang xử lý", tone: "info" },
+  SHIPPED: { label: "Đã giao vận", tone: "shipping" },
+  DELIVERED: { label: "Hoàn thành", tone: "success" },
+  CANCELED: { label: "Đã hủy", tone: "danger" }
 };
 
 const ORDER_STATUS_OPTIONS = ["", "PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELED"];
 const ORDER_FLOW = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"];
+
+const SHIPPING_CARRIERS = [
+  { id: "GHTK", label: "GHTK" },
+  { id: "VNPOST", label: "VNPost" },
+  { id: "JT", label: "J&T Express" }
+];
+
+const NOTE_TEMPLATES = [
+  "Đã gọi xác nhận đơn với khách — khách đồng ý giao trong 2–3 ngày.",
+  "Khách yêu cầu giao cuối tuần, ưu tiên khung giờ 9h–12h.",
+  "Đã tư vấn nâng cấp linh kiện, khách giữ nguyên cấu hình đơn hiện tại.",
+  "Đơn thanh toán VNPay — đã xác nhận giao dịch thành công trước khi xuất kho."
+];
+
+function buildMockTrackingCode(orderId, carrier = "GHTK") {
+  const prefix = String(carrier || "GHTK")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
+  const stamp = Date.now().toString().slice(-6);
+  return `${prefix}-MOCK-${orderId}-${stamp}`;
+}
 
 function getErrorMessage(error, fallback) {
   if (axios.isAxiosError(error)) {
@@ -41,15 +65,26 @@ function formatCurrency(value) {
 }
 
 function formatDate(value) {
-  if (!value) {
-    return "Khong ro";
-  }
-
-  return new Date(value).toLocaleString("vi-VN");
+  if (!value) return "Không rõ";
+  return new Date(value).toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
 }
 
 function getStatusMeta(status) {
-  return STATUS_META[status] || { label: status || "Khong ro", color: "#475569", background: "#e2e8f0" };
+  return STATUS_META[status] || { label: status || "Không rõ", tone: "neutral" };
+}
+
+function getOrderAmount(order) {
+  return Number(order?.finalAmount || order?.totalAmount || 0);
+}
+
+function getLineAmount(item) {
+  return Number(item?.lineTotal || item?.totalPrice || item?.price || 0);
 }
 
 export function StaffOrdersPage() {
@@ -59,6 +94,7 @@ export function StaffOrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [trackingCode, setTrackingCode] = useState("");
+  const [shippingCarrier, setShippingCarrier] = useState("GHTK");
   const [consultationNote, setConsultationNote] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -82,9 +118,7 @@ export function StaffOrdersPage() {
   }, [selectedOrderId]);
 
   useEffect(() => {
-    if (!successMessage) {
-      return undefined;
-    }
+    if (!successMessage) return undefined;
 
     const timer = window.setTimeout(() => setSuccessMessage(""), 3500);
     return () => window.clearTimeout(timer);
@@ -92,10 +126,7 @@ export function StaffOrdersPage() {
 
   const filteredOrders = useMemo(() => {
     const query = keyword.trim().toLowerCase();
-
-    if (!query) {
-      return orders;
-    }
+    if (!query) return orders;
 
     return orders.filter((order) => {
       const customer = order.customer || {};
@@ -116,6 +147,11 @@ export function StaffOrdersPage() {
     });
   }, [keyword, orders]);
 
+  const visibleTotal = useMemo(
+    () => filteredOrders.reduce((sum, order) => sum + getOrderAmount(order), 0),
+    [filteredOrders]
+  );
+
   async function loadOrders(nextStatusFilter = statusFilter) {
     try {
       setLoading(true);
@@ -135,7 +171,7 @@ export function StaffOrdersPage() {
         setSelectedOrderId(normalizedList[0].id);
       }
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the tai danh sach don hang."));
+      setErrorMessage(getErrorMessage(error, "Không thể tải danh sách đơn hàng."));
     } finally {
       setLoading(false);
     }
@@ -151,7 +187,7 @@ export function StaffOrdersPage() {
       setTrackingCode(order?.shipment?.trackingCode || "");
       setConsultationNote(order?.note || "");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the tai chi tiet don hang."));
+      setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết đơn hàng."));
     } finally {
       setDetailLoading(false);
     }
@@ -165,18 +201,14 @@ export function StaffOrdersPage() {
   }
 
   async function refreshCurrentOrder() {
-    if (!selectedOrderId) {
-      return;
-    }
+    if (!selectedOrderId) return;
 
     await loadOrderDetail(selectedOrderId);
     await loadOrders();
   }
 
   async function handleMoveToProcessing() {
-    if (!selectedOrder) {
-      return;
-    }
+    if (!selectedOrder) return;
 
     try {
       setActionLoading("processing");
@@ -185,24 +217,21 @@ export function StaffOrdersPage() {
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
       setStatusFilter("PROCESSING");
-      setSuccessMessage(`Don #${selectedOrder.id} da chuyen sang PROCESSING.`);
+      setSuccessMessage(`Đơn #${selectedOrder.id} đã chuyển sang Đang xử lý.`);
       await loadOrders("PROCESSING");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the chuyen don sang PROCESSING."));
+      setErrorMessage(getErrorMessage(error, "Không thể chuyển đơn sang Đang xử lý."));
     } finally {
       setActionLoading("");
     }
   }
 
   async function handleShipOrder() {
-    if (!selectedOrder) {
-      return;
-    }
+    if (!selectedOrder) return;
 
     const normalizedTracking = trackingCode.trim();
-
     if (!normalizedTracking) {
-      setErrorMessage("Can nhap ma tracking truoc khi chuyen don sang SHIPPED.");
+      setErrorMessage("Cần nhập mã vận đơn trước khi chuyển sang Đã giao vận.");
       return;
     }
 
@@ -211,30 +240,28 @@ export function StaffOrdersPage() {
       setErrorMessage("");
       await createStaffShipment(selectedOrder.id, {
         trackingCode: normalizedTracking,
+        carrier: shippingCarrier,
         status: "IN_TRANSIT"
       });
       const response = await updateStaffOrderStatus(selectedOrder.id, "SHIPPED");
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
       setStatusFilter("SHIPPED");
-      setSuccessMessage(`Don #${selectedOrder.id} da giao van voi ma ${normalizedTracking}.`);
+      setSuccessMessage(`Đơn #${selectedOrder.id} đã giao vận với mã ${normalizedTracking}.`);
       await loadOrders("SHIPPED");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the cap nhat van don."));
+      setErrorMessage(getErrorMessage(error, "Không thể cập nhật vận đơn."));
     } finally {
       setActionLoading("");
     }
   }
 
   async function handleCompleteOrder() {
-    if (!selectedOrder) {
-      return;
-    }
+    if (!selectedOrder) return;
 
     const normalizedTracking = (selectedOrder.shipment?.trackingCode || trackingCode || "").trim();
-
     if (!normalizedTracking) {
-      setErrorMessage("Don chua co ma tracking de xac nhan giao thanh cong.");
+      setErrorMessage("Đơn chưa có mã vận đơn để xác nhận giao thành công.");
       return;
     }
 
@@ -243,25 +270,24 @@ export function StaffOrdersPage() {
       setErrorMessage("");
       await createStaffShipment(selectedOrder.id, {
         trackingCode: normalizedTracking,
+        carrier: shippingCarrier,
         status: "DELIVERED"
       });
       const response = await updateStaffOrderStatus(selectedOrder.id, "DELIVERED");
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
       setStatusFilter("DELIVERED");
-      setSuccessMessage(`Don #${selectedOrder.id} da hoan thanh.`);
+      setSuccessMessage(`Đơn #${selectedOrder.id} đã hoàn thành.`);
       await loadOrders("DELIVERED");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the chuyen don sang DELIVERED."));
+      setErrorMessage(getErrorMessage(error, "Không thể chuyển đơn sang Hoàn thành."));
     } finally {
       setActionLoading("");
     }
   }
 
   async function handleSaveNote() {
-    if (!selectedOrder) {
-      return;
-    }
+    if (!selectedOrder) return;
 
     try {
       setActionLoading("note");
@@ -269,23 +295,20 @@ export function StaffOrdersPage() {
       const response = await updateStaffConsultationNote(selectedOrder.id, consultationNote);
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
-      setSuccessMessage("Da luu ghi chu tu van.");
+      setSuccessMessage("Đã lưu ghi chú xử lý.");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the luu ghi chu."));
+      setErrorMessage(getErrorMessage(error, "Không thể lưu ghi chú."));
     } finally {
       setActionLoading("");
     }
   }
 
   async function handleCancelOrder() {
-    if (!selectedOrder) {
-      return;
-    }
+    if (!selectedOrder) return;
 
     const normalizedReason = cancelReason.trim();
-
     if (!normalizedReason) {
-      setErrorMessage("Can nhap ly do huy don.");
+      setErrorMessage("Cần nhập lý do hủy đơn.");
       return;
     }
 
@@ -296,12 +319,12 @@ export function StaffOrdersPage() {
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
       setStatusFilter("CANCELED");
-      setSuccessMessage(`Don #${selectedOrder.id} da duoc huy.`);
+      setSuccessMessage(`Đơn #${selectedOrder.id} đã được hủy.`);
       setShowCancelDialog(false);
       setCancelReason("");
       await loadOrders("CANCELED");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Khong the huy don."));
+      setErrorMessage(getErrorMessage(error, "Không thể hủy đơn."));
     } finally {
       setActionLoading("");
     }
@@ -315,331 +338,322 @@ export function StaffOrdersPage() {
   const canCancel = selectedOrder?.status === "PENDING";
   const currentFlowIndex = ORDER_FLOW.indexOf(selectedOrder?.status);
 
+  function handleGenerateTracking() {
+    if (!selectedOrder?.id) return;
+    setTrackingCode(buildMockTrackingCode(selectedOrder.id, shippingCarrier));
+    setSuccessMessage("Đã tạo mã vận đơn demo.");
+  }
+
+  function applyNoteTemplate(text) {
+    setConsultationNote((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text));
+  }
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 40 }}>
-      <div style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", color: "#fff", padding: "36px 24px 56px" }}>
-        <div style={{ maxWidth: 1320, margin: "0 auto" }}>
-          <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", fontWeight: 800, marginBottom: 8 }}>
-            Sales Staff Workspace
-          </div>
-          <h1 style={{ margin: 0, fontSize: 34, fontWeight: 900 }}>Xu ly don hang /staff/orders</h1>
-          <p style={{ margin: "8px 0 0", color: "#cbd5e1", maxWidth: 760 }}>
-            Theo doi don moi, cap nhat quy trinh xu ly, nhap ma tracking va xac nhan giao thanh cong cho khach hang.
-          </p>
+    <div className="staff-orders">
+      <section className="staff-page-head">
+        <div>
+          <p className="staff-eyebrow">Nhân viên kinh doanh</p>
+          <h1>Xử lý đơn hàng</h1>
+          <p>Tiếp nhận đơn mới, cập nhật trạng thái giao vận và theo dõi thông tin khách hàng tại một màn hình.</p>
         </div>
-      </div>
+        <div className="staff-head-actions">
+          <Link to="/staff/chat" className="staff-btn staff-btn--secondary">
+            Tư vấn chat
+          </Link>
+          <button type="button" className="staff-btn staff-btn--secondary" onClick={refreshCurrentOrder} disabled={Boolean(actionLoading)}>
+            Làm mới
+          </button>
+        </div>
+      </section>
 
-      <div style={{ maxWidth: 1320, margin: "-22px auto 0", padding: "0 24px", position: "relative", zIndex: 1 }}>
-        {errorMessage ? (
-          <div style={{ marginBottom: 16, padding: "14px 18px", borderRadius: 16, background: "#fee2e2", border: "1px solid #fecaca", color: "#b91c1c", fontWeight: 700 }}>
-            {errorMessage}
+      <section className="staff-metrics" aria-label="Tổng quan đơn hàng">
+        <div className="staff-metric">
+          <span>Đang hiển thị</span>
+          <strong>{filteredOrders.length}</strong>
+          <small>{statusFilter ? getStatusMeta(statusFilter).label : "Tất cả trạng thái"}</small>
+        </div>
+        <div className="staff-metric">
+          <span>Tổng giá trị</span>
+          <strong>{formatCurrency(visibleTotal)} đ</strong>
+          <small>Tính theo danh sách đang lọc</small>
+        </div>
+        <div className="staff-metric">
+          <span>Đơn đang chọn</span>
+          <strong>{selectedOrder ? `#${selectedOrder.id}` : "--"}</strong>
+          <small>{selectedOrder ? selectedStatusMeta.label : "Chưa chọn đơn"}</small>
+        </div>
+      </section>
+
+      {errorMessage ? <div className="staff-alert staff-alert--error">{errorMessage}</div> : null}
+      {successMessage ? <div className="staff-alert staff-alert--success">{successMessage}</div> : null}
+
+      <div className="staff-workspace">
+        <aside className="staff-orders-panel">
+          <div className="staff-panel-head">
+            <div>
+              <h2>Danh sách đơn hàng</h2>
+              <p>Chọn đơn để xem chi tiết và thao tác.</p>
+            </div>
           </div>
-        ) : null}
 
-        {successMessage ? (
-          <div style={{ marginBottom: 16, padding: "14px 18px", borderRadius: 16, background: "#dcfce7", border: "1px solid #bbf7d0", color: "#166534", fontWeight: 700 }}>
-            {successMessage}
+          <div className="staff-filters">
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="Tìm mã đơn, khách hàng, email, mã vận đơn"
+              aria-label="Tìm đơn hàng"
+            />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Lọc trạng thái đơn hàng">
+              {ORDER_STATUS_OPTIONS.map((status) => (
+                <option key={status || "all"} value={status}>
+                  {status ? getStatusMeta(status).label : "Tất cả trạng thái"}
+                </option>
+              ))}
+            </select>
           </div>
-        ) : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "360px minmax(0, 1fr)", gap: 24, alignItems: "start" }}>
-          <aside style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)", overflow: "hidden" }}>
-            <div style={{ padding: 18, borderBottom: "1px solid #e2e8f0", display: "grid", gap: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 16 }}>Danh sach don hang</div>
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="Tim theo ma don, ten khach, email, tracking"
-                style={{ height: 42, borderRadius: 12, border: "1px solid #cbd5e1", padding: "0 14px", fontSize: 14 }}
-              />
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                style={{ height: 42, borderRadius: 12, border: "1px solid #cbd5e1", padding: "0 14px", fontSize: 14 }}
+          <div className="staff-status-tabs">
+            {ORDER_STATUS_OPTIONS.map((status) => (
+              <button
+                key={status || "all"}
+                type="button"
+                className={statusFilter === status ? "is-active" : ""}
+                onClick={() => setStatusFilter(status)}
               >
-                {ORDER_STATUS_OPTIONS.map((status) => (
-                  <option key={status || "all"} value={status}>
-                    {status ? getStatusMeta(status).label : "Tat ca trang thai"}
-                  </option>
-                ))}
-              </select>
-            </div>
+                {status ? getStatusMeta(status).label : "Tất cả"}
+              </button>
+            ))}
+          </div>
 
-            <div style={{ maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
-              {loading ? (
-                <div style={{ padding: 22, color: "#64748b" }}>Dang tai danh sach don hang...</div>
-              ) : filteredOrders.length === 0 ? (
-                <div style={{ padding: 22, color: "#64748b" }}>Khong tim thay don hang phu hop.</div>
-              ) : (
-                filteredOrders.map((order) => {
-                  const isActive = order.id === selectedOrderId;
-                  const statusMeta = getStatusMeta(order.status);
-                  return (
-                    <button
-                      key={order.id}
-                      type="button"
-                      onClick={() => setSelectedOrderId(order.id)}
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        borderBottom: "1px solid #e2e8f0",
-                        background: isActive ? "#eff6ff" : "#fff",
-                        borderLeft: isActive ? "4px solid #2563eb" : "4px solid transparent",
-                        padding: "16px 18px",
-                        cursor: "pointer",
-                        textAlign: "left"
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 15 }}>Don #{order.id}</div>
-                          <div style={{ color: "#0f172a", marginTop: 4, fontWeight: 600 }}>{order.customer?.fullName || "Khach hang"}</div>
-                          <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{order.customer?.email || "Khong co email"}</div>
-                        </div>
-                        <span style={{ padding: "6px 10px", borderRadius: 999, background: statusMeta.background, color: statusMeta.color, fontWeight: 800, fontSize: 12 }}>
-                          {statusMeta.label}
-                        </span>
-                      </div>
-                      <div style={{ marginTop: 10, color: "#475569", fontSize: 13 }}>{formatDate(order.createdAt)}</div>
-                      <div style={{ marginTop: 6, fontWeight: 800, fontSize: 18 }}>{formatCurrency(order.finalAmount)} VND</div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
-
-          <main>
-            {detailLoading ? (
-              <div style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", padding: 24, color: "#64748b" }}>
-                Dang tai chi tiet don hang...
-              </div>
-            ) : !selectedOrder ? (
-              <div style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", padding: 24, color: "#64748b" }}>
-                Chon mot don hang de xem chi tiet.
-              </div>
+          <div className="staff-order-list">
+            {loading ? (
+              <div className="staff-empty">Đang tải danh sách đơn hàng...</div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="staff-empty">Không tìm thấy đơn hàng phù hợp.</div>
             ) : (
-              <div style={{ display: "grid", gap: 20 }}>
-                <section style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", padding: 26, boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "start" }}>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div style={{ color: "#64748b", fontSize: 13 }}>Don hang #{selectedOrder.id} • {formatDate(selectedOrder.createdAt)}</div>
-                      <h2 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>Thong tin xu ly don hang</h2>
-                      <div style={{ color: "#475569" }}>{selectedOrder.shippingAddress || "Chua co dia chi giao hang"}</div>
+              filteredOrders.map((order) => {
+                const isActive = order.id === selectedOrderId;
+                const statusMeta = getStatusMeta(order.status);
+
+                return (
+                  <button
+                    key={order.id}
+                    type="button"
+                    className={`staff-order-row${isActive ? " staff-order-row--active" : ""}`}
+                    onClick={() => setSelectedOrderId(order.id)}
+                  >
+                    <span className={`staff-status staff-status--${statusMeta.tone}`}>{statusMeta.label}</span>
+                    <span className="staff-order-row__title">Đơn #{order.id}</span>
+                    <span className="staff-order-row__customer">{order.customer?.fullName || "Khách hàng"}</span>
+                    <span className="staff-order-row__meta">{order.customer?.email || "Không có email"}</span>
+                    <span className="staff-order-row__date">{formatDate(order.createdAt)}</span>
+                    <span className="staff-order-row__amount">{formatCurrency(getOrderAmount(order))} đ</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
+
+        <main className="staff-detail">
+          {detailLoading ? (
+            <section className="staff-card staff-empty">Đang tải chi tiết đơn hàng...</section>
+          ) : !selectedOrder ? (
+            <section className="staff-card staff-empty">Chọn một đơn hàng để xem chi tiết.</section>
+          ) : (
+            <>
+              <section className="staff-order-summary staff-card">
+                <div className="staff-order-summary__main">
+                  <span className={`staff-status staff-status--${selectedStatusMeta.tone}`}>{selectedStatusMeta.label}</span>
+                  <p>Đơn hàng #{selectedOrder.id} · {formatDate(selectedOrder.createdAt)}</p>
+                  <h2>Thông tin xử lý đơn hàng</h2>
+                  <div className="staff-address">{selectedOrder.shippingAddress || "Chưa có địa chỉ giao hàng"}</div>
+                </div>
+                <div className="staff-order-summary__side">
+                  <span>Tổng thanh toán</span>
+                  <strong>{formatCurrency(getOrderAmount(selectedOrder))} đ</strong>
+                </div>
+                <div className="staff-action-row">
+                  {canMoveToProcessing ? (
+                    <button type="button" className="staff-btn staff-btn--primary" onClick={handleMoveToProcessing} disabled={Boolean(actionLoading)}>
+                      {actionLoading === "processing" ? "Đang cập nhật..." : "Xử lý đơn"}
+                    </button>
+                  ) : null}
+
+                  {canShip ? (
+                    <button type="button" className="staff-btn staff-btn--shipping" onClick={handleShipOrder} disabled={Boolean(actionLoading)}>
+                      {actionLoading === "ship" ? "Đang cập nhật..." : "Giao vận"}
+                    </button>
+                  ) : null}
+
+                  {canComplete ? (
+                    <button type="button" className="staff-btn staff-btn--success" onClick={handleCompleteOrder} disabled={Boolean(actionLoading)}>
+                      {actionLoading === "delivered" ? "Đang cập nhật..." : "Hoàn thành"}
+                    </button>
+                  ) : null}
+
+                  {canCancel ? (
+                    <button type="button" className="staff-btn staff-btn--danger" onClick={() => setShowCancelDialog(true)} disabled={Boolean(actionLoading)}>
+                      Hủy đơn
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="staff-progress staff-card" aria-label="Tiến trình xử lý">
+                {ORDER_FLOW.map((status, index) => {
+                  const meta = getStatusMeta(status);
+                  const isDone = currentFlowIndex >= index;
+
+                  return (
+                    <div key={status} className={`staff-progress__step${isDone ? " staff-progress__step--done" : ""}`}>
+                      <span>{index + 1}</span>
+                      <strong>{meta.label}</strong>
                     </div>
-                    <div style={{ textAlign: "right", display: "grid", gap: 8 }}>
-                      <span style={{ justifySelf: "end", padding: "6px 12px", borderRadius: 999, background: selectedStatusMeta.background, color: selectedStatusMeta.color, fontWeight: 800, fontSize: 12 }}>
-                        {selectedStatusMeta.label}
-                      </span>
-                      <div style={{ fontWeight: 900, fontSize: 28 }}>{formatCurrency(selectedOrder.finalAmount || selectedOrder.totalAmount)} VND</div>
+                  );
+                })}
+              </section>
+
+              <div className="staff-detail-grid">
+                <section className="staff-card">
+                  <div className="staff-section-title">
+                    <h3>Khách hàng và sản phẩm</h3>
+                    <p>Thông tin người nhận, thanh toán và các dòng sản phẩm trong đơn.</p>
+                  </div>
+
+                  <div className="staff-info-grid">
+                    <div>
+                      <span>Tên khách</span>
+                      <strong>{customer.fullName || "Không rõ"}</strong>
+                    </div>
+                    <div>
+                      <span>Email</span>
+                      <strong>{customer.email || "Không rõ"}</strong>
+                    </div>
+                    <div>
+                      <span>Số điện thoại</span>
+                      <strong>{customer.phone || "Không rõ"}</strong>
+                    </div>
+                    <div>
+                      <span>Thanh toán</span>
+                      <strong>{selectedOrder.paymentMethod || "COD"} / {selectedOrder.paymentStatus || "UNPAID"}</strong>
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}>
-                    {canMoveToProcessing ? (
-                      <button
-                        type="button"
-                        onClick={handleMoveToProcessing}
-                        disabled={Boolean(actionLoading)}
-                        style={{ height: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#2563eb", color: "#fff", fontWeight: 800, cursor: "pointer" }}
-                      >
-                        {actionLoading === "processing" ? "Dang cap nhat..." : "Xu ly"}
-                      </button>
-                    ) : null}
-
-                    {canShip ? (
-                      <button
-                        type="button"
-                        onClick={handleShipOrder}
-                        disabled={Boolean(actionLoading)}
-                        style={{ height: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#0f766e", color: "#fff", fontWeight: 800, cursor: "pointer" }}
-                      >
-                        {actionLoading === "ship" ? "Dang cap nhat..." : "Da giao van"}
-                      </button>
-                    ) : null}
-
-                    {canComplete ? (
-                      <button
-                        type="button"
-                        onClick={handleCompleteOrder}
-                        disabled={Boolean(actionLoading)}
-                        style={{ height: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#166534", color: "#fff", fontWeight: 800, cursor: "pointer" }}
-                      >
-                        {actionLoading === "delivered" ? "Dang cap nhat..." : "Hoan thanh"}
-                      </button>
-                    ) : null}
-
-                    {canCancel ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowCancelDialog(true)}
-                        disabled={Boolean(actionLoading)}
-                        style={{ height: 44, padding: "0 18px", borderRadius: 12, border: "1px solid #fca5a5", background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" }}
-                      >
-                        Huy don
-                      </button>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={refreshCurrentOrder}
-                      disabled={Boolean(actionLoading)}
-                      style={{ height: 44, padding: "0 18px", borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      Lam moi
-                    </button>
+                  <div className="staff-product-list">
+                    {(selectedOrder.items || []).length === 0 ? (
+                      <div className="staff-empty staff-empty--compact">Đơn hàng chưa có dòng sản phẩm.</div>
+                    ) : (
+                      (selectedOrder.items || []).map((item) => (
+                        <div key={item.id || `${item.productName}-${item.sku}`} className="staff-product-row">
+                          <div>
+                            <strong>{item.productName || "Sản phẩm"}</strong>
+                            <span>SKU: {item.sku || "Không rõ"} · SL: {item.quantity || 0}</span>
+                          </div>
+                          <b>{formatCurrency(getLineAmount(item))} đ</b>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </section>
 
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(320px, 0.9fr)", gap: 20 }}>
-                  <section style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", padding: 24 }}>
-                    <div style={{ display: "grid", gap: 6, marginBottom: 18 }}>
-                      <div style={{ fontWeight: 800, fontSize: 18 }}>Khach hang va san pham</div>
-                      <div style={{ color: "#64748b", fontSize: 14 }}>Xem nhanh thong tin khach, san pham va tong tien cua don.</div>
+                <div className="staff-side-stack">
+                  <section className="staff-card">
+                    <div className="staff-section-title">
+                      <h3>Vận đơn</h3>
+                      <p>Nhập mã vận đơn trước khi chuyển đơn sang Đã giao vận.</p>
                     </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 }}>
-                      {ORDER_FLOW.map((status, index) => {
-                        const meta = getStatusMeta(status);
-                        const isDone = currentFlowIndex >= index;
-                        return (
-                          <div
-                            key={status}
-                            style={{
-                              padding: 12,
-                              borderRadius: 16,
-                              border: isDone ? `1px solid ${meta.color}33` : "1px solid #e2e8f0",
-                              background: isDone ? meta.background : "#f8fafc",
-                              color: isDone ? meta.color : "#64748b",
-                              fontWeight: 800,
-                              fontSize: 13,
-                              textAlign: "center"
-                            }}
-                          >
-                            {meta.label}
-                          </div>
-                        );
-                      })}
+                    <div className="staff-shipment-box">
+                      <span>Trạng thái vận đơn</span>
+                      <strong>{selectedOrder.shipment?.status || "Chưa tạo vận đơn"}</strong>
                     </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 18 }}>
-                      <div style={{ padding: 14, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ color: "#64748b", fontSize: 12, textTransform: "uppercase", marginBottom: 6 }}>Ten khach</div>
-                        <div style={{ fontWeight: 700 }}>{customer.fullName || "Khong ro"}</div>
-                      </div>
-                      <div style={{ padding: 14, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ color: "#64748b", fontSize: 12, textTransform: "uppercase", marginBottom: 6 }}>Email</div>
-                        <div style={{ fontWeight: 700 }}>{customer.email || "Khong ro"}</div>
-                      </div>
-                      <div style={{ padding: 14, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ color: "#64748b", fontSize: 12, textTransform: "uppercase", marginBottom: 6 }}>So dien thoai</div>
-                        <div style={{ fontWeight: 700 }}>{customer.phone || "Khong ro"}</div>
-                      </div>
-                      <div style={{ padding: 14, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div style={{ color: "#64748b", fontSize: 12, textTransform: "uppercase", marginBottom: 6 }}>Thanh toan</div>
-                        <div style={{ fontWeight: 700 }}>{selectedOrder.paymentMethod || "COD"} / {selectedOrder.paymentStatus || "UNPAID"}</div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "grid", gap: 12 }}>
-                      {(selectedOrder.items || []).map((item) => (
-                        <div key={item.id} style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", background: "#fff" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                            <div>
-                              <div style={{ fontWeight: 800 }}>{item.productName || "San pham"}</div>
-                              <div style={{ color: "#64748b", marginTop: 4, fontSize: 14 }}>SKU: {item.sku || "Khong ro"} • SL: {item.quantity || 0}</div>
-                            </div>
-                            <div style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(item.lineTotal)} VND</div>
-                          </div>
-                        </div>
+                    <label className="staff-field-label" htmlFor="staff-carrier">
+                      Đơn vị vận chuyển (demo)
+                    </label>
+                    <select
+                      id="staff-carrier"
+                      className="staff-field"
+                      value={shippingCarrier}
+                      onChange={(event) => setShippingCarrier(event.target.value)}
+                    >
+                      {SHIPPING_CARRIERS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
                       ))}
+                    </select>
+                    <input
+                      className="staff-field"
+                      value={trackingCode}
+                      onChange={(event) => setTrackingCode(event.target.value)}
+                      placeholder="Nhập hoặc tạo mã vận đơn"
+                    />
+                    <div className="staff-action-row staff-action-row--compact">
+                      <button type="button" className="staff-btn staff-btn--secondary" onClick={handleGenerateTracking}>
+                        Tạo mã demo
+                      </button>
                     </div>
+                    <p className="staff-help">
+                      Mã hiện tại: {selectedOrder.shipment?.trackingCode || "Chưa có"}
+                      {selectedOrder.shipment?.provider ? ` · ${selectedOrder.shipment.provider}` : ""}
+                    </p>
                   </section>
 
-                  <div style={{ display: "grid", gap: 20 }}>
-                    <section style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", padding: 24 }}>
-                      <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-                        <div style={{ fontWeight: 800, fontSize: 18 }}>Van don</div>
-                        <div style={{ color: "#64748b", fontSize: 14 }}>Nhap ma tracking khi giao van va theo doi trang thai shipment.</div>
-                      </div>
-
-                      <div style={{ display: "grid", gap: 12 }}>
-                        <div style={{ padding: 14, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                          <div style={{ color: "#64748b", fontSize: 12, textTransform: "uppercase", marginBottom: 6 }}>Trang thai shipment</div>
-                          <div style={{ fontWeight: 700 }}>{selectedOrder.shipment?.status || "Chua tao van don"}</div>
-                        </div>
-                        <input
-                          value={trackingCode}
-                          onChange={(event) => setTrackingCode(event.target.value)}
-                          placeholder="Nhap ma tracking"
-                          style={{ height: 44, borderRadius: 12, border: "1px solid #cbd5e1", padding: "0 14px", fontSize: 14 }}
-                        />
-                        <div style={{ color: "#475569", fontSize: 13 }}>
-                          Tracking hien tai: {selectedOrder.shipment?.trackingCode || "Chua co"}
-                        </div>
-                      </div>
-                    </section>
-
-                    <section style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", padding: 24 }}>
-                      <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-                        <div style={{ fontWeight: 800, fontSize: 18 }}>Ghi chu xu ly</div>
-                        <div style={{ color: "#64748b", fontSize: 14 }}>Luu lai thong tin tu van hoac ghi chu giao dich cho team.</div>
-                      </div>
-
-                      <textarea
-                        value={consultationNote}
-                        onChange={(event) => setConsultationNote(event.target.value)}
-                        rows={5}
-                        placeholder="Nhap ghi chu xu ly don hang"
-                        style={{ width: "100%", borderRadius: 14, border: "1px solid #cbd5e1", padding: 14, fontSize: 14, resize: "vertical", boxSizing: "border-box" }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveNote}
-                        disabled={Boolean(actionLoading)}
-                        style={{ marginTop: 12, height: 42, padding: "0 16px", borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800, cursor: "pointer" }}
-                      >
-                        {actionLoading === "note" ? "Dang luu..." : "Luu ghi chu"}
-                      </button>
-                    </section>
-                  </div>
+                  <section className="staff-card">
+                    <div className="staff-section-title">
+                      <h3>Ghi chú xử lý</h3>
+                      <p>Lưu thông tin tư vấn hoặc ghi chú giao dịch cho nội bộ.</p>
+                    </div>
+                    <div className="staff-note-templates">
+                      {NOTE_TEMPLATES.map((text) => (
+                        <button key={text} type="button" className="staff-note-template-btn" onClick={() => applyNoteTemplate(text)}>
+                          {text.slice(0, 42)}…
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      className="staff-textarea"
+                      value={consultationNote}
+                      onChange={(event) => setConsultationNote(event.target.value)}
+                      rows={5}
+                      placeholder="Nhập ghi chú xử lý đơn hàng"
+                    />
+                    <button type="button" className="staff-btn staff-btn--dark" onClick={handleSaveNote} disabled={Boolean(actionLoading)}>
+                      {actionLoading === "note" ? "Đang lưu..." : "Lưu ghi chú"}
+                    </button>
+                  </section>
                 </div>
               </div>
-            )}
-          </main>
-        </div>
+            </>
+          )}
+        </main>
       </div>
 
       {showCancelDialog ? (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.5)", display: "grid", placeItems: "center", padding: 24, zIndex: 20 }}>
-          <div style={{ width: "100%", maxWidth: 460, background: "#fff", borderRadius: 22, padding: 24, border: "1px solid #e2e8f0", boxShadow: "0 25px 50px rgba(15, 23, 42, 0.2)" }}>
-            <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Huy don #{selectedOrder?.id}</div>
-            <div style={{ color: "#64748b", marginBottom: 16 }}>Nhap ly do huy don. Hanh dong nay chi ap dung cho don dang PENDING.</div>
+        <div className="staff-modal">
+          <div className="staff-modal__panel">
+            <h2>Hủy đơn #{selectedOrder?.id}</h2>
+            <p>Nhập lý do hủy đơn. Hành động này chỉ áp dụng cho đơn đang chờ xử lý.</p>
             <textarea
+              className="staff-textarea"
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}
               rows={4}
-              placeholder="Ly do huy don"
-              style={{ width: "100%", borderRadius: 14, border: "1px solid #cbd5e1", padding: 14, fontSize: 14, resize: "vertical", boxSizing: "border-box" }}
+              placeholder="Lý do hủy đơn"
             />
-            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-              <button
-                type="button"
-                onClick={handleCancelOrder}
-                disabled={Boolean(actionLoading)}
-                style={{ flex: 1, height: 44, borderRadius: 12, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, cursor: "pointer" }}
-              >
-                {actionLoading === "cancel" ? "Dang xu ly..." : "Xac nhan huy"}
+            <div className="staff-modal__actions">
+              <button type="button" className="staff-btn staff-btn--danger-fill" onClick={handleCancelOrder} disabled={Boolean(actionLoading)}>
+                {actionLoading === "cancel" ? "Đang xử lý..." : "Xác nhận hủy"}
               </button>
               <button
                 type="button"
+                className="staff-btn staff-btn--secondary"
                 onClick={() => {
                   setShowCancelDialog(false);
                   setCancelReason("");
                 }}
-                style={{ flex: 1, height: 44, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, cursor: "pointer" }}
               >
-                Quay lai
+                Quay lại
               </button>
             </div>
           </div>

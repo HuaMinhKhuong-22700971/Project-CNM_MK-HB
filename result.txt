@@ -1,0 +1,7 @@
+
+=== Danh sách Users trong DB ===
+- ID: 1 | Email: admin@example.com | Name: Admin Demo | Role: ADMIN
+- ID: 2 | Email: customer@example.com | Name: Customer Demo | Role: CUSTOMER
+- ID: 3 | Email: sales@example.com | Name: Sales Staff Demo | Role: SALES_STAFF
+- ID: 4 | Email: tech@example.com | Name: Tech Staff Demo | Role: TECH_STAFF
+- ID: 5 | Email: khuongminhhua11062004@gmail.com | Name: H???a Minh Kh????ng | Role: CUSTOMER

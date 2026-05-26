@@ -19,7 +19,12 @@ const env = {
   jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
-  openaiModel: process.env.OPENAI_MODEL || "gpt-5.2"
+  openaiModel: process.env.OPENAI_MODEL || "gpt-5.2",
+  groqApiKey: process.env.GROQ_API_KEY || "",
+  paymentMockMode: process.env.PAYMENT_MOCK_MODE === "true",
+  shippingMockMode: process.env.SHIPPING_MOCK_MODE === "true",
+  shippingProvider: process.env.SHIPPING_PROVIDER || "manual",
+  chatStoragePath: process.env.CHAT_STORAGE_PATH || "./data/chat-sessions.json"
 };
 
 module.exports = { env };

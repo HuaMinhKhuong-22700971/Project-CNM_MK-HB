@@ -2,9 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
+import { OrderStatusBadge } from "../../components/marketplace/OrderStatusBadge";
 import { useAuth } from "../../hooks/useAuth";
-import { getOrderDetail } from "../../services/order.service";
+import { cancelMyOrder, createVnpayUrl, getOrderDetail, uploadPaymentProof } from "../../services/order.service";
 import { routeConfig } from "../../routes/routeConfig";
+import { PAYMENT_STATUS_META, canCustomerCancelOrder, canCustomerPayOrder } from "../../utils/orderStatus";
+import { resolveProductImage } from "../../utils/productImage";
+
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api").replace(/\/api\/?$/, "");
 
 function getErrorMessage(error, fallbackMessage) {
   if (axios.isAxiosError(error)) {
@@ -28,9 +33,11 @@ function mapDbOrderToUi(dbOrder) {
     status: dbOrder.status,
     paymentMethod: dbOrder.payment_method || dbOrder.paymentMethod,
     paymentStatus: dbOrder.payment_status || dbOrder.paymentStatus,
+    paymentProof: dbOrder.payment_proof || dbOrder.paymentProof,
     shippingAddress: dbOrder.shipping_address || dbOrder.shippingAddress,
     createdAt: dbOrder.created_at || dbOrder.createdAt,
     note: dbOrder.note,
+    customer: dbOrder.customer || dbOrder.User || null,
     trackingCode: shipment?.trackingCode || dbOrder.tracking_code || dbOrder.trackingCode,
     shipmentStatus: shipment?.status || null,
     totalAmount: dbOrder.total_amount || dbOrder.totalAmount,
@@ -48,21 +55,45 @@ function mapDbOrderToUi(dbOrder) {
   };
 }
 
-function formatCurrency(value) {
-  return Number(value || 0).toLocaleString("vi-VN");
+function resolveUploadUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_ORIGIN}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-function getOrderStatusLabel(status) {
-  const labels = {
-    PENDING: "Chờ xác nhận",
-    PROCESSING: "Đang xử lý",
-    SHIPPED: "Đã giao vận",
-    DELIVERED: "Hoàn thành",
-    CANCELED: "Đã hủy",
-    PAID: "Đã thanh toán"
-  };
+function getPaymentMethodLabel(method) {
+  const normalized = String(method || "").toUpperCase();
+  if (normalized === "BANK_TRANSFER") return "BANK_TRANSFER / QR Banking";
+  if (normalized === "VNPAY") return "VNPay";
+  return normalized || "COD";
+}
 
-  return labels[String(status || "").toUpperCase()] || status || "Chưa cập nhật";
+function getPaymentStatusMeta(status, method) {
+  const normalized = String(status || "").toUpperCase();
+  if (String(method || "").toUpperCase() === "BANK_TRANSFER" && ["PENDING_GATEWAY", "UNPAID", ""].includes(normalized)) {
+    return { label: "Chờ tải minh chứng", tone: "#b45309" };
+  }
+  if (normalized === "AWAITING_ADMIN_CONFIRMATION" || normalized === "PENDING_VERIFICATION") {
+    return { label: "Chờ admin xác nhận", tone: "#1d4ed8" };
+  }
+  return PAYMENT_STATUS_META[normalized] || { label: status || "Chưa thanh toán", tone: "#64748b" };
+}
+
+function parseRecipientFromShippingAddress(shippingAddress, fallbackUser) {
+  const parts = String(shippingAddress || "")
+    .split(" - ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    name: parts[0] || fallbackUser?.fullName || fallbackUser?.full_name || fallbackUser?.email || "Chưa có dữ liệu",
+    phone: parts[1] || fallbackUser?.phone || "Chưa có dữ liệu",
+    address: parts.slice(2).join(" - ") || shippingAddress || "Chưa có dữ liệu"
+  };
+}
+
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString("vi-VN");
 }
 
 function getShipmentStatusLabel(status) {
@@ -91,10 +122,15 @@ function InfoRow({ label, value }) {
 export function OrderDetailPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authState } = useAuth();
+  const user = authState?.user;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [paymentProof, setPaymentProof] = useState(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !orderId) {
@@ -119,7 +155,85 @@ export function OrderDetailPage() {
     loadOrder();
   }, [isAuthenticated, orderId]);
 
+  async function reloadOrder() {
+    const response = await getOrderDetail(orderId);
+    const rawData = normalizeResponse(response);
+    setOrder(mapDbOrderToUi(rawData));
+  }
+
+  async function handleCancelOrder() {
+    if (!confirm(`Hủy đơn hàng #${orderId}?`)) return;
+    try {
+      setActionLoading(true);
+      setErrorMessage("");
+      await cancelMyOrder(orderId);
+      setSuccessMessage("Đã hủy đơn hàng thành công.");
+      await reloadOrder();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Không thể hủy đơn hàng"));
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handlePayOrder() {
+    try {
+      setActionLoading(true);
+      setErrorMessage("");
+      const urlRes = await createVnpayUrl(orderId, { amount: Number(order?.finalAmount || 0) });
+      const urlData = urlRes?.data?.data || urlRes?.data || urlRes;
+      if (urlData?.paymentUrl) {
+        window.location.href = urlData.paymentUrl;
+        return;
+      }
+      throw new Error("Không lấy được liên kết thanh toán");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Không thể thanh toán"));
+      setActionLoading(false);
+    }
+  }
+
+  async function handleUploadPaymentProof(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+
+    // Validate file type
+    if (!file.type.match(/image\/(jpeg|jpg|png|gif)/)) {
+      setErrorMessage("Chỉ chấp nhận file ảnh (JPG, PNG, GIF)");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMessage("Kích thước file không được quá 5MB");
+      return;
+    }
+
+    try {
+      setUploadingProof(true);
+      setErrorMessage("");
+      const response = await uploadPaymentProof(orderId, file);
+      const data = normalizeResponse(response);
+      setSuccessMessage("Đã tải lên minh chứng chuyển khoản. Đơn hàng đang chờ admin xác nhận.");
+      setPaymentProof(data?.paymentProof || data?.payment_proof || null);
+      await reloadOrder();
+    } catch (error) {
+      console.error("Upload error:", error);
+      setErrorMessage(getErrorMessage(error, "Không thể tải lên bằng chứng thanh toán"));
+    } finally {
+      setUploadingProof(false);
+    }
+  }
+
   const itemCount = useMemo(() => (order?.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0), [order]);
+  const recipient = useMemo(() => parseRecipientFromShippingAddress(order?.shippingAddress, order?.customer || user), [order, user]);
+  const paymentStatusMeta = getPaymentStatusMeta(order?.paymentStatus, order?.paymentMethod);
+  const normalizedPaymentStatus = String(order?.paymentStatus || "").toUpperCase();
+  const proofUrl = paymentProof || order?.paymentProof;
+  const canUploadPaymentProof =
+    order?.paymentMethod === "BANK_TRANSFER" &&
+    !["PAID", "AWAITING_ADMIN_CONFIRMATION", "PENDING_VERIFICATION"].includes(normalizedPaymentStatus);
 
   if (!isAuthenticated) {
     return (
@@ -163,7 +277,8 @@ export function OrderDetailPage() {
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Chi tiết đơn hàng</div>
             <h1 style={{ margin: 0, fontSize: 44, lineHeight: 1, letterSpacing: "-0.05em" }}>Đơn hàng #{order.id}</h1>
-            <div style={{ color: "var(--muted)" }}>Theo dõi đầy đủ trạng thái, vận đơn, thanh toán và thông tin sản phẩm trong đơn.</div>
+            <div style={{ marginTop: 10 }}><OrderStatusBadge status={order.status} /></div>
+            <div style={{ color: "var(--muted)", marginTop: 8 }}>Theo dõi đầy đủ trạng thái, vận đơn, thanh toán và thông tin sản phẩm trong đơn.</div>
           </div>
 
           <div style={{ textAlign: "right", display: "grid", gap: 6 }}>
@@ -173,10 +288,116 @@ export function OrderDetailPage() {
         </div>
       </section>
 
+      {successMessage ? (
+        <div style={{ padding: 16, borderRadius: 16, background: "#ecfdf5", border: "1px solid #86efac", color: "#047857" }}>{successMessage}</div>
+      ) : null}
+
+      {(canCustomerCancelOrder(order) || canCustomerPayOrder(order)) ? (
+        <section style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)" }}>
+          {canCustomerPayOrder(order) ? (
+            <button type="button" disabled={actionLoading} onClick={handlePayOrder} style={{ padding: "12px 24px", borderRadius: 12, border: "none", background: "#2563eb", color: "#fff", fontWeight: 800, cursor: "pointer" }}>
+              {actionLoading ? "Đang mở cổng thanh toán..." : "💳 Thanh toán VNPay ngay"}
+            </button>
+          ) : null}
+          {canCustomerCancelOrder(order) ? (
+            <button type="button" disabled={actionLoading} onClick={handleCancelOrder} style={{ padding: "12px 24px", borderRadius: 12, border: "1px solid #fecaca", background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" }}>
+              Hủy đơn hàng
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* Bank Transfer Payment Proof Upload */}
+      {order?.paymentMethod === "BANK_TRANSFER" ? (
+        <section style={{ padding: 24, borderRadius: 20, background: "linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(37, 99, 235, 0.02))", border: "2px dashed rgba(37, 99, 235, 0.3)" }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20 }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(37, 99, 235, 0.1)", color: "#2563eb", display: "grid", placeItems: "center", fontSize: 24 }}>💳</div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#1e293b" }}>Bằng chứng thanh toán chuyển khoản</h3>
+              <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 14 }}>Vui lòng tải lên screenshot chứng minh bạn đã chuyển khoản thành công</p>
+            </div>
+          </div>
+
+          {proofUrl && !canUploadPaymentProof ? (
+            <div style={{ padding: 20, background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", marginBottom: 16 }}>
+              <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                <div style={{ width: 100, height: 100, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                  <img 
+                    src={resolveUploadUrl(proofUrl)} 
+                    alt="Bằng chứng thanh toán" 
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#166534", fontSize: 16 }}>✅ Đã tải lên bằng chứng thanh toán</div>
+                  <div style={{ color: "#64748b", fontSize: 14, marginTop: 4 }}>Admin đang xác nhận thanh toán của bạn</div>
+                </div>
+              </div>
+            </div>
+          ) : canUploadPaymentProof ? (
+            <div style={{ padding: 20, background: "#fff", borderRadius: 16, border: "1px dashed #cbd5e1", marginBottom: 16 }}>
+              <input
+                type="file"
+                id="paymentProof"
+                accept="image/jpeg,image/jpg,image/png,image/gif"
+                onChange={handleUploadPaymentProof}
+                style={{ display: "none" }}
+              />
+              <label
+                htmlFor="paymentProof"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: 24,
+                  borderRadius: 12,
+                  background: "#f8fafc",
+                  border: "2px dashed #94a3b8",
+                  cursor: "pointer",
+                  transition: "all 0.3s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "#2563eb";
+                  e.currentTarget.style.background = "#eff6ff";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#94a3b8";
+                  e.currentTarget.style.background = "#f8fafc";
+                }}
+              >
+                {uploadingProof ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 40, marginBottom: 8 }}>⏳</div>
+                    <div style={{ fontWeight: 700, color: "#64748b" }}>Đang tải lên...</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 48 }}>📤</div>
+                    <div style={{ fontWeight: 700, color: "#1e293b", fontSize: 16 }}>Click để tải lên screenshot</div>
+                    <div style={{ color: "#64748b", fontSize: 13 }}>Chấp nhận: JPG, PNG, GIF (Max 5MB)</div>
+                  </>
+                )}
+              </label>
+            </div>
+          ) : null}
+
+          <div style={{ display: "grid", gap: 8, padding: 16, background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0" }}>
+            <div style={{ fontWeight: 700, color: "#1e293b", fontSize: 14 }}>📋 Hướng dẫn chuyển khoản:</div>
+            <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
+              1. Chuyển khoản vào tài khoản Techcombank: <strong>8686868991</strong> - <strong>HỨA MINH KHƯƠNG</strong><br/>
+              2. Số tiền chuyển: <strong>{formatCurrency(order?.finalAmount)} VND</strong><br/>
+              3. Nội dung chuyển khoản: <strong>DH{user?.phone || "SĐT của bạn"}</strong><br/>
+              4. Chụp screenshot màn hình chuyển khoản và tải lên ở trên
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái đơn" value={getOrderStatusLabel(order.status)} /></div>
-        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Phương thức thanh toán" value={order.paymentMethod} /></div>
-        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái thanh toán" value={order.paymentStatus} /></div>
+        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái đơn" value={order.status} /></div>
+        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Phương thức thanh toán" value={getPaymentMethodLabel(order.paymentMethod)} /></div>
+        <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Trạng thái thanh toán" value={paymentStatusMeta.label} /></div>
         <div style={{ padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}><InfoRow label="Số lượng sản phẩm" value={String(itemCount)} /></div>
       </section>
 
@@ -192,7 +413,7 @@ export function OrderDetailPage() {
               <div key={item.id} style={{ display: "flex", gap: 16, padding: 18, borderRadius: 18, background: "#fff", border: "1px solid #f1f5f9", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                 <div style={{ width: 64, height: 64, borderRadius: 12, background: "linear-gradient(135deg, #f8fafc, #fff)", border: "1px solid #e2e8f0", display: "grid", placeItems: "center", flexShrink: 0, overflow: "hidden" }}>
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.productName} style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} />
+                    <img src={resolveProductImage({ image_url: item.imageUrl, name: item.productName })} alt={item.productName} style={{ width: "100%", height: "100%", objectFit: "contain", padding: 4 }} />
                   ) : (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                   )}
@@ -215,7 +436,9 @@ export function OrderDetailPage() {
         <div style={{ display: "grid", gap: 18 }}>
           <section style={{ display: "grid", gap: 14, padding: 24, borderRadius: 24, background: "#fff", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
             <h2 style={{ margin: 0, fontSize: 24 }}>Thông tin giao hàng</h2>
-            <InfoRow label="Địa chỉ" value={order.shippingAddress} />
+            <InfoRow label="Người nhận" value={recipient.name} />
+            <InfoRow label="Số điện thoại" value={recipient.phone} />
+            <InfoRow label="Địa chỉ" value={recipient.address} />
             <InfoRow label="Ngày tạo" value={order.createdAt ? new Date(order.createdAt).toLocaleString("vi-VN") : "Không rõ"} />
             <InfoRow label="Ghi chú" value={order.note || "Không có ghi chú"} />
           </section>

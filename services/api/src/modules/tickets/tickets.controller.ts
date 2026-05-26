@@ -9,6 +9,7 @@ import {
   createTicket,
   getTicketById,
   getTicketsByReporter,
+  getTicketQueueStats,
   listTickets,
   updateTicket
 } from "./tickets.repository";
@@ -47,6 +48,25 @@ export const getMyTickets = asyncHandler(async (req: Request, res: Response) => 
   });
 });
 
+function isTechRole(role?: string) {
+  const normalized = String(role || "").toUpperCase();
+  return normalized === ROLES.TECH_STAFF || normalized === "TECHNICIAN";
+}
+
+function canManageTicketRole(role?: string) {
+  const normalized = String(role || "").toUpperCase();
+  return (
+    normalized === ROLES.ADMIN ||
+    isTechRole(normalized) ||
+    normalized === ROLES.SALES_STAFF ||
+    normalized === "SALES"
+  );
+}
+
+function canAccessTicket(ticket: { user_id?: number | null }, user: { userId: string | number; role?: string }) {
+  return Number(ticket.user_id) === Number(user.userId) || canManageTicketRole(user.role);
+}
+
 export const getTicketDetail = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError("Unauthorized", 401);
@@ -57,13 +77,7 @@ export const getTicketDetail = asyncHandler(async (req: Request, res: Response) 
     throw new AppError("Ticket not found", 404);
   }
 
-  const canAccess =
-    Number(ticket.user_id) === Number(req.user.userId) ||
-    req.user.role === ROLES.ADMIN ||
-    req.user.role === ROLES.TECHNICIAN ||
-    req.user.role === ROLES.SALES;
-
-  if (!canAccess) {
+  if (!canAccessTicket(ticket, req.user)) {
     throw new AppError("Forbidden", 403);
   }
 
@@ -73,12 +87,40 @@ export const getTicketDetail = asyncHandler(async (req: Request, res: Response) 
   });
 });
 
-export const getAllTickets = asyncHandler(async (_req: Request, res: Response) => {
-  const tickets = await listTickets();
+export const getAllTickets = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  const scope = String(req.query.scope || "ALL");
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const priority = req.query.priority ? String(req.query.priority) : undefined;
+  const keyword = req.query.keyword ? String(req.query.keyword) : undefined;
+
+  const tickets = await listTickets({
+    scope,
+    status,
+    priority,
+    keyword,
+    assignedToId: scope.toUpperCase() === "ASSIGNED" ? Number(req.user.userId) : undefined
+  });
 
   res.status(200).json({
     success: true,
     data: tickets
+  });
+});
+
+export const getTicketStats = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  const stats = await getTicketQueueStats(Number(req.user.userId));
+
+  res.status(200).json({
+    success: true,
+    data: stats
   });
 });
 
@@ -100,7 +142,9 @@ export const patchTicket = asyncHandler(async (req: Request, res: Response) => {
       throw new AppError("Assignee not found", 404);
     }
 
-    const isValidAssignee = (assignee as any).Role?.name === ROLES.TECHNICIAN || (assignee as any).Role?.name === ROLES.ADMIN;
+    const assigneeRole = String((assignee as any).Role?.name || "").toUpperCase();
+    const isValidAssignee =
+      assigneeRole === ROLES.ADMIN || assigneeRole === ROLES.TECH_STAFF || assigneeRole === "TECHNICIAN";
 
     if (!isValidAssignee) {
       throw new AppError("Assignee must be technician or admin", 400);
@@ -129,13 +173,7 @@ export const postTicketMessage = asyncHandler(async (req: Request, res: Response
     throw new AppError("Ticket not found", 404);
   }
 
-  const canAccess =
-    Number(ticket.user_id) === Number(req.user.userId) ||
-    req.user.role === ROLES.ADMIN ||
-    req.user.role === ROLES.TECHNICIAN ||
-    req.user.role === ROLES.SALES;
-
-  if (!canAccess) {
+  if (!canAccessTicket(ticket, req.user)) {
     throw new AppError("Forbidden", 403);
   }
 

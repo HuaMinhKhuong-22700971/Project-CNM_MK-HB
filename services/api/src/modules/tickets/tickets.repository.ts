@@ -83,14 +83,80 @@ export function getTicketsByReporter(userId: string) {
   }).then((tickets: any[]) => tickets.map(normalizeTicket));
 }
 
-export function listTickets() {
-  return prisma.ticket.findMany({
-    include: {
-      users_tickets_user_idTousers: { select: { id: true, email: true, full_name: true, Role: { select: { name: true } } } },
-      users_tickets_assigned_to_idTousers: { select: { id: true, email: true, full_name: true, Role: { select: { name: true } } } }
-    },
-    orderBy: { created_at: "desc" }
-  }).then((tickets: any[]) => tickets.map(normalizeTicket));
+export type TicketListFilters = {
+  scope?: string;
+  status?: string;
+  priority?: string;
+  keyword?: string;
+  assignedToId?: number;
+};
+
+function buildTicketWhere(filters: TicketListFilters = {}) {
+  const where: Record<string, unknown> = {};
+  const scope = String(filters.scope || "ALL").trim().toUpperCase();
+  const status = String(filters.status || "").trim().toUpperCase();
+  const priority = String(filters.priority || "").trim().toUpperCase();
+  const keyword = String(filters.keyword || "").trim();
+
+  if (status) {
+    where.status = status;
+  }
+
+  if (priority) {
+    where.priority = priority;
+  }
+
+  if (keyword) {
+    where.OR = [
+      { title: { contains: keyword } },
+      { description: { contains: keyword } }
+    ];
+  }
+
+  if (scope === "ASSIGNED" && filters.assignedToId) {
+    where.assigned_to_id = filters.assignedToId;
+  } else if (scope === "UNASSIGNED") {
+    where.assigned_to_id = null;
+  }
+
+  return where;
+}
+
+export function listTickets(filters: TicketListFilters = {}) {
+  const where = buildTicketWhere(filters);
+
+  return prisma.ticket
+    .findMany({
+      where,
+      include: {
+        users_tickets_user_idTousers: {
+          select: { id: true, email: true, full_name: true, Role: { select: { name: true } } }
+        },
+        users_tickets_assigned_to_idTousers: {
+          select: { id: true, email: true, full_name: true, Role: { select: { name: true } } }
+        }
+      },
+      orderBy: { created_at: "desc" }
+    })
+    .then((tickets: any[]) => tickets.map(normalizeTicket));
+}
+
+export async function getTicketQueueStats(assignedToId?: number) {
+  const [open, inProgress, unassigned, myActive] = await Promise.all([
+    prisma.ticket.count({ where: { status: "OPEN" } }),
+    prisma.ticket.count({ where: { status: "IN_PROGRESS" } }),
+    prisma.ticket.count({ where: { status: "OPEN", assigned_to_id: null } }),
+    assignedToId
+      ? prisma.ticket.count({
+          where: {
+            assigned_to_id: assignedToId,
+            status: { in: ["OPEN", "IN_PROGRESS"] }
+          }
+        })
+      : Promise.resolve(0)
+  ]);
+
+  return { open, inProgress, unassigned, myActive, waiting: unassigned };
 }
 
 export function updateTicket(

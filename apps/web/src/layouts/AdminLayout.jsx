@@ -2,70 +2,88 @@ import { Navigate, Link, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 
-const NAV_ITEMS = [
-  { to: "/admin/dashboard", label: "Tổng quan", description: "Trang điều khiển nhanh" },
-  { to: "/admin/system", label: "Hệ thống", description: "Health check và system settings" },
-  { to: "/admin/products", label: "Sản phẩm", description: "Danh mục sản phẩm" },
-  { to: "/admin/attributes", label: "Attributes", description: "Thuộc tính động và values" },
-  { to: "/admin/skus", label: "SKUs", description: "Biến thể, tồn kho và gán thuộc tính" },
-  { to: "/admin/users", label: "Người dùng", description: "Vai trò và trạng thái tài khoản" },
-  { to: "/admin/compatibility-rules", label: "Compatibility", description: "Luật tương thích linh kiện" }
+const ADMIN_NAV_ITEMS = [
+  { to: "/admin/dashboard", label: "Tổng quan", icon: "📊" },
+  { to: "/admin/system", label: "Hệ thống", icon: "⚙️" },
+  { to: "/admin/products", label: "Sản phẩm", icon: "🏷️" },
+  { to: "/admin/attributes", label: "Thuộc tính", icon: "✨" },
+  { to: "/admin/skus", label: "SKU", icon: "📦" },
+  { to: "/admin/users", label: "Người dùng", icon: "👥" },
+  { to: "/admin/payment-approval", label: "Duyệt thanh toán", icon: "💳" },
+  { to: "/admin/compatibility-rules", label: "Tương thích", icon: "🔗" },
+  { to: "/staff/orders", label: "Đơn hàng", icon: "🛒", external: true },
+  { to: "/tech/tickets", label: "Ticket KT", icon: "🎫", external: true }
 ];
 
 export function AdminLayout() {
   const location = useLocation();
   const { authState, isAuthenticated } = useAuth();
   const role = String(authState?.user?.role || "").toUpperCase();
-  const adminName = authState?.user?.fullName || authState?.user?.email || "Admin";
+  const adminName = authState?.user?.fullName || authState?.user?.email || "Quản trị viên";
+  const canAccess = role === "ADMIN";
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (role !== "ADMIN") {
+  if (!canAccess) {
     return <Navigate to="/" replace />;
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 40%), var(--color-bg)", color: "var(--color-ink)" }}>
-      <div style={{ maxWidth: 1380, margin: "0 auto", padding: "30px 24px 40px", display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: 28, alignItems: "start" }}>
-        <aside style={{ position: "sticky", top: 24, display: "grid", gap: 24, padding: 24, borderRadius: 28, background: "rgba(255, 255, 255, 0.65)", border: "1px solid rgba(255, 255, 255, 0.8)", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.04)", backdropFilter: "blur(24px) saturate(150%)", WebkitBackdropFilter: "blur(24px) saturate(150%)" }}>
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-muted)" }}>CNM Ecommerce Admin</div>
-            <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.04 }}>Bảng điều khiển</div>
-            <div style={{ color: "var(--color-muted)", lineHeight: 1.7 }}>Quản lý catalog, SKU, thuộc tính động, người dùng và cấu hình hệ thống trong cùng một khu vực rõ ràng.</div>
-          </div>
+    <div className="admin-shell">
+      <header className="admin-topbar">
+        <div className="admin-topbar__inner">
+          <Link to="/admin/dashboard" className="admin-brand">
+            <span className="admin-brand__mark">ADM</span>
+            <span>
+              <span className="admin-brand__name">PC Mall Admin</span>
+              <span className="admin-brand__sub">Trung tâm điều hành</span>
+            </span>
+          </Link>
 
-          <div style={{ display: "grid", gap: 6, padding: 18, borderRadius: 22, background: "linear-gradient(145deg, rgba(37, 99, 235, 0.1), rgba(139, 92, 246, 0.1))" }}>
-            <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--color-muted)" }}>Đăng nhập với</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{adminName}</div>
-            <div style={{ color: "var(--color-muted)" }}>Quyền truy cập: {role}</div>
-          </div>
+          <nav className="admin-nav" aria-label="Admin navigation">
+            {ADMIN_NAV_ITEMS.map((item) => {
+              const isActive = !item.external && location.pathname.startsWith(item.to);
+              const className = `admin-nav__link${isActive ? " admin-nav__link--active" : ""}`;
 
-          <nav style={{ display: "grid", gap: 10 }}>
-            {NAV_ITEMS.map((item) => {
-              const isActive = location.pathname === item.to;
+              if (item.external) {
+                return (
+                  <a key={item.to} href={item.to} className={className}>
+                    <span className="admin-nav__icon" aria-hidden>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </a>
+                );
+              }
 
               return (
-                <Link key={item.to} to={item.to} style={{ display: "grid", gap: 4, padding: "14px 16px", borderRadius: 18, textDecoration: "none", border: isActive ? "1px solid rgba(37, 99, 235, 0.2)" : "1px solid transparent", background: isActive ? "rgba(37, 99, 235, 0.1)" : "transparent", color: "var(--color-ink)", transition: "0.2s ease" }}>
-                  <span style={{ fontWeight: 700 }}>{item.label}</span>
-                  <span style={{ fontSize: 14, color: "var(--color-muted)" }}>{item.description}</span>
+                <Link key={item.to} to={item.to} className={className}>
+                  <span className="admin-nav__icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  {item.label}
                 </Link>
               );
             })}
           </nav>
 
-          <div style={{ display: "grid", gap: 10 }}>
-            <Link to="/" style={{ display: "inline-flex", justifyContent: "center", padding: "12px 16px", borderRadius: 999, border: "1px solid var(--color-line)", color: "var(--color-ink)", textDecoration: "none", background: "var(--color-surface)" }}>
-              Về cửa hàng
+          <div className="admin-account">
+            <div className="admin-account__meta">
+              <div className="admin-account__name">{adminName}</div>
+              <div className="admin-account__role">Quản trị viên</div>
+            </div>
+            <Link to="/" className="admin-account__link">
+              Cửa hàng
             </Link>
           </div>
-        </aside>
+        </div>
+      </header>
 
-        <main style={{ minWidth: 0 }}>
-          <Outlet />
-        </main>
-      </div>
+      <main className="admin-content">
+        <Outlet />
+      </main>
     </div>
   );
 }

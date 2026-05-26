@@ -8,13 +8,32 @@ function normalizeListParams(params = {}) {
   return {
     categoryId: params.category_id ? Number(params.category_id) : null,
     brandId: params.brand_id ? Number(params.brand_id) : null,
-    minPrice: params.min_price !== undefined && params.min_price !== "" ? Number(params.min_price) : null,
-    maxPrice: params.max_price !== undefined && params.max_price !== "" ? Number(params.max_price) : null,
+    minPrice: params.min_price !== undefined && params.min_price !== "" ? Number(String(params.min_price).replace(/[^0-9]/g, "")) : null,
+    maxPrice: params.max_price !== undefined && params.max_price !== "" ? Number(String(params.max_price).replace(/[^0-9]/g, "")) : null,
     keyword: String(params.keyword || params.search || "").trim() || null,
     attributeValueIds: normalizeAttributeValueIds(params.attribute_value_ids || params.attributeValueIds || []),
+    sort: String(params.sort || "newest").trim().toLowerCase(),
     page: toPositiveNumber(params.page, 1),
     limit: Math.min(toPositiveNumber(params.limit, 12), 50)
   };
+}
+
+function resolveSortClause(sort, config) {
+  const priceExpr = config.skus
+    ? `COALESCE(MIN(s.${config.skus.price}), p.${config.products.price || "price"})`
+    : `p.${config.products.price}`;
+
+  switch (sort) {
+    case "price_asc":
+      return `${priceExpr} ASC`;
+    case "price_desc":
+      return `${priceExpr} DESC`;
+    case "name_asc":
+      return `p.${config.products.name} ASC`;
+    case "newest":
+    default:
+      return `p.${config.products.id} DESC`;
+  }
 }
 
 function normalizeCompareIds(rawIds) {
@@ -137,11 +156,12 @@ function createListConditions(filters, config) {
   }
 
   if (filters.keyword) {
-    clauses.push(`(p.${config.products.name} LIKE CONCAT('%', ?, '%')${config.products.slug ? ` OR p.${config.products.slug} LIKE CONCAT('%', ?, '%')` : ""})`);
+    clauses.push(`(p.${config.products.name} LIKE CONCAT('%', ?, '%')${config.products.slug ? ` OR p.${config.products.slug} LIKE CONCAT('%', ?, '%')` : ""} OR c.${config.categories.name || "name"} LIKE CONCAT('%', ?, '%'))`);
     params.push(filters.keyword);
     if (config.products.slug) {
       params.push(filters.keyword);
     }
+    params.push(filters.keyword);
   }
 
   if (filters.attributeValueIds.length > 0 && config.skus && config.skuAttributes) {
@@ -162,6 +182,25 @@ function createListConditions(filters, config) {
     whereSql: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
     params
   };
+}
+
+function normalizeProductImageUrl(rawUrl, categoryName, productName) {
+  const url = String(rawUrl || "").trim();
+  if (!url || (url.startsWith("data:image") && url.length < 1000)) {
+    const label = encodeURIComponent(
+      String(categoryName || productName || "PC Mall")
+        .trim()
+        .slice(0, 24) || "PC Mall"
+    );
+    return `https://placehold.co/600x400/f1f5f9/334155?text=${label}`;
+  }
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/")) {
+    return url;
+  }
+  if (url.startsWith("assets/") || url.startsWith("media/")) {
+    return `/${url}`;
+  }
+  return `/media/${url}`;
 }
 
 function mapVariantRow(row) {
@@ -190,6 +229,7 @@ async function getProducts(params = {}) {
   const skuJoin = config.skus ? `LEFT JOIN ${config.skus.table} s ON s.${config.skus.productId} = p.${config.products.id}` : "";
   const priceExpr = config.skus ? `COALESCE(MIN(s.${config.skus.price}), p.${config.products.price || "price"})` : `p.${config.products.price}`;
   const imageExpr = config.skus?.imageUrl ? `MIN(s.${config.skus.imageUrl})` : "NULL";
+  const orderBySql = resolveSortClause(filters.sort, config);
 
   const [items, totalRows] = await Promise.all([
     query(
@@ -209,7 +249,7 @@ async function getProducts(params = {}) {
         ${skuJoin}
         ${whereSql}
         GROUP BY p.${config.products.id}
-        ORDER BY p.${config.products.id} DESC
+        ORDER BY ${orderBySql}
         LIMIT ${safeLimit} OFFSET ${safeOffset}
       `,
       whereParams
@@ -228,9 +268,13 @@ async function getProducts(params = {}) {
   ]);
 
   const totalItems = Number(totalRows[0]?.total_items || 0);
+  const normalizedItems = items.map((item) => ({
+    ...item,
+    image_url: normalizeProductImageUrl(item.image_url, item.category_name, item.product_name)
+  }));
 
   return {
-    items,
+    items: normalizedItems,
     pagination: {
       page: filters.page,
       limit: filters.limit,
@@ -243,7 +287,8 @@ async function getProducts(params = {}) {
       min_price: filters.minPrice,
       max_price: filters.maxPrice,
       keyword: filters.keyword,
-      attribute_value_ids: filters.attributeValueIds
+      attribute_value_ids: filters.attributeValueIds,
+      sort: filters.sort
     }
   };
 }
@@ -386,7 +431,10 @@ async function getProductDetail(idOrSlug) {
       }
     }
 
-    variants = Array.from(variantsMap.values());
+    variants = Array.from(variantsMap.values()).map((variant) => ({
+      ...variant,
+      image_url: normalizeProductImageUrl(variant.image_url, product.category_name, product.product_name)
+    }));
   }
 
   if (variants.length === 0) {
@@ -401,10 +449,13 @@ async function getProductDetail(idOrSlug) {
     }];
   }
 
-  return {
+  const primaryImage = variants[0]?.image_url || null;
+
+  const result = {
     product_id: product.product_id,
     product_name: product.product_name,
     slug: product.slug,
+    image_url: normalizeProductImageUrl(primaryImage, product.category_name, product.product_name),
     description: product.description,
     brand: {
       id: product.brand_id,
@@ -416,6 +467,19 @@ async function getProductDetail(idOrSlug) {
     },
     variants
   };
+
+  // Build top-level attributes array from the first variant's specs for frontend compatibility
+  const primaryVariant = variants[0];
+  if (primaryVariant && Array.isArray(primaryVariant.specs)) {
+    result.attributes = primaryVariant.specs.map(s => ({
+      key: s.attribute_name,
+      value: s.attribute_value
+    }));
+  } else {
+    result.attributes = [];
+  }
+
+  return result;
 }
 
 async function compareProducts(rawIds) {

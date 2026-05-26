@@ -76,6 +76,33 @@ const cancelOrder = asyncHandler(async (req, res) => {
   return sendSuccess(res, "Order canceled successfully", result);
 });
 
+const uploadPaymentProof = asyncHandler(async (req, res) => {
+  const result = await ordersService.uploadPaymentProof(req.user.id, req.params.orderId, req.file);
+  await recordAuditLog({
+    actorUserId: req.user?.id,
+    actorRole: req.user?.role,
+    action: "PAYMENT_PROOF_UPLOADED",
+    entityType: "ORDER",
+    entityId: req.params.orderId,
+    description: `Customer uploaded payment proof for order #${req.params.orderId}`
+  });
+  return sendSuccess(res, "Payment proof uploaded successfully", result);
+});
+
+const approvePaymentProof = asyncHandler(async (req, res) => {
+  const result = await ordersService.approvePaymentProof(req.user, req.params.orderId, req.body);
+  await recordAuditLog({
+    actorUserId: req.user?.id,
+    actorRole: req.user?.role,
+    action: "PAYMENT_APPROVED",
+    entityType: "ORDER",
+    entityId: req.params.orderId,
+    description: `Admin approved payment for order #${req.params.orderId}`,
+    metadata: { approved: req.body.approved }
+  });
+  return sendSuccess(res, "Payment proof processed successfully", result);
+});
+
 module.exports = {
   createOrderFromCart,
   getMyOrders,
@@ -83,5 +110,7 @@ module.exports = {
   getOrderDetail,
   updateOrderStatus,
   markOrderPaid,
-  cancelOrder
+  cancelOrder,
+  uploadPaymentProof,
+  approvePaymentProof
 };

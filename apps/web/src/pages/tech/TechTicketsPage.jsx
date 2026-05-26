@@ -1,65 +1,125 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 
-import { addTicketMessage, getManageTickets, getTicketDetail, updateTicket } from "../../services/ticket.service";
 import { useAuth } from "../../hooks/useAuth";
+import {
+  addTicketMessage,
+  getManageTickets,
+  getTicketDetail,
+  getTicketStats,
+  updateTicket
+} from "../../services/ticket.service";
+import {
+  TICKET_REPLY_TEMPLATES,
+  getTicketPriorityMeta,
+  getTicketStatusMeta,
+  isTechSender,
+  translateTicketText
+} from "../../utils/ticketTech";
 
-const STATUS_OPTIONS = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const STATUS_OPTIONS = ["", "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+const PRIORITY_OPTIONS = ["", "LOW", "MEDIUM", "HIGH", "URGENT"];
+const SCOPE_OPTIONS = [
+  { value: "UNASSIGNED", label: "Chưa giao" },
+  { value: "ASSIGNED", label: "Được giao cho tôi" },
+  { value: "ALL", label: "Tất cả" }
+];
 
-function getErrorMessage(error, fallbackMessage) {
+function getErrorMessage(error, fallback) {
   if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || fallbackMessage;
+    return error.response?.data?.message || fallback;
   }
+  return error?.message || fallback;
+}
 
-  return error.message || fallbackMessage;
+function getEnvelopeData(response, fallback) {
+  if (response && typeof response === "object" && "data" in response) {
+    return response.data ?? fallback;
+  }
+  return response ?? fallback;
+}
+
+function formatDate(value) {
+  if (!value) return "Không rõ";
+  return new Date(value).toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+}
+
+function formatTime(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 }
 
 export function TechTicketsPage() {
   const { authState } = useAuth();
+  const currentUserId = authState?.user?.id;
+  const techName = authState?.user?.fullName || "Nhân viên kỹ thuật";
+
   const [tickets, setTickets] = useState([]);
+  const [stats, setStats] = useState(null);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
-  const [scope, setScope] = useState("ASSIGNED");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const [scope, setScope] = useState("UNASSIGNED");
+  const [keyword, setKeyword] = useState("");
   const [replyMessage, setReplyMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const messagesEndRef = useRef(null);
 
-  const currentUserId = authState?.user?.id;
-  const selectedStatus = useMemo(() => selectedTicket?.status || "OPEN", [selectedTicket]);
-  const selectedPriority = useMemo(() => selectedTicket?.priority || "MEDIUM", [selectedTicket]);
+  const loadStats = useCallback(async () => {
+    try {
+      const response = await getTicketStats();
+      setStats(getEnvelopeData(response, null));
+    } catch {
+      setStats(null);
+    }
+  }, []);
+
+  const loadTickets = useCallback(async () => {
+    try {
+      setLoading(true);
+      setErrorMessage("");
+      const response = await getManageTickets({
+        scope,
+        status: statusFilter || undefined,
+        priority: priorityFilter || undefined,
+        keyword: keyword.trim() || undefined
+      });
+      const list = getEnvelopeData(response, []);
+      const normalized = Array.isArray(list) ? list : [];
+      setTickets(normalized);
+
+      if (normalized.length === 0) {
+        setSelectedTicketId(null);
+        setSelectedTicket(null);
+        return;
+      }
+
+      if (!normalized.some((item) => item.id === selectedTicketId)) {
+        setSelectedTicketId(normalized[0].id);
+      }
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Không thể tải danh sách ticket."));
+    } finally {
+      setLoading(false);
+    }
+  }, [scope, statusFilter, priorityFilter, keyword, selectedTicketId]);
 
   useEffect(() => {
-    async function loadTickets() {
-      try {
-        setLoading(true);
-        setErrorMessage("");
-        const response = await getManageTickets({ scope, status: statusFilter || undefined });
-        const nextTickets = response?.data || [];
-        setTickets(nextTickets);
-
-        if (nextTickets.length > 0) {
-          const nextSelectedId = selectedTicketId && nextTickets.some((ticket) => ticket.id === selectedTicketId)
-            ? selectedTicketId
-            : nextTickets[0].id;
-          setSelectedTicketId(nextSelectedId);
-        } else {
-          setSelectedTicketId(null);
-          setSelectedTicket(null);
-        }
-      } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Không thể tải danh sách ticket kỹ thuật"));
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadTickets();
-  }, [scope, statusFilter, selectedTicketId]);
+    loadStats();
+  }, [loadTickets, loadStats]);
 
   useEffect(() => {
     if (!selectedTicketId) {
@@ -67,239 +127,360 @@ export function TechTicketsPage() {
       return;
     }
 
-    async function loadTicketDetail() {
+    async function loadDetail() {
       try {
         setDetailLoading(true);
-        setErrorMessage("");
         const response = await getTicketDetail(selectedTicketId);
-        setSelectedTicket(response?.data || null);
+        setSelectedTicket(getEnvelopeData(response, null));
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết ticket"));
+        setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết ticket."));
       } finally {
         setDetailLoading(false);
       }
     }
 
-    loadTicketDetail();
+    loadDetail();
   }, [selectedTicketId]);
 
-  function updateTicketInList(updatedTicket) {
-    setTickets((prevState) => prevState.map((item) => (item.id === updatedTicket.id ? { ...item, ...updatedTicket } : item)));
-    setSelectedTicket(updatedTicket);
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedTicket?.messages, actionLoading]);
+
+  useEffect(() => {
+    if (!successMessage) return undefined;
+    const timer = setTimeout(() => setSuccessMessage(""), 3500);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
+
+  const filteredCount = tickets.length;
+  const selectedStatusMeta = getTicketStatusMeta(selectedTicket?.status);
+  const selectedPriorityMeta = getTicketPriorityMeta(selectedTicket?.priority);
+  const canAssignSelf = selectedTicket && !selectedTicket.assignedToId;
+  const isMine = Number(selectedTicket?.assignedToId) === Number(currentUserId);
+
+  async function refreshAll() {
+    await Promise.all([loadTickets(), loadStats()]);
+    if (selectedTicketId) {
+      const response = await getTicketDetail(selectedTicketId);
+      setSelectedTicket(getEnvelopeData(response, null));
+    }
   }
 
-  async function handleAssignToMe() {
-    if (!selectedTicket || !currentUserId) {
-      return;
-    }
+  async function handleAction(type, data) {
+    if (!selectedTicket) return;
 
     try {
-      setActionLoading("assign");
+      setActionLoading(type);
       setErrorMessage("");
-      setSuccessMessage("");
-      const response = await updateTicket(selectedTicket.id, {
-        assignedToId: currentUserId,
-        status: selectedTicket.status === "OPEN" ? "IN_PROGRESS" : selectedTicket.status
-      });
-      updateTicketInList(response?.data || null);
-      setSuccessMessage("Đã nhận xử lý ticket thành công");
+      let response;
+
+      if (type === "reply") {
+        response = await addTicketMessage(selectedTicket.id, { message: data });
+        setReplyMessage("");
+      } else {
+        response = await updateTicket(selectedTicket.id, data);
+      }
+
+      const updated = getEnvelopeData(response, null);
+      setSelectedTicket(updated);
+      setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? { ...t, ...updated } : t)));
+      setSuccessMessage(type === "reply" ? "Đã gửi phản hồi." : "Đã cập nhật ticket.");
+      await loadStats();
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể nhận xử lý ticket"));
+      setErrorMessage(getErrorMessage(error, "Không thể thực hiện thao tác."));
     } finally {
       setActionLoading("");
     }
   }
 
-  async function handleStatusChange(nextStatus) {
-    if (!selectedTicket) {
-      return;
-    }
-
-    try {
-      setActionLoading("status");
-      setErrorMessage("");
-      setSuccessMessage("");
-      const response = await updateTicket(selectedTicket.id, { status: nextStatus });
-      updateTicketInList(response?.data || null);
-      setSuccessMessage("Đã cập nhật trạng thái ticket");
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể cập nhật trạng thái ticket"));
-    } finally {
-      setActionLoading("");
-    }
+  function handleSendReply() {
+    const trimmed = replyMessage.trim();
+    if (!trimmed) return;
+    handleAction("reply", trimmed);
   }
 
-  async function handlePriorityChange(nextPriority) {
-    if (!selectedTicket) {
-      return;
-    }
-
-    try {
-      setActionLoading("priority");
-      setErrorMessage("");
-      setSuccessMessage("");
-      const response = await updateTicket(selectedTicket.id, { priority: nextPriority });
-      updateTicketInList(response?.data || null);
-      setSuccessMessage("Đã cập nhật mức ưu tiên ticket");
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể cập nhật mức ưu tiên"));
-    } finally {
-      setActionLoading("");
-    }
+  function handleAssignToMe() {
+    handleAction("assign", { assignedToId: currentUserId, status: "IN_PROGRESS" });
   }
 
-  async function handleSendReply() {
-    if (!selectedTicket || !replyMessage.trim()) {
-      return;
-    }
-
-    try {
-      setActionLoading("reply");
-      setErrorMessage("");
-      setSuccessMessage("");
-      const response = await addTicketMessage(selectedTicket.id, { message: replyMessage });
-      updateTicketInList(response?.data || null);
-      setReplyMessage("");
-      setSuccessMessage("Đã gửi phản hồi kỹ thuật");
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể gửi phản hồi"));
-    } finally {
-      setActionLoading("");
-    }
+  function handleResolve() {
+    handleAction("resolve", { status: "RESOLVED" });
   }
+
+  function handleClose() {
+    if (!confirm("Đóng ticket này? Khách sẽ không thể tiếp tục trao đổi.")) return;
+    handleAction("close", { status: "CLOSED" });
+  }
+
+  const statusTabs = useMemo(
+    () => [
+      { value: "", label: "Tất cả" },
+      { value: "OPEN", label: "Mới" },
+      { value: "IN_PROGRESS", label: "Đang xử lý" },
+      { value: "RESOLVED", label: "Đã giải quyết" }
+    ],
+    []
+  );
 
   return (
-    <div style={{ display: "grid", gap: 22 }}>
-      <section style={{ padding: 28, borderRadius: 28, background: "linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(239, 246, 255, 0.9))", border: "1px solid rgba(59, 130, 246, 0.12)", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)", display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.16em", color: "#1d4ed8" }}>Technical support workflow</div>
-        <h1 style={{ margin: 0, fontSize: 42, lineHeight: 1 }}>Xử lý ticket hỗ trợ kỹ thuật</h1>
-        <p style={{ margin: 0, maxWidth: 860, color: "#1e3a8a", lineHeight: 1.7 }}>
-          Theo dõi ticket được giao, cập nhật trạng thái xử lý và trao đổi trực tiếp với khách hàng thông qua lịch sử message trong ticket.
-        </p>
+    <div className="tech-tickets">
+      <section className="tech-page-head">
+        <div>
+          <p className="tech-eyebrow">Nhân viên kỹ thuật</p>
+          <h1>Xử lý yêu cầu hỗ trợ</h1>
+          <p>Tiếp nhận ticket, phản hồi khách hàng và cập nhật trạng thái xử lý tại một màn hình chuyên nghiệp.</p>
+        </div>
+        <div className="tech-head-actions">
+          <button type="button" className="tech-btn tech-btn--secondary" onClick={refreshAll} disabled={Boolean(actionLoading)}>
+            Làm mới
+          </button>
+          <Link to="/tech/compatibility" className="tech-btn tech-btn--secondary">
+            Luật tương thích
+          </Link>
+        </div>
       </section>
 
-      {errorMessage ? <div style={{ padding: 14, borderRadius: 16, background: "#fff1f2", border: "1px solid #fecdd3", color: "#be123c" }}>{errorMessage}</div> : null}
-      {successMessage ? <div style={{ padding: 14, borderRadius: 16, background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#047857" }}>{successMessage}</div> : null}
+      <section className="tech-metrics" aria-label="Tổng quan ticket">
+        <div className="tech-metric">
+          <span>Chưa giao</span>
+          <strong>{stats?.unassigned ?? "—"}</strong>
+          <small>Ticket OPEN chưa có người nhận</small>
+        </div>
+        <div className="tech-metric">
+          <span>Đang xử lý (tôi)</span>
+          <strong>{stats?.myActive ?? "—"}</strong>
+          <small>Ticket được giao cho bạn</small>
+        </div>
+        <div className="tech-metric">
+          <span>Đang hiển thị</span>
+          <strong>{filteredCount}</strong>
+          <small>{SCOPE_OPTIONS.find((s) => s.value === scope)?.label || scope}</small>
+        </div>
+      </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "380px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
-        <section style={{ padding: 18, borderRadius: 22, background: "#ffffff", border: "1px solid #e5e7eb", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)", display: "grid", gap: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <select value={scope} onChange={(event) => setScope(event.target.value)} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #d1d5db", background: "#ffffff" }}>
-              <option value="ASSIGNED">Ticket được giao</option>
-              <option value="ALL">Tất cả ticket kỹ thuật</option>
+      {errorMessage ? <div className="tech-alert tech-alert--error">{errorMessage}</div> : null}
+      {successMessage ? <div className="tech-alert tech-alert--success">{successMessage}</div> : null}
+
+      <div className="tech-workspace">
+        <aside className="tech-tickets-panel">
+          <div className="tech-panel-head">
+            <div>
+              <h2>Danh sách ticket</h2>
+              <p>Chọn ticket để xem hội thoại và thao tác.</p>
+            </div>
+          </div>
+
+          <div className="tech-filters">
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Tìm tiêu đề, mô tả..."
+              aria-label="Tìm ticket"
+            />
+            <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Phạm vi ticket">
+              {SCOPE_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
             </select>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #d1d5db", background: "#ffffff" }}>
-              <option value="">Tất cả trạng thái</option>
-              {STATUS_OPTIONS.map((item) => (
-                <option key={item} value={item}>{item}</option>
+            <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} aria-label="Lọc ưu tiên">
+              <option value="">Mọi ưu tiên</option>
+              {PRIORITY_OPTIONS.filter(Boolean).map((p) => (
+                <option key={p} value={p}>
+                  {getTicketPriorityMeta(p).label}
+                </option>
               ))}
             </select>
           </div>
 
-          {loading ? (
-            <div>Đang tải ticket...</div>
-          ) : tickets.length === 0 ? (
-            <div style={{ color: "#6b7280" }}>Không có ticket phù hợp với bộ lọc hiện tại.</div>
-          ) : (
-            <div style={{ display: "grid", gap: 12 }}>
-              {tickets.map((ticket) => {
+          <div className="tech-status-tabs">
+            {statusTabs.map((tab) => (
+              <button
+                key={tab.value || "all"}
+                type="button"
+                className={statusFilter === tab.value ? "is-active" : ""}
+                onClick={() => setStatusFilter(tab.value)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="tech-ticket-list">
+            {loading ? (
+              <div className="tech-empty">Đang tải ticket...</div>
+            ) : tickets.length === 0 ? (
+              <div className="tech-empty">Không có ticket phù hợp bộ lọc.</div>
+            ) : (
+              tickets.map((ticket) => {
+                const statusMeta = getTicketStatusMeta(ticket.status);
+                const priorityMeta = getTicketPriorityMeta(ticket.priority);
                 const isActive = ticket.id === selectedTicketId;
 
                 return (
-                  <button key={ticket.id} type="button" onClick={() => setSelectedTicketId(ticket.id)} style={{ textAlign: "left", display: "grid", gap: 8, width: "100%", padding: 16, borderRadius: 18, border: isActive ? "1px solid #bfdbfe" : "1px solid #e5e7eb", background: isActive ? "#eff6ff" : "#ffffff" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                      <div style={{ fontWeight: 800 }}>#{ticket.id}</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#1d4ed8" }}>{ticket.status}</div>
+                  <button
+                    key={ticket.id}
+                    type="button"
+                    className={`tech-ticket-row${isActive ? " tech-ticket-row--active" : ""}`}
+                    onClick={() => setSelectedTicketId(ticket.id)}
+                  >
+                    <div className="tech-ticket-row__top">
+                      <span className={`tech-status tech-status--${statusMeta.tone}`}>{statusMeta.label}</span>
+                      <span className={`tech-priority tech-priority--${priorityMeta.tone}`}>{priorityMeta.label}</span>
                     </div>
-                    <div style={{ fontWeight: 700 }}>{ticket.title}</div>
-                    <div style={{ fontSize: 14, color: "#6b7280" }}>Khách: {ticket.reporter?.fullName || ticket.reporter?.email || `User #${ticket.reporterId}`}</div>
-                    <div style={{ fontSize: 14, color: "#6b7280" }}>Phụ trách: {ticket.assignee?.fullName || "Chưa phân công"}</div>
+                    <span className="tech-ticket-row__title">#{ticket.id} · {translateTicketText(ticket.title)}</span>
+                    <span className="tech-ticket-row__meta">{ticket.reporter?.fullName || ticket.reporter?.email || "Khách"}</span>
+                    <span className="tech-ticket-row__date">{formatDate(ticket.createdAt)}</span>
                   </button>
                 );
-              })}
-            </div>
-          )}
-        </section>
+              })
+            )}
+          </div>
+        </aside>
 
-        <section style={{ padding: 22, borderRadius: 24, background: "#ffffff", border: "1px solid #e5e7eb", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)", display: "grid", gap: 18 }}>
+        <main className="tech-detail">
           {detailLoading ? (
-            <div>Đang tải chi tiết ticket...</div>
+            <section className="tech-card tech-empty">Đang tải chi tiết ticket...</section>
           ) : !selectedTicket ? (
-            <div style={{ color: "#6b7280" }}>Chọn một ticket để bắt đầu xử lý.</div>
+            <section className="tech-card tech-empty">
+              <div className="tech-detail-empty__icon">🎫</div>
+              Chọn một ticket để bắt đầu xử lý.
+            </section>
           ) : (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", flexWrap: "wrap" }}>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "#6b7280" }}>Ticket kỹ thuật</div>
-                  <h2 style={{ margin: 0, fontSize: 34 }}>{selectedTicket.title}</h2>
-                  <div style={{ color: "#6b7280" }}>Người gửi: {selectedTicket.reporter?.fullName || selectedTicket.reporter?.email || `User #${selectedTicket.reporterId}`}</div>
-                </div>
-                <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
-                  <div style={{ padding: "8px 12px", borderRadius: 999, background: "#eff6ff", color: "#1d4ed8", fontWeight: 700 }}>{selectedTicket.status}</div>
-                  <div style={{ color: "#6b7280" }}>Ưu tiên: {selectedTicket.priority}</div>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 18 }}>
-                <div style={{ display: "grid", gap: 14 }}>
-                  <div style={{ padding: 18, borderRadius: 18, background: "#f9fafb", border: "1px solid #e5e7eb", display: "grid", gap: 12 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>Nội dung ticket và lịch sử trao đổi</div>
-                    <div style={{ display: "grid", gap: 12 }}>
-                      {selectedTicket.messages?.map((message) => {
-                        const senderRole = String(message.sender?.role || "CUSTOMER").toUpperCase();
-                        const isTechSide = ["ADMIN", "TECH_STAFF", "TECHNICIAN"].includes(senderRole);
-
-                        return (
-                          <div key={message.id} style={{ justifySelf: isTechSide ? "end" : "start", maxWidth: "80%", padding: 14, borderRadius: 16, background: isTechSide ? "#dbeafe" : "#f3f4f6", border: `1px solid ${isTechSide ? "#bfdbfe" : "#e5e7eb"}`, display: "grid", gap: 6 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: isTechSide ? "#1d4ed8" : "#374151" }}>
-                              {message.sender?.fullName || message.sender?.email || "Khách hàng"}
-                            </div>
-                            <div style={{ lineHeight: 1.7 }}>{message.message}</div>
-                            <div style={{ fontSize: 12, color: "#6b7280" }}>{message.createdAt ? new Date(message.createdAt).toLocaleString("vi-VN") : "N/A"}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+              <section className="tech-ticket-summary tech-card">
+                <div className="tech-ticket-summary__main">
+                  <span className={`tech-status tech-status--${selectedStatusMeta.tone}`}>{selectedStatusMeta.label}</span>
+                  <p>
+                    Ticket #{selectedTicket.id} · {formatDate(selectedTicket.createdAt)}
+                  </p>
+                  <h2>{translateTicketText(selectedTicket.title)}</h2>
+                  <div className="tech-ticket-desc">{translateTicketText(selectedTicket.description)}</div>
+                  <div className="tech-reporter">
+                    <strong>{selectedTicket.reporter?.fullName || "Khách hàng"}</strong>
+                    <span>{selectedTicket.reporter?.email}</span>
+                    {selectedTicket.assignee ? (
+                      <span>
+                        Người xử lý: <strong>{selectedTicket.assignee.fullName}</strong>
+                      </span>
+                    ) : (
+                      <span className="tech-reporter__warn">Chưa có người nhận xử lý</span>
+                    )}
                   </div>
+                </div>
+                <div className="tech-ticket-summary__side">
+                  <span>Ưu tiên</span>
+                  <strong className={`tech-priority tech-priority--${selectedPriorityMeta.tone}`}>{selectedPriorityMeta.label}</strong>
+                </div>
+                <div className="tech-action-row">
+                  {canAssignSelf ? (
+                    <button type="button" className="tech-btn tech-btn--primary" onClick={handleAssignToMe} disabled={Boolean(actionLoading)}>
+                      Nhận xử lý
+                    </button>
+                  ) : null}
+                  {isMine && selectedTicket.status !== "RESOLVED" && selectedTicket.status !== "CLOSED" ? (
+                    <button type="button" className="tech-btn tech-btn--success" onClick={handleResolve} disabled={Boolean(actionLoading)}>
+                      Đánh dấu đã giải quyết
+                    </button>
+                  ) : null}
+                  {selectedTicket.status !== "CLOSED" ? (
+                    <button type="button" className="tech-btn tech-btn--secondary" onClick={handleClose} disabled={Boolean(actionLoading)}>
+                      Đóng ticket
+                    </button>
+                  ) : null}
+                </div>
+              </section>
 
-                  <div style={{ padding: 18, borderRadius: 18, background: "#f9fafb", border: "1px solid #e5e7eb", display: "grid", gap: 12 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>Phản hồi kỹ thuật</div>
-                    <textarea value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)} rows={5} placeholder="Cập nhật tình trạng kiểm tra, hướng dẫn khách kiểm tra thêm hoặc thông báo kết quả xử lý..." style={{ width: "100%", padding: 14, borderRadius: 14, border: "1px solid #d1d5db", resize: "vertical" }} />
-                    <div>
-                      <button type="button" onClick={handleSendReply} disabled={actionLoading === "reply"} style={{ padding: "12px 16px", borderRadius: 14, border: "none", background: "#2563eb", color: "#ffffff", fontWeight: 700 }}>
+              <section className="tech-card tech-ticket-thread">
+                <div className="tech-section-title">
+                  <h3>Hội thoại hỗ trợ</h3>
+                  <p>Phản hồi khách và theo dõi tiến độ xử lý.</p>
+                </div>
+
+                <div className="tech-messages">
+                  {(selectedTicket.messages || []).length === 0 ? (
+                    <div className="tech-empty tech-empty--compact">Chưa có tin nhắn — gửi phản hồi đầu tiên cho khách.</div>
+                  ) : (
+                    (selectedTicket.messages || []).map((m) => {
+                      const isTech = isTechSender(m.sender?.role);
+                      return (
+                        <div key={m.id} className={`tech-message-row${isTech ? " tech-message-row--tech" : ""}`}>
+                          <div className="tech-message-meta">
+                            {m.sender?.fullName || "Người dùng"} · {formatTime(m.createdAt)}
+                          </div>
+                          <div className={`tech-message-bubble${isTech ? " tech-message-bubble--tech" : ""}`}>
+                            {translateTicketText(m.message)}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {selectedTicket.status !== "CLOSED" ? (
+                  <>
+                    <div className="tech-quick-replies">
+                      {TICKET_REPLY_TEMPLATES.map((text) => (
+                        <button key={text} type="button" className="tech-quick-reply-btn" onClick={() => setReplyMessage(text)}>
+                          {text.slice(0, 48)}…
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="tech-compose-controls">
+                      <select
+                        value={selectedTicket.status}
+                        onChange={(e) => handleAction("status", { status: e.target.value })}
+                        disabled={Boolean(actionLoading)}
+                        aria-label="Trạng thái ticket"
+                      >
+                        {STATUS_OPTIONS.filter(Boolean).map((s) => (
+                          <option key={s} value={s}>
+                            {getTicketStatusMeta(s).label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={selectedTicket.priority}
+                        onChange={(e) => handleAction("priority", { priority: e.target.value })}
+                        disabled={Boolean(actionLoading)}
+                        aria-label="Ưu tiên ticket"
+                      >
+                        {PRIORITY_OPTIONS.filter(Boolean).map((p) => (
+                          <option key={p} value={p}>
+                            {getTicketPriorityMeta(p).label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="tech-compose">
+                      <textarea
+                        value={replyMessage}
+                        onChange={(e) => setReplyMessage(e.target.value)}
+                        placeholder={`Phản hồi với tư cách ${techName}...`}
+                        rows={3}
+                        disabled={Boolean(actionLoading)}
+                      />
+                      <button
+                        type="button"
+                        className="tech-btn tech-btn--primary"
+                        onClick={handleSendReply}
+                        disabled={!replyMessage.trim() || actionLoading === "reply"}
+                      >
                         {actionLoading === "reply" ? "Đang gửi..." : "Gửi phản hồi"}
                       </button>
                     </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 14 }}>
-                  <div style={{ padding: 18, borderRadius: 18, background: "#f9fafb", border: "1px solid #e5e7eb", display: "grid", gap: 12 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>Phân công và xử lý</div>
-                    <div style={{ color: "#6b7280" }}>Kỹ thuật đang phụ trách: {selectedTicket.assignee?.fullName || "Chưa phân công"}</div>
-                    <button type="button" onClick={handleAssignToMe} disabled={actionLoading === "assign"} style={{ padding: "12px 16px", borderRadius: 14, border: "none", background: "#111827", color: "#ffffff", fontWeight: 700 }}>
-                      {actionLoading === "assign" ? "Đang nhận..." : "Nhận xử lý ticket"}
-                    </button>
-                  </div>
-
-                  <div style={{ padding: 18, borderRadius: 18, background: "#f9fafb", border: "1px solid #e5e7eb", display: "grid", gap: 12 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>Cập nhật ticket</div>
-                    <select value={selectedStatus} onChange={(event) => handleStatusChange(event.target.value)} style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid #d1d5db", background: "#ffffff" }}>
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                    <select value={selectedPriority} onChange={(event) => handlePriorityChange(event.target.value)} style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid #d1d5db", background: "#ffffff" }}>
-                      {PRIORITY_OPTIONS.map((priority) => (
-                        <option key={priority} value={priority}>{priority}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
+                  </>
+                ) : (
+                  <p className="tech-help">Ticket đã đóng — không thể gửi thêm tin nhắn.</p>
+                )}
+              </section>
             </>
           )}
-        </section>
+        </main>
       </div>
     </div>
   );

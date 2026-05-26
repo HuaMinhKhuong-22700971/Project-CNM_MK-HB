@@ -15,7 +15,37 @@ export async function getOrderDetail(orderId) {
   return response.data;
 }
 
+export async function uploadPaymentProof(orderId, file) {
+  const formData = new FormData();
+  formData.append("paymentProof", file);
+
+  const response = await httpClient.post(`/orders/${orderId}/payment-proof`, formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return response.data;
+}
+
+export async function approvePaymentProof(orderId, payload) {
+  const response = await httpClient.patch(`/orders/${orderId}/payment-proof/approve`, payload);
+  return response.data;
+}
+
 export async function createVnpayUrl(orderId, payload = {}) {
   const response = await httpClient.post(`/orders/${orderId}/vnpay-url`, payload);
+  return response.data;
+}
+
+export async function confirmMockPayment(orderId) {
+  const response = await httpClient.post(`/orders/${orderId}/mock-pay`);
+  return response.data;
+}
+
+export async function cancelMockPayment(orderId) {
+  const response = await httpClient.post(`/orders/${orderId}/mock-cancel`);
+  return response.data;
+}
+
+export async function cancelMyOrder(orderId) {
+  const response = await httpClient.post(`/orders/${orderId}/cancel`);
   return response.data;
 }

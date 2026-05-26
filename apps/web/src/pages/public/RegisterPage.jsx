@@ -1,269 +1,318 @@
-import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-import { register, googleLoginMock } from "../../services/auth.service";
+import { checkEmailAvailability, googleLoginMock, register } from "../../services/auth.service";
 import { setAuthState } from "../../store/authStore";
+import { runCustomerOnboarding } from "../../utils/customerOnboarding";
 
-const ICON_SIZE = 18;
-
-// SVG Icons
-const UserIcon = () => (
-  <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
-  </svg>
-);
-
-const EmailIcon = () => (
-  <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
-  </svg>
-);
-
-const PhoneIcon = () => (
-  <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-  </svg>
-);
-
-const LockIcon = () => (
-  <svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-  </svg>
-);
-
-const GoogleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24">
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-  </svg>
-);
-
-const SECTION_STYLE = {
-  padding: "56px",
-  background: "rgba(255, 255, 255, 0.85)",
-  backdropFilter: "blur(40px) saturate(180%)",
-  borderRadius: "40px",
-  border: "1px solid rgba(255, 255, 255, 0.7)",
-  boxShadow: "0 25px 80px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,1)",
-  animation: "fadeInBlur 0.8s cubic-bezier(0.16, 1, 0.3, 1) both"
-};
-
-const inputWrapperStyle = { position: "relative", display: "flex", alignItems: "center" };
-const inputIconStyle = { position: "absolute", left: "20px", color: "var(--market-primary)", opacity: 0.6, pointerEvents: "none" };
-const inputStyle = { padding: "18px 24px 18px 54px", borderRadius: "20px", border: "1px solid rgba(0, 0, 0, 0.08)", outline: "none", width: "100%", background: "rgba(248, 250, 252, 0.8)", color: "#1e293b", fontSize: "15px", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)", fontWeight: "600" };
-
-function validateForm(values) {
-  const errors = {};
-  if (!String(values.full_name || "").trim()) errors.full_name = "Vui lòng nhập họ tên";
-  if (!String(values.email || "").trim()) errors.email = "Vui lòng nhập email";
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(values.email).trim())) errors.email = "Email không hợp lệ";
-  if (!String(values.password || "").trim()) errors.password = "Vui lòng nhập mật khẩu";
-  else if (String(values.password).length < 6) errors.password = "Mật khẩu tối thiểu 6 ký tự";
-  return errors;
+function getErrorMessage(error, fallback) {
+  if (axios.isAxiosError(error)) {
+    return error.response?.data?.message || fallback;
+  }
+  return error?.message || fallback;
 }
 
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
+function validatePhone(phone) {
+  return /^(0|\+84)(\d{9,10})$/.test(String(phone).replace(/\s/g, ""));
+}
+
+function getPasswordStrength(password) {
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+  const labels = ["Yếu", "Trung bình", "Khá", "Mạnh", "Rất mạnh"];
+  const tones = ["#ef4444", "#f97316", "#f59e0b", "#22c55e", "#047857"];
+  return { score, label: labels[score], tone: tones[score], percent: Math.max(12, score * 25) };
+}
+
+function Spinner() {
+  return <span className="register-spinner" aria-hidden />;
+}
+
+function EyeIcon({ hidden }) {
+  return hidden ? "Hiện" : "Ẩn";
+}
+
+const initialForm = {
+  full_name: "",
+  email: "",
+  phone: "",
+  password: "",
+  confirmPassword: ""
+};
+
 export function RegisterPage() {
-  const [formValues, setFormValues] = useState({ full_name: "", email: "", phone: "", password: "" });
-  const [errors, setErrors] = useState({});
+  const navigate = useNavigate();
+  const [formValues, setFormValues] = useState(initialForm);
+  const [touched, setTouched] = useState({});
+  const [emailStatus, setEmailStatus] = useState({ checking: false, exists: false, message: "" });
   const [status, setStatus] = useState({ type: "", message: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showMockGoogle, setShowMockGoogle] = useState(false);
-  const [isManualEntry, setIsManualEntry] = useState(false);
-  const [manualEntry, setManualEntry] = useState({ fullName: "", email: "" });
-  const navigate = useNavigate();
 
-  function handleChange(e) {
-    const { name, value } = e.target;
-    setFormValues(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: "" }));
-  }
+  const strength = useMemo(() => getPasswordStrength(formValues.password), [formValues.password]);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const nextErrors = validateForm(formValues);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+  const errors = useMemo(() => {
+    const next = {};
+    if (!formValues.full_name.trim()) next.full_name = "Vui lòng nhập họ tên";
+    if (!formValues.email.trim()) next.email = "Vui lòng nhập email";
+    else if (!validateEmail(formValues.email)) next.email = "Email không hợp lệ";
+    else if (emailStatus.exists) next.email = "Email đã tồn tại";
+    if (!formValues.phone.trim()) next.phone = "Vui lòng nhập số điện thoại";
+    else if (!validatePhone(formValues.phone)) next.phone = "Số điện thoại không hợp lệ";
+    if (!formValues.password) next.password = "Vui lòng nhập mật khẩu";
+    else if (formValues.password.length < 8) next.password = "Mật khẩu tối thiểu 8 ký tự";
+    if (!formValues.confirmPassword) next.confirmPassword = "Vui lòng xác nhận mật khẩu";
+    else if (formValues.confirmPassword !== formValues.password) next.confirmPassword = "Mật khẩu xác nhận không khớp";
+    return next;
+  }, [emailStatus.exists, formValues]);
 
-    try {
-      setIsSubmitting(true);
-      await register({ ...formValues });
-      setStatus({ type: "success", message: "Chào mừng bạn! Đang chuyển hướng..." });
-      setTimeout(() => navigate("/login"), 2000);
-    } catch (error) {
-      setStatus({ type: "error", message: axios.isAxiosError(error) ? (error.response?.data?.message || "Đăng ký thất bại") : error.message });
-    } finally { setIsSubmitting(false); }
-  }
+  const canSubmit = Object.keys(errors).length === 0 && !emailStatus.checking && !isSubmitting;
 
-  const handleGoogleMockSelection = async (account) => {
-    setShowMockGoogle(false);
-    setIsManualEntry(false);
-    try {
-      setIsSubmitting(true);
-      setStatus({ type: "info", message: `Đang xác thực qua Google với tài khoản ${account.email}...` });
-      const response = await googleLoginMock({ email: account.email, fullName: account.fullName });
-      
-      // Update global auth state to ensure session is recognized system-wide
-      if (response.success && response.data) {
-        setAuthState({
-          accessToken: response.data.accessToken,
-          user: response.data.user
-        });
-        
-        setStatus({ type: "success", message: "Đăng nhập Google thành công! Chào mừng bạn." });
-        setTimeout(() => navigate("/"), 1500);
-      } else {
-        throw new Error("Dữ liệu trả về không hợp lệ");
+  useEffect(() => {
+    const email = formValues.email.trim();
+    if (!validateEmail(email)) {
+      setEmailStatus({ checking: false, exists: false, message: "" });
+      return;
+    }
+
+    let cancelled = false;
+    setEmailStatus({ checking: true, exists: false, message: "Đang kiểm tra email..." });
+    const timer = setTimeout(async () => {
+      try {
+        const response = await checkEmailAvailability(email);
+        const exists = Boolean(response?.data?.exists);
+        if (!cancelled) {
+          setEmailStatus({
+            checking: false,
+            exists,
+            message: exists ? "Email đã tồn tại" : "Email có thể sử dụng"
+          });
+        }
+      } catch (_error) {
+        if (!cancelled) setEmailStatus({ checking: false, exists: false, message: "" });
       }
-    } catch (error) {
-      setStatus({ type: "error", message: "Lỗi đăng nhập Google giả lập." });
-    } finally { setIsSubmitting(false); }
-  };
+    }, 450);
 
-  const handleManualGoogleSubmit = (e) => {
-    e.preventDefault();
-    if (!manualEntry.email || !manualEntry.fullName) return;
-    handleGoogleMockSelection(manualEntry);
-  };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [formValues.email]);
+
+  function handleChange(event) {
+    const { name, value } = event.target;
+    setFormValues((prev) => ({ ...prev, [name]: value }));
+    setStatus({ type: "", message: "" });
+  }
+
+  async function completeLoginFromResponse(response) {
+    const payload = response?.data || response;
+    const accessToken = payload?.accessToken || "";
+    const refreshToken = payload?.refreshToken || "";
+    const user = payload?.user || null;
+    if (!accessToken || !user) return false;
+
+    setAuthState({ accessToken, refreshToken, user });
+    try {
+      await runCustomerOnboarding();
+    } catch (_error) {
+      // Registration should not fail because guest migration failed.
+    }
+    return true;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setTouched({ full_name: true, email: true, phone: true, password: true, confirmPassword: true });
+    if (!canSubmit) return;
+
+    try {
+      setIsSubmitting(true);
+      const response = await register({
+        full_name: formValues.full_name.trim(),
+        email: formValues.email.trim(),
+        phone: formValues.phone.trim(),
+        password: formValues.password
+      });
+      const loggedIn = await completeLoginFromResponse(response);
+      setStatus({ type: "success", message: loggedIn ? "Tạo tài khoản thành công. Đang đăng nhập..." : "Tạo tài khoản thành công. Đang chuyển đến đăng nhập..." });
+      setTimeout(() => navigate(loggedIn ? "/" : "/login"), 900);
+    } catch (error) {
+      setStatus({ type: "error", message: getErrorMessage(error, "Đăng ký thất bại") });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleGoogleDemo(account) {
+    try {
+      setIsSubmitting(true);
+      const response = await googleLoginMock(account);
+      await completeLoginFromResponse(response);
+      setStatus({ type: "success", message: "Đăng nhập Google demo thành công." });
+      setTimeout(() => navigate("/"), 700);
+    } catch (error) {
+      setStatus({ type: "error", message: getErrorMessage(error, "Không thể đăng nhập Google demo") });
+    } finally {
+      setIsSubmitting(false);
+      setShowMockGoogle(false);
+    }
+  }
+
+  function fieldError(name) {
+    return touched[name] ? errors[name] : "";
+  }
 
   return (
-    <div style={{ 
-      minHeight: "100vh", display: "grid", placeItems: "center", padding: "80px 20px",
-      background: "radial-gradient(circle at 0% 0%, rgba(32, 120, 202, 0.08) 0%, transparent 50%), radial-gradient(circle at 100% 100%, rgba(15, 76, 63, 0.08) 0%, transparent 50%)"
-    }}>
+    <div className="register-page">
       <style>{`
-        @keyframes fadeInBlur { from { opacity: 0; transform: translateY(30px); filter: blur(10px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
-        @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        input:focus { background: #fff !important; border-color: var(--market-primary) !important; box-shadow: 0 10px 25px rgba(32, 120, 202, 0.1); transform: translateY(-2px); }
-        .social-btn:hover { background: #fff !important; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .mock-account:hover { background: #f8fafc; }
+        .register-page { min-height: 100vh; padding: 56px 20px; background: radial-gradient(circle at 0% 0%, rgba(32, 120, 202, 0.09), transparent 44%), radial-gradient(circle at 100% 100%, rgba(15, 76, 63, 0.08), transparent 44%), #f8fafc; }
+        .register-shell { max-width: 1160px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1fr); gap: 24px; align-items: stretch; }
+        .register-brand, .register-form-card { border-radius: 32px; border: 1px solid rgba(255,255,255,0.75); background: rgba(255,255,255,0.86); box-shadow: 0 24px 70px rgba(15,23,42,0.08); backdrop-filter: blur(34px) saturate(180%); }
+        .register-brand { padding: 38px; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,64,175,0.88)); color: #fff; display: grid; align-content: space-between; gap: 28px; min-height: 620px; }
+        .register-form-card { padding: 34px; }
+        .register-field { display: grid; gap: 8px; }
+        .register-field label { font-size: 13px; color: #475569; font-weight: 900; }
+        .register-input-wrap { position: relative; }
+        .register-input { width: 100%; height: 52px; box-sizing: border-box; border-radius: 16px; border: 1px solid #dbe4ef; background: #f8fafc; padding: 0 48px 0 16px; outline: none; color: #0f172a; font-size: 15px; font-weight: 700; transition: 0.2s ease; }
+        .register-input:focus { background: #fff; border-color: var(--market-primary); box-shadow: 0 0 0 4px rgba(32,120,202,0.12); }
+        .register-toggle { position: absolute; right: 10px; top: 8px; height: 36px; border: none; background: #e2e8f0; color: #334155; border-radius: 10px; font-weight: 900; cursor: pointer; padding: 0 10px; }
+        .register-error { color: #dc2626; font-size: 12px; font-weight: 800; min-height: 16px; }
+        .register-hint { color: #64748b; font-size: 12px; font-weight: 750; min-height: 16px; }
+        .register-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .register-benefit { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16); }
+        .register-trust { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+        .register-trust span { padding: 12px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 12px; font-weight: 900; color: #334155; text-align: center; }
+        .register-submit { height: 56px; border-radius: 18px; border: none; background: linear-gradient(135deg, var(--market-primary), #1e40af); color: #fff; font-size: 16px; font-weight: 950; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 16px 30px rgba(32,120,202,0.22); }
+        .register-submit:disabled { opacity: 0.68; cursor: not-allowed; box-shadow: none; }
+        .register-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.45); border-top-color: #fff; animation: registerSpin 0.8s linear infinite; }
+        @keyframes registerSpin { to { transform: rotate(360deg); } }
+        @media (max-width: 980px) { .register-shell { grid-template-columns: 1fr; } .register-brand { min-height: auto; } }
+        @media (max-width: 640px) { .register-page { padding: 20px 12px 48px; } .register-form-card, .register-brand { padding: 22px; border-radius: 24px; } .register-grid-2, .register-trust { grid-template-columns: 1fr; } }
       `}</style>
 
-      {/* Mock Google Account Selector */}
-      {showMockGoogle && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", zIndex: 2000 }}>
-           <div style={{ background: "#fff", padding: 32, borderRadius: 24, width: "100%", maxWidth: 420, animation: "scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
-              <div style={{ textAlign: "center", marginBottom: 24 }}>
-                 <GoogleIcon />
-                 <h3 style={{ fontSize: 20, fontWeight: 800, marginTop: 12 }}>{isManualEntry ? "Nhập tài khoản của bạn" : "Chọn một tài khoản"}</h3>
-                 <p style={{ color: "#64748b", fontSize: 14 }}>để tiếp tục tới **PC Mall**</p>
+      {showMockGoogle ? (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "grid", placeItems: "center", zIndex: 20, padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 430, borderRadius: 24, background: "#fff", padding: 24, boxShadow: "0 30px 80px rgba(15,23,42,0.24)" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 22 }}>Chọn tài khoản Google demo</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              {[
+                { fullName: "Minh Khương", email: "khuong.minh@example.com" },
+                { fullName: "Test User", email: "tester.pro@gmail.com" }
+              ].map((account) => (
+                <button key={account.email} type="button" onClick={() => handleGoogleDemo(account)} style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff", textAlign: "left", cursor: "pointer" }}>
+                  <strong>{account.fullName}</strong>
+                  <div style={{ color: "#64748b", fontSize: 13 }}>{account.email}</div>
+                </button>
+              ))}
+              <button type="button" onClick={() => setShowMockGoogle(false)} style={{ height: 42, borderRadius: 12, border: "none", background: "#f1f5f9", fontWeight: 900, cursor: "pointer" }}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="register-shell">
+        <aside className="register-brand">
+          <div>
+            <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.14em", color: "#bfdbfe", fontWeight: 950 }}>PC Mall Account</div>
+            <h1 style={{ margin: "12px 0 16px", fontSize: 46, lineHeight: 1.02, letterSpacing: "-0.04em" }}>Tài khoản mua linh kiện thông minh</h1>
+            <p style={{ margin: 0, color: "#dbeafe", lineHeight: 1.7, fontSize: 16 }}>Lưu cấu hình PC, theo dõi đơn hàng, bảo hành điện tử và nhận hỗ trợ kỹ thuật nhanh hơn.</p>
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            {[
+              ["Theo dõi đơn hàng", "Cập nhật trạng thái thanh toán, giao hàng và lịch sử mua."],
+              ["Bảo hành điện tử", "Tra cứu QR warranty, gửi yêu cầu bảo hành và theo dõi tiến trình."],
+              ["PC Builder cloud", "Lưu cấu hình PC và đồng bộ khi đăng nhập."]
+            ].map(([title, desc]) => (
+              <div key={title} className="register-benefit">
+                <div style={{ width: 34, height: 34, borderRadius: 12, background: "#60a5fa", display: "grid", placeItems: "center", fontWeight: 950 }}>✓</div>
+                <div><strong>{title}</strong><div style={{ color: "#cbd5e1", marginTop: 3, fontSize: 13, lineHeight: 1.5 }}>{desc}</div></div>
               </div>
-
-              {!isManualEntry ? (
-                <div style={{ display: "grid", gap: 12 }}>
-                   {[
-                     { fullName: "Minh Khương", email: "khuong.minh@example.com", avatar: "MK" },
-                     { fullName: "Test User", email: "tester.pro@gmail.com", avatar: "TU" }
-                   ].map((acc, i) => (
-                     <div key={i} onClick={() => handleGoogleMockSelection(acc)} className="mock-account" style={{ display: "flex", alignItems: "center", gap: 16, padding: 16, borderRadius: 16, border: "1px solid #f1f5f9", cursor: "pointer", transition: "0.2s" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e2e8f0", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 13 }}>{acc.avatar}</div>
-                        <div style={{ flex: 1 }}>
-                           <div style={{ fontWeight: 700, fontSize: 15 }}>{acc.fullName}</div>
-                           <div style={{ fontSize: 13, color: "#64748b" }}>{acc.email}</div>
-                        </div>
-                     </div>
-                   ))}
-                   
-                   <button onClick={() => setIsManualEntry(true)} style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px", borderRadius: 16, border: "1px dashed #cbd5e1", background: "none", cursor: "pointer", transition: "0.2s", textAlign: "left", width: "100%" }} className="mock-account">
-                      <div style={{ width: 40, height: 40, borderRadius: "50%", border: "1.5px dashed #cbd5e1", display: "grid", placeItems: "center", fontSize: 20, color: "#94a3b8" }}>+</div>
-                      <div>
-                         <div style={{ fontWeight: 700, fontSize: 15, color: "#475569" }}>Sử dụng tài khoản khác</div>
-                         <div style={{ fontSize: 12, color: "#94a3b8" }}>Nhập Gmail cá nhân của bạn</div>
-                      </div>
-                   </button>
-
-                   <button onClick={() => setShowMockGoogle(false)} style={{ marginTop: 12, padding: "12px", borderRadius: 12, border: "none", background: "#f1f5f9", fontWeight: 700, cursor: "pointer" }}>Hủy bỏ</button>
-                </div>
-              ) : (
-                <form onSubmit={handleManualGoogleSubmit} style={{ display: "grid", gap: 16 }}>
-                   <div style={{ display: "grid", gap: 8 }}>
-                      <label style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginLeft: 4 }}>Họ và tên</label>
-                      <input 
-                        required
-                        placeholder="VD: Nguyễn Văn A"
-                        value={manualEntry.fullName}
-                        onChange={(e) => setManualEntry(p => ({ ...p, fullName: e.target.value }))}
-                        style={{ ...inputStyle, padding: "14px 20px" }}
-                      />
-                   </div>
-                   <div style={{ display: "grid", gap: 8 }}>
-                      <label style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginLeft: 4 }}>Email cá nhân (Gmail)</label>
-                      <input 
-                        required
-                        type="email"
-                        placeholder="user@gmail.com"
-                        value={manualEntry.email}
-                        onChange={(e) => setManualEntry(p => ({ ...p, email: e.target.value }))}
-                        style={{ ...inputStyle, padding: "14px 20px" }}
-                      />
-                   </div>
-                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-                      <button type="button" onClick={() => setIsManualEntry(false)} style={{ padding: "14px", borderRadius: 14, border: "none", background: "#f1f5f9", fontWeight: 700, cursor: "pointer" }}>Quay lại</button>
-                      <button type="submit" style={{ padding: "14px", borderRadius: 14, border: "none", background: "var(--market-primary)", color: "#fff", fontWeight: 700, cursor: "pointer" }}>Tiếp tục</button>
-                   </div>
-                </form>
-              )}
-           </div>
-        </div>
-      )}
-
-      <div style={{ maxWidth: 640, width: "100%", ...SECTION_STYLE }}>
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-           <h1 style={{ fontSize: 42, fontWeight: 950, marginBottom: 12, letterSpacing: "-0.05em", color: "#0f172a" }}>Gia nhập PC Mall</h1>
-           <p style={{ color: "#64748b", fontSize: 17 }}>Hệ sinh thái linh kiện cao cấp từ chuyên gia.</p>
-        </div>
-
-        {status.message && (
-            <div style={{ 
-                padding: "16px 20px", borderRadius: 16, marginBottom: 32, textAlign: "center", fontSize: 14, fontWeight: 700, 
-                background: status.type === "error" ? "#fef2f2" : (status.type === "success" ? "#f0fdf4" : "#eff6ff"),
-                color: status.type === "error" ? "#991b1b" : (status.type === "success" ? "#166534" : "#1e40af")
-            }}>
-                {status.message}
-            </div>
-        )}
-
-        <div style={{ marginBottom: 32 }}>
-           <button type="button" onClick={() => { setShowMockGoogle(true); setIsManualEntry(false); }} className="social-btn" style={{ width: "100%", height: 64, borderRadius: 20, border: "1.5px solid #f1f5f9", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, cursor: "pointer", transition: "all 0.2s" }}>
-             <GoogleIcon /> <span style={{ fontWeight: 800, fontSize: 16, color: "#1e293b" }}>Tiếp tục đăng ký với Google</span>
-           </button>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 32 }}>
-            <div style={{ flex: 1, height: 1, background: "#f1f5f9" }}></div>
-            <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em" }}>Hoặc dùng Email</span>
-            <div style={{ flex: 1, height: 1, background: "#f1f5f9" }}></div>
-        </div>
-
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 24 }}>
-          <div style={inputWrapperStyle}>
-            <div style={inputIconStyle}><UserIcon /></div>
-            <input name="full_name" value={formValues.full_name} onChange={handleChange} placeholder="Họ và tên" style={inputStyle} />
+            ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            <div style={inputWrapperStyle}>
-              <div style={inputIconStyle}><EmailIcon /></div>
-              <input name="email" type="email" value={formValues.email} onChange={handleChange} placeholder="Email" style={inputStyle} />
-            </div>
-            <div style={inputWrapperStyle}>
-              <div style={inputIconStyle}><PhoneIcon /></div>
-              <input name="phone" value={formValues.phone} onChange={handleChange} placeholder="Số điện thoại" style={inputStyle} />
-            </div>
-          </div>
-          
-          <div style={inputWrapperStyle}>
-            <div style={inputIconStyle}><LockIcon /></div>
-            <input name="password" type="password" value={formValues.password} onChange={handleChange} placeholder="Mật khẩu" style={inputStyle} />
+        </aside>
+
+        <main className="register-form-card">
+          <div style={{ display: "grid", gap: 8, marginBottom: 22 }}>
+            <h2 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.03em", color: "#0f172a" }}>Tạo tài khoản</h2>
+            <p style={{ margin: 0, color: "#64748b" }}>Đăng ký để bắt đầu mua sắm và quản lý bảo hành tại PC Mall.</p>
           </div>
 
-          <button type="submit" disabled={isSubmitting} style={{ height: 68, borderRadius: 22, border: "none", background: "linear-gradient(135deg, var(--market-primary), #1e40af)", color: "#fff", fontSize: 17, fontWeight: 900, cursor: isSubmitting ? "not-allowed" : "pointer", boxShadow: "0 10px 25px rgba(32, 120, 202, 0.2)", marginTop: 8 }}>
-            {isSubmitting ? "Đang xử lý..." : "HOÀN TẤT ĐĂNG KÝ"}
+          {status.message ? (
+            <div style={{ padding: "13px 15px", borderRadius: 14, marginBottom: 16, background: status.type === "success" ? "#ecfdf5" : "#fef2f2", color: status.type === "success" ? "#047857" : "#b91c1c", border: `1px solid ${status.type === "success" ? "#bbf7d0" : "#fecaca"}`, fontWeight: 850 }}>
+              {status.message}
+            </div>
+          ) : null}
+
+          <button type="button" onClick={() => setShowMockGoogle(true)} disabled={isSubmitting} style={{ width: "100%", height: 52, borderRadius: 16, border: "1px solid #dbe4ef", background: "#fff", fontWeight: 900, cursor: "pointer", marginBottom: 16 }}>
+            Tiếp tục với Google <span style={{ color: "#64748b" }}>(DEMO)</span>
           </button>
-          <p style={{ textAlign: "center", color: "#64748b", fontSize: 16 }}>Đã có tài khoản? <Link to="/login" style={{ color: "var(--market-primary)", fontWeight: 800 }}>Đăng nhập</Link></p>
-        </form>
+
+          <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+            <div className="register-field">
+              <label>Họ và tên</label>
+              <input className="register-input" name="full_name" value={formValues.full_name} onChange={handleChange} onBlur={() => setTouched((p) => ({ ...p, full_name: true }))} placeholder="Nguyễn Văn A" />
+              <div className="register-error">{fieldError("full_name")}</div>
+            </div>
+
+            <div className="register-grid-2">
+              <div className="register-field">
+                <label>Email</label>
+                <input className="register-input" name="email" type="email" value={formValues.email} onChange={handleChange} onBlur={() => setTouched((p) => ({ ...p, email: true }))} placeholder="you@example.com" />
+                <div className={fieldError("email") ? "register-error" : "register-hint"}>{fieldError("email") || emailStatus.message}</div>
+              </div>
+              <div className="register-field">
+                <label>Số điện thoại</label>
+                <input className="register-input" name="phone" value={formValues.phone} onChange={handleChange} onBlur={() => setTouched((p) => ({ ...p, phone: true }))} placeholder="0901234567" />
+                <div className="register-error">{fieldError("phone")}</div>
+              </div>
+            </div>
+
+            <div className="register-grid-2">
+              <div className="register-field">
+                <label>Mật khẩu</label>
+                <div className="register-input-wrap">
+                  <input className="register-input" name="password" type={showPassword ? "text" : "password"} value={formValues.password} onChange={handleChange} onBlur={() => setTouched((p) => ({ ...p, password: true }))} placeholder="Tối thiểu 8 ký tự" />
+                  <button className="register-toggle" type="button" onClick={() => setShowPassword((p) => !p)}><EyeIcon hidden={!showPassword} /></button>
+                </div>
+                <div style={{ height: 7, borderRadius: 999, background: "#e2e8f0", overflow: "hidden" }}><div style={{ width: `${strength.percent}%`, height: "100%", background: strength.tone }} /></div>
+                <div className={fieldError("password") ? "register-error" : "register-hint"}>{fieldError("password") || `Độ mạnh: ${strength.label}`}</div>
+              </div>
+              <div className="register-field">
+                <label>Xác nhận mật khẩu</label>
+                <div className="register-input-wrap">
+                  <input className="register-input" name="confirmPassword" type={showConfirmPassword ? "text" : "password"} value={formValues.confirmPassword} onChange={handleChange} onBlur={() => setTouched((p) => ({ ...p, confirmPassword: true }))} placeholder="Nhập lại mật khẩu" />
+                  <button className="register-toggle" type="button" onClick={() => setShowConfirmPassword((p) => !p)}><EyeIcon hidden={!showConfirmPassword} /></button>
+                </div>
+                <div className="register-error">{fieldError("confirmPassword")}</div>
+              </div>
+            </div>
+
+            <div className="register-trust">
+              <span>SSL secure</span>
+              <span>Bảo hành điện tử</span>
+              <span>Hỗ trợ 24/7</span>
+            </div>
+
+            <button className="register-submit" type="submit" disabled={!canSubmit}>
+              {isSubmitting ? <><Spinner /> Đang tạo tài khoản...</> : "Tạo tài khoản PC Mall"}
+            </button>
+            <p style={{ margin: 0, textAlign: "center", color: "#64748b" }}>Đã có tài khoản? <Link to="/login" style={{ color: "var(--market-primary)", fontWeight: 900 }}>Đăng nhập</Link></p>
+          </form>
+        </main>
       </div>
     </div>
   );
 }
+

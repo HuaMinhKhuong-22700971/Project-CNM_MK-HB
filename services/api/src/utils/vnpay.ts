@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import { env } from "../config/env";
 
 export function getVnTime(): string {
@@ -70,18 +70,21 @@ export function generateVnpayUrl(
 }
 
 export function verifyVnpayReturn(vnp_Params: any) {
-  const secureHash = vnp_Params["vnp_SecureHash"];
+  const params = { ...(vnp_Params || {}) };
+  const secureHash = params["vnp_SecureHash"];
   const secretKey = env.vnpayHashSecret || process.env.VNPAY_HASH_SECRET;
 
-  delete vnp_Params["vnp_SecureHash"];
-  delete vnp_Params["vnp_SecureHashType"];
+  if (!secureHash || !secretKey) {
+    return false;
+  }
 
-  vnp_Params = sortObject(vnp_Params);
-  const signData = new URLSearchParams(vnp_Params).toString();
-  const hmac = crypto.createHmac("sha512", secretKey as string);
+  delete params["vnp_SecureHash"];
+  delete params["vnp_SecureHashType"];
+
+  const sortedParams = sortObject(params);
+  const signData = new URLSearchParams(sortedParams).toString();
+  const hmac = crypto.createHmac("sha512", secretKey);
   const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
   return secureHash === signed;
 }
-
-// Trigger reload

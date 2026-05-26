@@ -11,6 +11,7 @@ import { AdminProductsPage } from "../pages/admin/AdminProductsPage";
 import { AdminSkusPage } from "../pages/admin/AdminSkusPage";
 import { AdminSystemPage } from "../pages/admin/AdminSystemPage";
 import { AdminUsersPage } from "../pages/admin/AdminUsersPage";
+import { AdminPaymentApprovalPage } from "../pages/admin/AdminPaymentApprovalPage";
 import { AiChatPage } from "../pages/public/AiChatPage";
 import { CartPage } from "../pages/public/CartPage";
 import { CheckoutPage } from "../pages/public/CheckoutPage";
@@ -33,7 +34,9 @@ import { TicketListPage } from "../pages/public/TicketListPage";
 import { WarrantiesPage } from "../pages/public/WarrantiesPage";
 import { InformationPage } from "../pages/public/InformationPage";
 import { StaffOrdersPage } from "../pages/staff/StaffOrdersPage";
+import StaffChatPage from "../pages/staff/StaffChatPage";
 import { TechTicketsPage } from "../pages/tech/TechTicketsPage";
+import { TechCompatibilityPage } from "../pages/tech/TechCompatibilityPage";
 import { routeConfig } from "./routeConfig";
 
 export function AppRouter() {
@@ -78,7 +81,8 @@ export function AppRouter() {
       element: <StaffLayout />,
       children: [
         { index: true, element: <Navigate to={routeConfig.staff.orders} replace /> },
-        { path: routeConfig.staff.orders.replace(/^\/staff\//, ""), element: <StaffOrdersPage /> }
+        { path: routeConfig.staff.orders.replace(/^\/staff\//, ""), element: <StaffOrdersPage /> },
+        { path: routeConfig.staff.chat.replace(/^\/staff\//, ""), element: <StaffChatPage /> }
       ]
     },
     {
@@ -86,7 +90,8 @@ export function AppRouter() {
       element: <TechLayout />,
       children: [
         { index: true, element: <Navigate to={routeConfig.tech.tickets} replace /> },
-        { path: routeConfig.tech.tickets.replace(/^\/tech\//, ""), element: <TechTicketsPage /> }
+        { path: routeConfig.tech.tickets.replace(/^\/tech\//, ""), element: <TechTicketsPage /> },
+        { path: routeConfig.tech.compatibility.replace(/^\/tech\//, ""), element: <TechCompatibilityPage /> }
       ]
     },
     {
@@ -100,7 +105,8 @@ export function AppRouter() {
         { path: routeConfig.admin.attributes.replace(/^\/admin\//, ""), element: <AdminAttributesPage /> },
         { path: routeConfig.admin.skus.replace(/^\/admin\//, ""), element: <AdminSkusPage /> },
         { path: routeConfig.admin.compatibilityRules.replace(/^\/admin\//, ""), element: <AdminCompatibilityRulesPage /> },
-        { path: routeConfig.admin.users.replace(/^\/admin\//, ""), element: <AdminUsersPage /> }
+        { path: routeConfig.admin.users.replace(/^\/admin\//, ""), element: <AdminUsersPage /> },
+        { path: routeConfig.admin.paymentApproval.replace(/^\/admin\//, ""), element: <AdminPaymentApprovalPage /> }
       ]
     },
     { path: "*", element: <NotFoundPage /> }
