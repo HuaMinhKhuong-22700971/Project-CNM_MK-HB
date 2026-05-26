@@ -18,7 +18,7 @@ const WARRANTY_META = {
   RECEIVED: { label: "Đã tiếp nhận", tone: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
   INSPECTING: { label: "Đang kiểm tra", tone: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
   REPAIRING: { label: "Đang sửa", tone: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-  WAITING_PARTS: { label: "Chờ linh kiện", tone: "#b45309", bg: "#fff7ed", border: "#fdba74" },
+  WAITING_PARTS: { label: "Chờ linh kiện", tone: "#c2410c", bg: "#fff7ed", border: "#fdba74" },
   REPLACEMENT: { label: "Đổi mới", tone: "#0f766e", bg: "#ecfeff", border: "#99f6e4" },
   COMPLETED: { label: "Hoàn tất", tone: "#047857", bg: "#ecfdf5", border: "#bbf7d0" }
 };
@@ -41,7 +41,18 @@ function getStatusMeta(status) {
 function StatusBadge({ status }) {
   const meta = getStatusMeta(status);
   return (
-    <span style={{ display: "inline-flex", padding: "7px 12px", borderRadius: 999, background: meta.bg, border: `1px solid ${meta.border}`, color: meta.tone, fontSize: 12, fontWeight: 900 }}>
+    <span
+      style={{
+        display: "inline-flex",
+        padding: "7px 12px",
+        borderRadius: 999,
+        background: meta.bg,
+        border: `1px solid ${meta.border}`,
+        color: meta.tone,
+        fontSize: 12,
+        fontWeight: 900
+      }}
+    >
       {meta.label}
     </span>
   );
@@ -90,25 +101,34 @@ function ProductCard({ warranty, onRequest, onTrack }) {
   return (
     <article className="warranty-product-card">
       <div className="warranty-product-card__media">
-        <img src={resolveProductImage({ image_url: warranty.imageUrl, category_name: "COOLING", name: warranty.item?.productName })} alt={warranty.item?.productName || "Sản phẩm"} />
+        <img
+          src={resolveProductImage({
+            image_url: warranty.imageUrl,
+            category_name: warranty.categoryName,
+            name: warranty.item?.productName
+          })}
+          alt={warranty.item?.productName || "Sản phẩm"}
+        />
       </div>
 
       <div className="warranty-product-card__body">
         <div className="warranty-product-card__heading">
           <div>
             <h3>{warranty.item?.productName || "Sản phẩm"}</h3>
-            <p>Serial: <strong>{warranty.serialNumber || warranty.item?.sku || "—"}</strong></p>
+            <p>
+              Serial: <strong>{warranty.serialNumber || warranty.item?.sku || "—"}</strong>
+            </p>
           </div>
           <StatusBadge status={currentStatus} />
         </div>
 
         <div className="warranty-product-card__meta">
           <div>
-            <span>Còn bảo hành</span>
+            <span>Thời gian còn lại</span>
             <strong>{warranty.remainingDays ?? 0} ngày</strong>
           </div>
           <div>
-            <span>Hết hạn</span>
+            <span>Ngày hết hạn</span>
             <strong>{formatDate(warranty.endDate || warranty.expiresAt)}</strong>
           </div>
           <div>
@@ -122,12 +142,35 @@ function ProductCard({ warranty, onRequest, onTrack }) {
         </div>
 
         <div className="warranty-product-card__actions">
-          <button type="button" className="warranty-btn" onClick={() => onRequest(warranty)}>Yêu cầu bảo hành</button>
-          <button type="button" className="warranty-btn warranty-btn--light" onClick={() => onTrack(warranty)}>Theo dõi tiến trình</button>
+          <button type="button" className="warranty-btn" onClick={() => onRequest(warranty)}>
+            Yêu cầu bảo hành
+          </button>
+          <button type="button" className="warranty-btn warranty-btn--light" onClick={() => onTrack(warranty)}>
+            Theo dõi tiến trình
+          </button>
         </div>
       </div>
     </article>
   );
+}
+
+function createInitialForm(user = null, lookupValue = "") {
+  return {
+    warrantyId: "",
+    lookupValue,
+    customerName: user?.fullName || "",
+    customerPhone: user?.phone || "",
+    customerEmail: user?.email || "",
+    productName: "",
+    serialNumber: "",
+    orderId: "",
+    severity: "MEDIUM",
+    issueDescription: "",
+    extraNote: "",
+    media: [],
+    website: "",
+    startedAt: Date.now()
+  };
 }
 
 export function WarrantiesPage() {
@@ -144,21 +187,18 @@ export function WarrantiesPage() {
   const [message, setMessage] = useState({ type: "", text: "" });
   const [selectedWarranty, setSelectedWarranty] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [requestForm, setRequestForm] = useState({
-    warrantyId: "",
-    lookupValue: searchParams.get("lookup") || "",
-    customerName: authState?.user?.fullName || "",
-    customerPhone: authState?.user?.phone || "",
-    customerEmail: authState?.user?.email || "",
-    productName: "",
-    serialNumber: "",
-    orderId: "",
-    severity: "MEDIUM",
-    issueDescription: "",
-    extraNote: "",
-    media: []
-  });
+  const [requestForm, setRequestForm] = useState(createInitialForm(authState?.user, searchParams.get("lookup") || ""));
   const lastNotificationIdRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      requestForm.media.forEach((item) => {
+        if (item.previewUrl) {
+          URL.revokeObjectURL(item.previewUrl);
+        }
+      });
+    };
+  }, [requestForm.media]);
 
   async function loadDashboard(showSpinner = true) {
     if (!isAuthenticated) {
@@ -185,7 +225,7 @@ export function WarrantiesPage() {
         setMessage({ type: "info", text: nextNotifications[0].message || nextNotifications[0].title });
       }
       lastNotificationIdRef.current = nextNotifications[0]?.id || lastNotificationIdRef.current;
-    } catch (_error) {
+    } catch {
       setMessage({ type: "error", text: "Không thể tải dữ liệu bảo hành tài khoản." });
     } finally {
       setLoading(false);
@@ -229,7 +269,23 @@ export function WarrantiesPage() {
     };
   }, [requests, warranties]);
 
+  function revokeMedia(list) {
+    list.forEach((item) => {
+      if (item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    });
+  }
+
+  function resetRequestForm(nextLookupValue = "") {
+    setRequestForm((prev) => {
+      revokeMedia(prev.media);
+      return createInitialForm(authState?.user, nextLookupValue);
+    });
+  }
+
   function handleOpenRequest(warranty) {
+    resetRequestForm(warranty.warrantyCode);
     setSelectedWarranty(warranty);
     setRequestForm((prev) => ({
       ...prev,
@@ -244,19 +300,26 @@ export function WarrantiesPage() {
       severity: "MEDIUM",
       issueDescription: "",
       extraNote: "",
-      media: []
+      media: [],
+      website: "",
+      startedAt: Date.now()
     }));
   }
 
   function handleFiles(files) {
-    const normalized = Array.from(files || []).slice(0, 5).map((file) => ({
-      file,
-      name: file.name,
-      type: file.type,
-      previewUrl: file.type.startsWith("image/") || file.type.startsWith("video/") ? URL.createObjectURL(file) : null
-    }));
+    const nextFiles = Array.from(files || [])
+      .slice(0, 5)
+      .map((file) => ({
+        file,
+        name: file.name,
+        type: file.type,
+        previewUrl: file.type.startsWith("image/") || file.type.startsWith("video/") ? URL.createObjectURL(file) : null
+      }));
 
-    setRequestForm((prev) => ({ ...prev, media: normalized }));
+    setRequestForm((prev) => {
+      revokeMedia(prev.media);
+      return { ...prev, media: nextFiles };
+    });
   }
 
   async function handleLookup(event) {
@@ -285,10 +348,12 @@ export function WarrantiesPage() {
         ...requestForm,
         media: requestForm.media.map((item) => item.file)
       });
-      setMessage({ type: "success", text: "Đã gửi yêu cầu bảo hành. Bộ phận kỹ thuật sẽ tiếp nhận và cập nhật tiến trình." });
+      setMessage({ type: "success", text: "Đã gửi yêu cầu bảo hành. Bộ phận kỹ thuật sẽ tiếp nhận và cập nhật tiến trình xử lý." });
       setSelectedWarranty(null);
-      setRequestForm((prev) => ({ ...prev, issueDescription: "", extraNote: "", media: [] }));
-      if (isAuthenticated) await loadDashboard(false);
+      resetRequestForm(requestForm.lookupValue);
+      if (isAuthenticated) {
+        await loadDashboard(false);
+      }
     } catch (error) {
       setMessage({ type: "error", text: getErrorMessage(error, "Không thể gửi yêu cầu bảo hành.") });
     } finally {
@@ -296,9 +361,8 @@ export function WarrantiesPage() {
     }
   }
 
-  const activeTimeline = selectedWarranty
-    ? requests.find((item) => item.warrantyId === selectedWarranty.id)?.timeline || selectedWarranty.timeline || []
-    : requests[0]?.timeline || lookupResult?.request?.timeline || [];
+  const selectedRequest = selectedWarranty ? requests.find((item) => item.warrantyId === selectedWarranty.id) || null : null;
+  const activeTimeline = selectedRequest?.timeline || lookupResult?.request?.timeline || selectedWarranty?.timeline || [];
 
   return (
     <div className="warranty-page">
@@ -347,6 +411,7 @@ export function WarrantiesPage() {
         .warranty-notification strong { display: block; color: #0f172a; }
         .warranty-notification p { margin: 6px 0 0; color: #475569; line-height: 1.55; }
         .warranty-quick-lookup { display: grid; gap: 12px; }
+        .warranty-hidden-field { display: none !important; }
         @media (max-width: 1180px) {
           .warranty-hero, .warranty-grid { grid-template-columns: 1fr; }
           .warranty-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -363,16 +428,20 @@ export function WarrantiesPage() {
       <div className="warranty-shell">
         <section className="warranty-hero">
           <div>
-            <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.12em", color: "#93c5fd", fontWeight: 900 }}>PC Mall warranty center</div>
-            <h1 style={{ margin: "10px 0 10px", fontSize: 42, lineHeight: 1.04 }}>Dashboard bảo hành điện tử như hệ thống bán lẻ công nghệ thật</h1>
+            <div style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.12em", color: "#93c5fd", fontWeight: 900 }}>PC Mall Warranty Center</div>
+            <h1 style={{ margin: "10px 0 10px", fontSize: 42, lineHeight: 1.04 }}>Dashboard bảo hành điện tử theo workflow bán lẻ công nghệ</h1>
             <p style={{ margin: 0, color: "#cbd5e1", maxWidth: 820, lineHeight: 1.75 }}>
-              Tự động lấy sản phẩm còn bảo hành sau khi đơn hàng giao thành công, tra cứu nhanh bằng mã đơn/serial/SĐT, gửi yêu cầu với ảnh video minh chứng và theo dõi toàn bộ tiến trình xử lý.
+              Tự động lấy sản phẩm còn bảo hành sau khi đơn hàng giao thành công, tra cứu nhanh bằng mã đơn, serial hoặc số điện thoại, gửi yêu cầu với ảnh/video minh chứng và theo dõi toàn bộ tiến trình xử lý.
             </p>
           </div>
           <div className="warranty-hero__actions">
-            <Link to="/orders" className="warranty-btn warranty-btn--light" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>Đơn hàng của tôi</Link>
+            <Link to="/orders" className="warranty-btn warranty-btn--light" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+              Đơn hàng của tôi
+            </Link>
             {!isAuthenticated ? (
-              <Link to="/login" className="warranty-btn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>Đăng nhập để quản lý tập trung</Link>
+              <Link to="/login" className="warranty-btn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+                Đăng nhập để quản lý tập trung
+              </Link>
             ) : null}
           </div>
         </section>
@@ -388,7 +457,16 @@ export function WarrantiesPage() {
         ) : null}
 
         {message.text ? (
-          <div style={{ padding: 16, borderRadius: 18, background: message.type === "success" ? "#ecfdf5" : message.type === "error" ? "#fef2f2" : "#eff6ff", border: `1px solid ${message.type === "success" ? "#bbf7d0" : message.type === "error" ? "#fecaca" : "#bfdbfe"}`, color: message.type === "success" ? "#047857" : message.type === "error" ? "#b91c1c" : "#1d4ed8", fontWeight: 800 }}>
+          <div
+            style={{
+              padding: 16,
+              borderRadius: 18,
+              background: message.type === "success" ? "#ecfdf5" : message.type === "error" ? "#fef2f2" : "#eff6ff",
+              border: `1px solid ${message.type === "success" ? "#bbf7d0" : message.type === "error" ? "#fecaca" : "#bfdbfe"}`,
+              color: message.type === "success" ? "#047857" : message.type === "error" ? "#b91c1c" : "#1d4ed8",
+              fontWeight: 800
+            }}
+          >
             {message.text}
           </div>
         ) : null}
@@ -409,7 +487,7 @@ export function WarrantiesPage() {
                     </div>
                   ) : (
                     <div style={{ padding: 34, textAlign: "center", background: "#f8fafc", borderRadius: 18, color: "#64748b" }}>
-                      Chưa có sản phẩm bảo hành. Hệ thống sẽ tự tạo warranty record khi đơn hàng được giao thành công.
+                      Chưa có sản phẩm bảo hành khả dụng. Khi đơn hàng chuyển sang trạng thái đã giao, hệ thống sẽ tự kích hoạt bảo hành điện tử ngay lập tức.
                     </div>
                   )
                 ) : (
@@ -420,7 +498,7 @@ export function WarrantiesPage() {
               </div>
             </section>
 
-            {(selectedWarranty || requests[0] || lookupResult?.request) ? (
+            {(selectedWarranty || selectedRequest || lookupResult?.request) ? (
               <section className="warranty-card">
                 <div className="warranty-card__body">
                   <h2 style={{ margin: "0 0 18px", fontSize: 26 }}>Theo dõi tiến trình</h2>
@@ -428,31 +506,35 @@ export function WarrantiesPage() {
                     <div className="warranty-request-summary" style={{ marginBottom: 16 }}>
                       <span>Sản phẩm đang theo dõi</span>
                       <strong>{selectedWarranty.item?.productName}</strong>
-                      <div style={{ marginTop: 6, color: "#475569" }}>Mã bảo hành: {selectedWarranty.warrantyCode} · Serial: {selectedWarranty.serialNumber || selectedWarranty.item?.sku || "—"}</div>
+                      <div style={{ marginTop: 6, color: "#475569" }}>
+                        Mã bảo hành: {selectedWarranty.warrantyCode} · Serial: {selectedWarranty.serialNumber || selectedWarranty.item?.sku || "—"}
+                      </div>
                     </div>
                   ) : null}
                   <Timeline timeline={activeTimeline} />
 
-                  {selectedWarranty ? (
+                  {selectedRequest ? (
                     <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
-                      {requests.filter((item) => item.warrantyId === selectedWarranty.id).slice(0, 1).map((request) => (
-                        <div key={request.id} style={{ display: "grid", gap: 12 }}>
-                          <div className="warranty-request-summary">
-                            <span>Yêu cầu hiện tại</span>
-                            <strong>{request.statusLabel}</strong>
-                            <div style={{ marginTop: 6, color: "#475569" }}>{request.issueDescription}</div>
-                          </div>
-                          {request.attachments?.length ? (
-                            <div className="warranty-attachments">
-                              {request.attachments.map((attachment) => (
-                                <article key={attachment.id}>
-                                  <AttachmentPreview file={{ name: attachment.fileUrl.split("/").pop(), type: attachment.mimeType, previewUrl: attachment.fileUrl }} />
-                                </article>
-                              ))}
-                            </div>
-                          ) : null}
+                      <div className="warranty-request-summary">
+                        <span>Yêu cầu hiện tại</span>
+                        <strong>{selectedRequest.statusLabel}</strong>
+                        <div style={{ marginTop: 6, color: "#475569" }}>{selectedRequest.issueDescription}</div>
+                      </div>
+                      {selectedRequest.attachments?.length ? (
+                        <div className="warranty-attachments">
+                          {selectedRequest.attachments.map((attachment) => (
+                            <article key={attachment.id}>
+                              <AttachmentPreview
+                                file={{
+                                  name: attachment.fileUrl.split("/").pop(),
+                                  type: attachment.mimeType,
+                                  previewUrl: attachment.fileUrl
+                                }}
+                              />
+                            </article>
+                          ))}
                         </div>
-                      ))}
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -465,8 +547,15 @@ export function WarrantiesPage() {
               <div className="warranty-card__body">
                 <h2 style={{ margin: "0 0 14px", fontSize: 24 }}>Tra cứu nhanh</h2>
                 <form className="warranty-quick-lookup" onSubmit={handleLookup}>
-                  <input className="warranty-input" value={lookupCode} onChange={(event) => setLookupCode(event.target.value)} placeholder="Mã đơn, serial, số điện thoại, mã bảo hành..." />
-                  <button className="warranty-btn" disabled={lookupLoading}>{lookupLoading ? "Đang tra cứu..." : "Kiểm tra bảo hành"}</button>
+                  <input
+                    className="warranty-input"
+                    value={lookupCode}
+                    onChange={(event) => setLookupCode(event.target.value)}
+                    placeholder="Mã đơn, serial, số điện thoại, mã bảo hành..."
+                  />
+                  <button className="warranty-btn" disabled={lookupLoading}>
+                    {lookupLoading ? "Đang tra cứu..." : "Kiểm tra bảo hành"}
+                  </button>
                 </form>
 
                 {lookupResult ? (
@@ -487,8 +576,17 @@ export function WarrantiesPage() {
                 <h2 style={{ margin: "0 0 14px", fontSize: 24 }}>Gửi yêu cầu bảo hành</h2>
                 <form onSubmit={handleSubmitRequest} style={{ display: "grid", gap: 12 }}>
                   <div className="warranty-form-grid">
-                    <input className="warranty-input" value={requestForm.lookupValue} onChange={(event) => setRequestForm((prev) => ({ ...prev, lookupValue: event.target.value }))} placeholder="Mã bảo hành / mã đơn / serial" />
-                    <select className="warranty-select" value={requestForm.severity} onChange={(event) => setRequestForm((prev) => ({ ...prev, severity: event.target.value }))}>
+                    <input
+                      className="warranty-input"
+                      value={requestForm.lookupValue}
+                      onChange={(event) => setRequestForm((prev) => ({ ...prev, lookupValue: event.target.value }))}
+                      placeholder="Mã bảo hành / mã đơn / serial"
+                    />
+                    <select
+                      className="warranty-select"
+                      value={requestForm.severity}
+                      onChange={(event) => setRequestForm((prev) => ({ ...prev, severity: event.target.value }))}
+                    >
                       <option value="LOW">Lỗi nhẹ</option>
                       <option value="MEDIUM">Lỗi trung bình</option>
                       <option value="HIGH">Lỗi nặng</option>
@@ -501,11 +599,23 @@ export function WarrantiesPage() {
                     <input className="warranty-input" value={requestForm.serialNumber} onChange={(event) => setRequestForm((prev) => ({ ...prev, serialNumber: event.target.value }))} placeholder="Serial / SKU" />
                     <input className="warranty-input" value={requestForm.orderId} onChange={(event) => setRequestForm((prev) => ({ ...prev, orderId: event.target.value }))} placeholder="Mã đơn hàng" />
                     <div className="warranty-form-grid--full">
-                      <textarea className="warranty-textarea" value={requestForm.issueDescription} onChange={(event) => setRequestForm((prev) => ({ ...prev, issueDescription: event.target.value }))} placeholder="Mô tả lỗi, tình trạng sản phẩm, thời điểm phát sinh..." />
+                      <textarea
+                        className="warranty-textarea"
+                        value={requestForm.issueDescription}
+                        onChange={(event) => setRequestForm((prev) => ({ ...prev, issueDescription: event.target.value }))}
+                        placeholder="Mô tả lỗi, tình trạng sản phẩm, thời điểm phát sinh..."
+                      />
                     </div>
                     <div className="warranty-form-grid--full">
-                      <textarea className="warranty-textarea" value={requestForm.extraNote} onChange={(event) => setRequestForm((prev) => ({ ...prev, extraNote: event.target.value }))} placeholder="Ghi chú thêm cho kỹ thuật viên..." />
+                      <textarea
+                        className="warranty-textarea"
+                        value={requestForm.extraNote}
+                        onChange={(event) => setRequestForm((prev) => ({ ...prev, extraNote: event.target.value }))}
+                        placeholder="Ghi chú thêm cho kỹ thuật viên..."
+                      />
                     </div>
+                    <input className="warranty-hidden-field" tabIndex={-1} autoComplete="off" value={requestForm.website} onChange={(event) => setRequestForm((prev) => ({ ...prev, website: event.target.value }))} />
+                    <input type="hidden" value={requestForm.startedAt} readOnly />
                     <div className="warranty-form-grid--full">
                       <input type="file" multiple accept="image/*,video/*,application/pdf" onChange={(event) => handleFiles(event.target.files)} />
                     </div>
@@ -521,7 +631,9 @@ export function WarrantiesPage() {
                     </div>
                   ) : null}
 
-                  <button className="warranty-btn" disabled={submitting}>{submitting ? "Đang gửi..." : "Gửi yêu cầu"}</button>
+                  <button className="warranty-btn" disabled={submitting}>
+                    {submitting ? "Đang gửi..." : "Gửi yêu cầu"}
+                  </button>
                 </form>
               </div>
             </section>

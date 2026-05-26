@@ -12,12 +12,16 @@ const CATEGORY_PLACEHOLDERS = {
   fan: "Cooling",
   aio: "Cooling",
   laptop: "Laptop",
+  completepc: "Complete PC",
   default: "PC Mall"
 };
 
 const FALLBACK_IMAGES = {
   default: "https://placehold.co/800x800/f8fafc/1e293b?text=PC+Mall",
-  cooling: "/assets/products/cooling-real/deepcool-ag400.webp"
+  cooling: "/assets/products/cooling-real/deepcool-ag400.webp",
+  laptop: "/assets/products/laptop-acer-predator-helios-16.svg",
+  storage: "/assets/products/ssd-samsung-980-pro-2tb.svg",
+  completepc: "/assets/products/complete-pc-gaming-mid.jpg"
 };
 
 function pickLabel(categoryName, productName) {
@@ -40,29 +44,38 @@ function isBrokenImage(url) {
 }
 
 function getProductCategoryKey(product = {}) {
-  return String(product?.category_name || product?.category?.name || product?.product_name || product?.name || "")
+  return String(product?.category_name || product?.categoryName || product?.category?.name || product?.product_name || product?.name || "")
     .trim()
     .toLowerCase();
 }
 
-function isCoolingProduct(product = {}) {
-  const key = getProductCategoryKey(product);
-  return ["cooling", "cooler", "fan", "aio", "radiator", "tản nhiệt", "tan nhiet"].some((token) => key.includes(token));
+function getCategoryFallbackKey(product = {}, options = {}) {
+  const key = `${getProductCategoryKey(product)} ${String(options.label || "").toLowerCase()}`;
+
+  if (["cooling", "cooler", "fan", "aio", "radiator", "tản nhiệt", "tan nhiet"].some((token) => key.includes(token))) {
+    return "cooling";
+  }
+  if (["laptop", "notebook"].some((token) => key.includes(token))) {
+    return "laptop";
+  }
+  if (["storage", "ssd", "hdd", "nvme"].some((token) => key.includes(token))) {
+    return "storage";
+  }
+  if (["complete pc", "pc bộ", "pc build", "custom build"].some((token) => key.includes(token))) {
+    return "completepc";
+  }
+
+  return "default";
 }
 
 function getFallbackImage(product = {}, options = {}) {
   if (options.fallbackUrl && !isBrokenImage(options.fallbackUrl)) {
     return options.fallbackUrl;
   }
-  if (isCoolingProduct(product) || String(options.label || "").toLowerCase().includes("cool")) {
-    return FALLBACK_IMAGES.cooling;
-  }
-  return FALLBACK_IMAGES.default;
+
+  return FALLBACK_IMAGES[getCategoryFallbackKey(product, options)] || FALLBACK_IMAGES.default;
 }
 
-/**
- * Resolve a displayable product image URL with sensible fallbacks for guests.
- */
 export function resolveProductImage(product = {}, options = {}) {
   const candidates = [
     product?.image_url,

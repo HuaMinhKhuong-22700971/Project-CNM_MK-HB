@@ -23,6 +23,12 @@ export async function lookupWarranty(code) {
 export async function submitWarrantyRequest(payload) {
   const formData = new FormData();
   Object.entries(payload || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((file) => {
+        if (file) formData.append("media", file);
+      });
+      return;
+    }
     if (value !== undefined && value !== null && value !== "") {
       formData.append(key, value);
     }

@@ -3,6 +3,7 @@ const { createError, toPositiveInteger } = require("../../utils/service-helpers"
 const { getTableColumns, pickColumn } = require("../../utils/schema-helpers");
 const { ROLES, hasAnyRole, normalizeRole } = require("../../utils/role-helpers");
 const ordersService = require("../orders/orders.service");
+const { createWarrantyRecordsForDeliveredOrder } = require("../warranties/warranty-sync.service");
 const mockProvider = require("./providers/mock-shipping.provider");
 
 let schemaCache = null;
@@ -222,6 +223,10 @@ async function syncOrderStatusForShipment(orderId, shipmentStatus) {
 
   params.push(orderId);
   await query(`UPDATE ${schema.orders.table} SET ${updates.join(", ")} WHERE ${schema.orders.id} = ?`, params);
+
+  if (nextOrderStatus === "DELIVERED") {
+    await createWarrantyRecordsForDeliveredOrder(orderId);
+  }
 }
 
 async function getShipmentByOrder(userOrUserId, orderId) {

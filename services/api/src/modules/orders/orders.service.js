@@ -3,6 +3,7 @@ const { createError, toNonNegativeNumber, toPositiveInteger } = require("../../u
 const { buildActiveCondition, getTableColumns, pickColumn } = require("../../utils/schema-helpers");
 const { ROLES, hasAnyRole, normalizeRole } = require("../../utils/role-helpers");
 const { env } = require("../../config/env");
+const { createWarrantyRecordsForDeliveredOrder } = require("../warranties/warranty-sync.service");
 
 let schemaCache = null;
 const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELED"];
@@ -892,6 +893,10 @@ async function updateOrderStatus(actor, orderId, statusOrPayload) {
     [...params, parsedOrderId]
   );
 
+  if (nextStatus === "DELIVERED") {
+    await createWarrantyRecordsForDeliveredOrder(parsedOrderId);
+  }
+
   return getOrderDetail(actor, parsedOrderId);
 }
 
@@ -1163,6 +1168,5 @@ module.exports = {
   uploadPaymentProof,
   approvePaymentProof
 };
-
 
 

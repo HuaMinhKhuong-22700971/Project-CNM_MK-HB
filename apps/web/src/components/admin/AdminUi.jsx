@@ -117,12 +117,12 @@ export function AdminQuickLinks({ items = [] }) {
   return (
     <section className="admin-quick-links">
       {items.map((item) => (
-          <Link key={item.to} to={item.to} className="admin-quick-card">
-            <span className="admin-quick-card__icon">{item.icon}</span>
-            <strong>{item.title}</strong>
-            <p>{item.desc}</p>
-            <span className="admin-quick-card__cta">Mở module →</span>
-          </Link>
+        <Link key={item.to} to={item.to} className="admin-quick-card">
+          <span className="admin-quick-card__icon">{item.icon}</span>
+          <strong>{item.title}</strong>
+          <p>{item.desc}</p>
+          <span className="admin-quick-card__cta">Mở module →</span>
+        </Link>
       ))}
     </section>
   );

@@ -117,7 +117,7 @@ export function TechCompatibilityPage() {
 
       const savedRule = normalizeRule(response?.data || response);
       setRules((prev) =>
-        editingRuleId ? prev.map((r) => (r.id === savedRule.id ? savedRule : r)) : [savedRule, ...prev]
+        editingRuleId ? prev.map((rule) => (rule.id === savedRule.id ? savedRule : rule)) : [savedRule, ...prev]
       );
       setSuccessMessage(editingRuleId ? "Đã cập nhật rule." : "Đã tạo rule mới.");
       resetForm();
@@ -133,7 +133,7 @@ export function TechCompatibilityPage() {
     try {
       const response = await changeAdminCompatibilityRuleStatus(rule.id, nextStatus);
       const updated = normalizeRule(response?.data || response);
-      setRules((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setRules((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       setSuccessMessage(`Rule #${rule.id} → ${nextStatus}`);
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Không thể đổi trạng thái."));
@@ -146,7 +146,7 @@ export function TechCompatibilityPage() {
         <div>
           <p className="tech-eyebrow">Nhân viên kỹ thuật</p>
           <h1>Luật tương thích PC Builder</h1>
-          <p>Cấu hình quy tắc kiểm tra socket, RAM, PSU… khi khách dùng trình dựng cấu hình.</p>
+          <p>Cấu hình các rule kiểm tra socket, RAM, PSU và những ràng buộc giữa các nhóm linh kiện trong PC Builder.</p>
         </div>
         <div className="tech-head-actions">
           <Link to="/tech/tickets" className="tech-btn tech-btn--secondary">
@@ -165,76 +165,84 @@ export function TechCompatibilityPage() {
         <section className="tech-card tech-compat-form">
           <div className="tech-section-title">
             <h3>{editingRuleId ? `Sửa rule #${editingRuleId}` : "Thêm rule mới"}</h3>
-            <p>Định nghĩa cặp linh kiện và thuộc tính cần khớp.</p>
+            <p>Định nghĩa cặp linh kiện và thuộc tính cần khớp để trình dựng cấu hình đánh giá tương thích.</p>
           </div>
+
           <form onSubmit={handleSubmit} className="tech-form-grid">
             <label>
               Tên rule
-              <input name="name" value={formValues.name} onChange={(e) => setFormValues({ ...formValues, name: e.target.value })} />
+              <input name="name" value={formValues.name} onChange={(event) => setFormValues({ ...formValues, name: event.target.value })} />
             </label>
+
             <label>
               Nguồn (source)
               <select
                 name="sourceComponentType"
                 value={formValues.sourceComponentType}
-                onChange={(e) => setFormValues({ ...formValues, sourceComponentType: e.target.value })}
+                onChange={(event) => setFormValues({ ...formValues, sourceComponentType: event.target.value })}
               >
-                {COMPONENT_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {COMPONENT_OPTIONS.map((component) => (
+                  <option key={component} value={component}>
+                    {component}
                   </option>
                 ))}
               </select>
             </label>
+
             <label>
               Đích (target)
               <select
                 name="targetComponentType"
                 value={formValues.targetComponentType}
-                onChange={(e) => setFormValues({ ...formValues, targetComponentType: e.target.value })}
+                onChange={(event) => setFormValues({ ...formValues, targetComponentType: event.target.value })}
               >
-                {COMPONENT_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {COMPONENT_OPTIONS.map((component) => (
+                  <option key={component} value={component}>
+                    {component}
                   </option>
                 ))}
               </select>
             </label>
+
             <label>
               Loại rule
-              <select name="ruleType" value={formValues.ruleType} onChange={(e) => setFormValues({ ...formValues, ruleType: e.target.value })}>
-                {RULE_TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+              <select name="ruleType" value={formValues.ruleType} onChange={(event) => setFormValues({ ...formValues, ruleType: event.target.value })}>
+                {RULE_TYPE_OPTIONS.map((ruleType) => (
+                  <option key={ruleType} value={ruleType}>
+                    {ruleType}
                   </option>
                 ))}
               </select>
             </label>
+
             <label>
               Source attribute
               <input
                 name="sourceAttributeKey"
                 value={formValues.sourceAttributeKey}
-                onChange={(e) => setFormValues({ ...formValues, sourceAttributeKey: e.target.value })}
+                onChange={(event) => setFormValues({ ...formValues, sourceAttributeKey: event.target.value })}
               />
             </label>
+
             <label>
               Target attribute
               <input
                 name="targetAttributeKey"
                 value={formValues.targetAttributeKey}
-                onChange={(e) => setFormValues({ ...formValues, targetAttributeKey: e.target.value })}
+                onChange={(event) => setFormValues({ ...formValues, targetAttributeKey: event.target.value })}
               />
             </label>
+
             <label className="tech-form-span">
               Mô tả
               <textarea
                 name="description"
                 rows={3}
                 value={formValues.description}
-                onChange={(e) => setFormValues({ ...formValues, description: e.target.value })}
+                onChange={(event) => setFormValues({ ...formValues, description: event.target.value })}
               />
             </label>
+
             <div className="tech-action-row">
               <button type="submit" className="tech-btn tech-btn--primary" disabled={submitting}>
                 {submitting ? "Đang lưu..." : editingRuleId ? "Cập nhật" : "Tạo rule"}
@@ -251,8 +259,9 @@ export function TechCompatibilityPage() {
         <section className="tech-card">
           <div className="tech-section-title">
             <h3>Danh sách rule ({sortedRules.length})</h3>
-            <p>Bật/tắt rule để kiểm soát PC Builder ngay lập tức.</p>
+            <p>Bật hoặc tắt rule để kiểm soát PC Builder ngay lập tức.</p>
           </div>
+
           {loading ? (
             <div className="tech-empty">Đang tải...</div>
           ) : sortedRules.length === 0 ? (
@@ -271,7 +280,9 @@ export function TechCompatibilityPage() {
                     <span>
                       {rule.sourceAttributeKey} ↔ {rule.targetAttributeKey}
                     </span>
+                    {rule.description ? <span>{rule.description}</span> : null}
                   </div>
+
                   <div className="tech-rule-row__actions">
                     <span className={`tech-status tech-status--${rule.status === "ACTIVE" ? "success" : "neutral"}`}>{rule.status}</span>
                     <button type="button" className="tech-btn tech-btn--secondary" onClick={() => handleToggleStatus(rule)}>

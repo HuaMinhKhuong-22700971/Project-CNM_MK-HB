@@ -13,25 +13,74 @@ export const TICKET_PRIORITY_META = {
 };
 
 export const TICKET_REPLY_TEMPLATES = [
-  "Chào bạn, bộ phận kỹ thuật PC Mall đã nhận ticket và đang kiểm tra.",
-  "Vui lòng cung cấp thêm ảnh/video lỗi và mã đơn hàng (nếu có) để hỗ trợ nhanh hơn.",
-  "Chúng tôi đã cập nhật driver/firmware — bạn thử khởi động lại và kiểm tra giúp nhé.",
-  "Ticket đã xử lý xong. Nếu còn lỗi, bạn phản hồi lại trong 48 giờ để được hỗ trợ tiếp."
+  "Mình đã tiếp nhận ticket và đang kiểm tra chi tiết.",
+  "Bạn vui lòng gửi thêm ảnh lỗi, video hoặc mã đơn hàng để kỹ thuật kiểm tra nhanh hơn.",
+  "Mình đã cập nhật hướng xử lý ban đầu, bạn kiểm tra lại giúp mình rồi phản hồi thêm nếu cần.",
+  "Vấn đề đã được xử lý. Bạn kiểm tra lại giúp mình, nếu còn lỗi hãy phản hồi trong ticket này."
 ];
 
+const ATTACHMENT_MARKER_REGEX = /\[(?:Tệp đính kèm khách đã chọn|Khách hàng đã chọn tệp đính kèm):\s*([^\]]+)\]/gi;
+
 const MESSAGE_TRANSLATIONS = {
-  "Checking logs. Done. Issue resolved.": "Đã kiểm tra log hệ thống. Đã tìm ra nguyên nhân và đã xử lý xong lỗi.",
-  "Checking logs. Done.": "Đã kiểm tra log hệ thống. Đã xong.",
-  "Issue resolved.": "Vấn đề đã được giải quyết thành công.",
+  "Checking logs. Done. Issue resolved.": "Đã kiểm tra log hệ thống và xử lý xong vấn đề.",
+  "Checking logs. Done.": "Đã kiểm tra log hệ thống.",
+  "Issue resolved.": "Vấn đề đã được giải quyết.",
   "Checking logs.": "Đang kiểm tra log hệ thống...",
-  "LBSOD when playing Cyberpunk 2077": "Lỗi màn hình xanh (BSOD) khi đang chơi Cyberpunk 2077",
+  "LBSOD when playing Cyberpunk 2077": "Lỗi màn hình xanh khi chơi Cyberpunk 2077",
   "Smoke ticket": "Ticket kiểm thử hệ thống",
-  "Smoke Customer Ticket": "Yêu cầu hỗ trợ khách hàng mẫu",
-  "Smoke support ticket": "Yêu cầu tư vấn kỹ thuật mẫu"
+  "Smoke Customer Ticket": "Yêu cầu hỗ trợ mẫu",
+  "Smoke support ticket": "Ticket hỗ trợ kỹ thuật mẫu"
 };
 
+function dedupeAttachments(list) {
+  const seen = new Set();
+  return list.filter((item) => {
+    const key = `${item.name}-${item.sizeLabel || ""}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function extractAttachmentMentions(text) {
+  if (!text) return [];
+
+  const matches = [];
+  for (const match of String(text).matchAll(ATTACHMENT_MARKER_REGEX)) {
+    const rawItems = String(match[1] || "")
+      .split(/,\s*/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    rawItems.forEach((rawItem, index) => {
+      const attachmentMatch = rawItem.match(/^(.*?)(?:\s*\(([^)]+)\))?$/);
+      const name = attachmentMatch?.[1]?.trim() || `Tệp đính kèm ${index + 1}`;
+      const sizeLabel = attachmentMatch?.[2]?.trim() || "";
+      matches.push({
+        id: `${name}-${sizeLabel || index}`.replace(/\s+/g, "-").toLowerCase(),
+        name,
+        sizeLabel
+      });
+    });
+  }
+
+  return dedupeAttachments(matches);
+}
+
+export function stripAttachmentMarker(text) {
+  return String(text || "")
+    .replace(ATTACHMENT_MARKER_REGEX, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function translateTicketText(text) {
-  return MESSAGE_TRANSLATIONS[text] || text;
+  const source = String(text || "");
+  return MESSAGE_TRANSLATIONS[source] || source;
+}
+
+export function normalizeTicketText(text) {
+  return stripAttachmentMarker(translateTicketText(text));
 }
 
 export function getTicketStatusMeta(status) {
