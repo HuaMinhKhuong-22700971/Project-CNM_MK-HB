@@ -61,15 +61,20 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
   }, []);
 
   const fetchCurrentBuild = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      refreshGuestBuildState();
+      return getActiveGuestBuild();
+    }
     try {
       const res = await httpClient.get("/pc-builder/current");
       const data = res?.data?.data || res?.data || res;
       if (data?.id) setBuild(data);
+      return data;
     } catch (_err) {
       // silent
+      return null;
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshGuestBuildState]);
 
   const ensureBuild = useCallback(async () => {
     if (build?.id) return build;
@@ -312,6 +317,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
       removeGuestBuildSlot,
       exportGuestBuilds,
       importGuestBuilds,
+      refreshCurrentBuild: fetchCurrentBuild,
       setSuggestion,
       setError
     }

@@ -67,6 +67,24 @@ function getSessionStatus(session) {
   return STATUS_META[session.status] || STATUS_META.waiting_staff;
 }
 
+function getBuildComponents(build) {
+  const components = build?.components || [];
+  if (Array.isArray(components)) return components;
+  if (!components || typeof components !== "object") return [];
+
+  return Object.entries(components).map(([componentType, item]) => {
+    const product = item?.product || item?.Product || item?.variant?.product || {};
+    const variant = item?.variant || item?.ProductVariant || item?.sku || {};
+    return {
+      componentType,
+      skuId: variant?.id || variant?.variant_id || variant?.skuId || product?.id || componentType,
+      name: product?.product_name || product?.name || item?.name || componentType.toUpperCase(),
+      price: Number(variant?.price || item?.price || product?.price || 0),
+      stock: variant?.stock || variant?.stock_quantity || product?.stock || ""
+    };
+  });
+}
+
 function mapLiveMessages(session) {
   return (session?.messages || []).map((message) => ({
     id: message.id,
@@ -207,6 +225,26 @@ export function AiChatPage() {
     }
   }
 
+  async function handleStartNewLiveChat(initialMessage = "") {
+    setLiveSessionId("");
+    setLiveSession(null);
+    setHumanMessages([]);
+    await handleStartLiveChat(initialMessage);
+  }
+
+  function openOrStartLiveChat(initialMessage = "") {
+    const isResolvedSession = String(liveSession?.status || "").toLowerCase() === "resolved";
+    if (isResolvedSession) {
+      handleStartNewLiveChat(initialMessage);
+      return;
+    }
+    if (liveSessionId) {
+      switchMode("human");
+      return;
+    }
+    handleStartLiveChat(initialMessage);
+  }
+
   async function handleSubmit(event) {
     event?.preventDefault();
     const trimmedQuestion = String(question || "").trim();
@@ -217,6 +255,11 @@ export function AiChatPage() {
     markChatAutoScroll();
 
     if (isHumanMode && liveSessionId) {
+      if (String(liveSession?.status || "").toLowerCase() === "resolved") {
+        await handleStartNewLiveChat(trimmedQuestion);
+        textareaRef.current?.focus();
+        return;
+      }
       try {
         setHumanMessages((prev) => [...prev, userMessage]);
         await sendChatMessage(liveSessionId, {
@@ -273,7 +316,7 @@ export function AiChatPage() {
 
   function handleAction(action) {
     if (action.live) {
-      handleStartLiveChat(question);
+      openOrStartLiveChat(question);
       return;
     }
     setMode("ai");
@@ -351,14 +394,14 @@ export function AiChatPage() {
               <strong>AI chat</strong>
               <small>Tư vấn nhanh, không bịa sản phẩm.</small>
             </button>
-            <button type="button" className={isHumanMode ? "is-active" : ""} onClick={() => (liveSessionId ? switchMode("human") : handleStartLiveChat(question))}>
+            <button type="button" className={isHumanMode ? "is-active" : ""} onClick={() => openOrStartLiveChat(question)}>
               <span>Sales</span>
               <strong>Human support</strong>
               <small>Nhân viên bán hàng phản hồi trực tiếp.</small>
             </button>
           </div>
-          <button type="button" className="ai-live-button" onClick={() => (liveSessionId ? switchMode("human") : handleStartLiveChat(question))} disabled={loading}>
-            {liveSessionId ? "Mở Human support" : "Kết nối nhân viên bán hàng"}
+            <button type="button" className="ai-live-button" onClick={() => openOrStartLiveChat(question)} disabled={loading}>
+            {String(liveSession?.status || "").toLowerCase() === "resolved" ? "Tạo phiên tư vấn mới" : liveSessionId ? "Mở Human support" : "Kết nối nhân viên bán hàng"}
           </button>
           <button type="button" className="ai-clear-button" onClick={handleClearChatHistory}>
             Xóa lịch sử chat
@@ -407,7 +450,7 @@ export function AiChatPage() {
                     <div className="ai-bubble" dangerouslySetInnerHTML={{ __html: renderContent(message.content) }} />
 
                     {!isUser && message.handoffSuggested ? (
-                      <button type="button" className="ai-inline-handoff" onClick={() => (liveSessionId ? switchMode("human") : handleStartLiveChat(question))}>
+                      <button type="button" className="ai-inline-handoff" onClick={() => openOrStartLiveChat(question)}>
                         Kết nối nhân viên bán hàng
                       </button>
                     ) : null}
@@ -419,11 +462,11 @@ export function AiChatPage() {
                           <span>{formatCurrency(message.build.totalPrice)}đ</span>
                         </div>
                         <div className="ai-build-list">
-                          {(message.build.components || []).map((item) => (
-                            <div key={`${item.componentType}-${item.skuId}`}>
+                          {getBuildComponents(message.build).map((item) => (
+                            <div key={`${item.componentType}-${item.skuId || item.name}`}>
                               <span>{String(item.componentType || "").toUpperCase()}</span>
                               <strong>{item.name}</strong>
-                              <small>{formatCurrency(item.price)}đ · còn {item.stock}</small>
+                              <small>{formatCurrency(item.price)}đ{item.stock !== "" ? ` · còn ${item.stock}` : ""}</small>
                             </div>
                           ))}
                         </div>
@@ -473,6 +516,11 @@ export function AiChatPage() {
           </div>
 
           <form className="ai-composer" onSubmit={handleSubmit}>
+            {isHumanMode && String(liveSession?.status || "").toLowerCase() === "resolved" ? (
+              <div className="ai-resolved-session-notice">
+                Phiên tư vấn này đã kết thúc. Nếu bạn gửi tin nhắn mới, PC Mall sẽ mở một phiên tư vấn mới cho bạn.
+              </div>
+            ) : null}
             <textarea
               ref={textareaRef}
               value={question}
@@ -1065,6 +1113,17 @@ const aiChatStyles = `
   padding: 16px;
   border-top: 1px solid #e2e8f0;
   background: rgba(255,255,255,0.94);
+}
+
+.ai-resolved-session-notice {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .ai-composer textarea {

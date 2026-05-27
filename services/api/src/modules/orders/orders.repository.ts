@@ -2,6 +2,26 @@ import { prisma } from "../../config/prisma";
 
 let paymentProofColumnReady: boolean | null = null;
 
+async function repairLegacyPaidOrders(orderId?: number | string | null) {
+  const params: Array<number> = [];
+  let whereClause = "payment_status = 'PAID' AND status = 'PAID'";
+
+  if (orderId !== undefined && orderId !== null) {
+    whereClause += " AND id = ?";
+    params.push(Number(orderId));
+  }
+
+  await prisma.$executeRawUnsafe(
+    `
+      UPDATE orders
+      SET status = 'PROCESSING',
+          updated_at = NOW()
+      WHERE ${whereClause}
+    `,
+    ...params
+  );
+}
+
 async function hasPaymentProofColumn() {
   if (paymentProofColumnReady !== null) {
     return paymentProofColumnReady;
@@ -106,7 +126,8 @@ export async function normalizeOrderRecord<T extends Record<string, any> | null>
 
 export function getOrdersByUser(userId: string) {
   const numericId = parseInt(userId, 10);
-  return prisma.order.findMany({
+  return repairLegacyPaidOrders().then(() =>
+    prisma.order.findMany({
     where: { user_id: numericId },
     include: {
       Shipment: {
@@ -120,11 +141,13 @@ export function getOrdersByUser(userId: string) {
       }
     },
     orderBy: { created_at: "desc" }
-  });
+    })
+  );
 }
 
 export function getOrderById(orderId: string | number) {
-  return prisma.order.findUnique({
+  return repairLegacyPaidOrders(orderId).then(() =>
+    prisma.order.findUnique({
     where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     include: {
       Shipment: {
@@ -137,11 +160,13 @@ export function getOrderById(orderId: string | number) {
         }
       }
     }
-  });
+    })
+  );
 }
 
 export function listOrders() {
-  return prisma.order.findMany({
+  return repairLegacyPaidOrders().then(() =>
+    prisma.order.findMany({
     include: {
       Shipment: {
         orderBy: { id: "desc" },
@@ -154,7 +179,8 @@ export function listOrders() {
       }
     },
     orderBy: { created_at: "desc" }
-  });
+    })
+  );
 }
 
 export function updateOrderStatus(orderId: string | number, status: string) {
@@ -168,7 +194,7 @@ export function markOrderPaid(orderId: string | number) {
   return prisma.order.update({
     where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     data: {
-      status: "PAID",
+      status: "PROCESSING",
       payment_status: "PAID"
     }
   });

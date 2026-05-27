@@ -48,12 +48,27 @@ function normalizeOrderStatus(status) {
   return normalized;
 }
 
+async function repairLegacyPaidOrdersForStaff(config) {
+  if (!config?.orders?.table || !config?.orders?.status || !config?.orders?.paymentStatus) {
+    return;
+  }
+
+  await query(
+    `
+      UPDATE ${config.orders.table}
+      SET ${config.orders.status} = 'PROCESSING'
+      WHERE ${config.orders.status} = 'PAID'
+        AND ${config.orders.paymentStatus} = 'PAID'
+    `
+  );
+}
+
 async function getSchemaConfig() {
   if (schemaCache) {
     return schemaCache;
   }
 
-  const [orderColumns, orderItemColumns, cartColumns, cartItemColumns, addressColumns, variantColumns, productColumns, shipmentColumns, userColumns] = await Promise.all([
+  const [orderColumns, orderItemColumns, cartColumns, cartItemColumns, addressColumns, variantColumns, productColumns, categoryColumns, skuColumns, shipmentColumns, userColumns] = await Promise.all([
     getTableColumns("orders"),
     getTableColumns("order_items"),
     getTableColumns("carts"),
@@ -61,6 +76,8 @@ async function getSchemaConfig() {
     getTableColumns("addresses"),
     getTableColumns("product_variants"),
     getTableColumns("products"),
+    getTableColumns("categories").catch(() => []),
+    getTableColumns("product_skus").catch(() => []),
     getTableColumns("shipments").catch(() => []),
     getTableColumns("users").catch(() => [])
   ]);
@@ -140,8 +157,25 @@ async function getSchemaConfig() {
       columns: productColumns,
       id: pickColumn(productColumns, ["id"]),
       name: pickColumn(productColumns, ["name"]),
+      categoryId: pickColumn(productColumns, ["category_id"], null),
+      imageUrl: pickColumn(productColumns, ["image_url", "thumbnail_url", "thumbnail", "image"], null),
+      thumbnail: pickColumn(productColumns, ["thumbnail", "thumbnail_url", "image_url", "image"], null),
       slug: pickColumn(productColumns, ["slug"]),
       activeCondition: buildActiveCondition("p", productColumns)
+    },
+    categories: categoryColumns.length === 0 ? null : {
+      table: "categories",
+      columns: categoryColumns,
+      id: pickColumn(categoryColumns, ["id"], null),
+      name: pickColumn(categoryColumns, ["name"], null)
+    },
+    skus: skuColumns.length === 0 ? null : {
+      table: "product_skus",
+      columns: skuColumns,
+      id: pickColumn(skuColumns, ["id"], null),
+      productId: pickColumn(skuColumns, ["product_id"], null),
+      sku: pickColumn(skuColumns, ["sku"], null),
+      imageUrl: pickColumn(skuColumns, ["image_url", "thumbnail_url", "thumbnail", "image"], null)
     },
     shipments: {
       table: shipmentColumns.length > 0 ? "shipments" : null,
@@ -504,6 +538,10 @@ async function getCustomerByUserId(userId) {
 
 async function getOrderItemsByOrderId(orderId) {
   const config = await getSchemaConfig();
+  const skuJoinCondition = config.skus?.table && config.skus?.sku
+    ? `ps.${config.skus.sku} = oi.${config.orderItems.sku}${config.skus.productId && config.orderItems.productId ? ` AND (oi.${config.orderItems.productId} IS NULL OR ps.${config.skus.productId} = oi.${config.orderItems.productId})` : ""}`
+    : null;
+
   const rows = await query(
     `
       SELECT
@@ -514,8 +552,15 @@ async function getOrderItemsByOrderId(orderId) {
         oi.${config.orderItems.name} AS productName,
         oi.${config.orderItems.unitPrice} AS unitPrice,
         oi.${config.orderItems.quantity} AS quantity,
-        ${config.orderItems.lineTotal ? `oi.${config.orderItems.lineTotal}` : `(oi.${config.orderItems.unitPrice} * oi.${config.orderItems.quantity})`} AS lineTotal
+        ${config.orderItems.lineTotal ? `oi.${config.orderItems.lineTotal}` : `(oi.${config.orderItems.unitPrice} * oi.${config.orderItems.quantity})`} AS lineTotal,
+        ${config.products.imageUrl ? `p.${config.products.imageUrl}` : "NULL"} AS productImageUrl,
+        ${config.products.thumbnail ? `p.${config.products.thumbnail}` : "NULL"} AS productThumbnail,
+        ${config.categories?.name ? `c.${config.categories.name}` : "NULL"} AS categoryName,
+        ${config.skus?.imageUrl ? `ps.${config.skus.imageUrl}` : "NULL"} AS skuImageUrl
       FROM ${config.orderItems.table} oi
+      ${config.products.id && config.orderItems.productId ? `LEFT JOIN ${config.products.table} p ON p.${config.products.id} = oi.${config.orderItems.productId}` : ""}
+      ${config.categories?.table && config.categories.id && config.products.categoryId ? `LEFT JOIN ${config.categories.table} c ON c.${config.categories.id} = p.${config.products.categoryId}` : ""}
+      ${config.skus?.table && skuJoinCondition ? `LEFT JOIN ${config.skus.table} ps ON ${skuJoinCondition}` : ""}
       WHERE oi.${config.orderItems.orderId} = ?
       ORDER BY oi.${config.orderItems.id} ASC
     `,
@@ -528,6 +573,19 @@ async function getOrderItemsByOrderId(orderId) {
     variantId: row.variantId,
     sku: row.sku,
     productName: row.productName,
+    imageUrl: row.skuImageUrl || row.productImageUrl || row.productThumbnail || null,
+    image_url: row.skuImageUrl || row.productImageUrl || row.productThumbnail || null,
+    thumbnail: row.productThumbnail || row.productImageUrl || null,
+    categoryName: row.categoryName || null,
+    category_name: row.categoryName || null,
+    product: {
+      image_url: row.productImageUrl || null,
+      thumbnail: row.productThumbnail || null,
+      category_name: row.categoryName || null
+    },
+    skuData: {
+      image_url: row.skuImageUrl || null
+    },
     unitPrice: toMoney(row.unitPrice),
     quantity: Number(row.quantity || 0),
     lineTotal: toMoney(row.lineTotal)
@@ -704,6 +762,7 @@ async function getAllOrders() {
 
 async function getProcessingOrders(params = {}) {
   const config = await getSchemaConfig();
+  await repairLegacyPaidOrdersForStaff(config);
   const status = params.status ? normalizeOrderStatus(params.status) : null;
   const whereClauses = [];
   const queryParams = [];
@@ -1168,5 +1227,3 @@ module.exports = {
   uploadPaymentProof,
   approvePaymentProof
 };
-
-

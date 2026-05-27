@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import { resolveProductImage } from "../../utils/productImage";
 
 import {
   createStaffShipment,
@@ -64,9 +65,24 @@ function formatCurrency(value) {
   return Number(value || 0).toLocaleString("vi-VN");
 }
 
+function normalizeApiDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") return new Date(value);
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const hasExplicitTimezone = /[zZ]$|[+\-]\d{2}:\d{2}$/.test(raw);
+  const isoLike = raw.includes("T") ? raw : raw.replace(" ", "T");
+  return new Date(hasExplicitTimezone ? isoLike : `${isoLike}Z`);
+}
+
 function formatDate(value) {
   if (!value) return "Không rõ";
-  return new Date(value).toLocaleString("vi-VN", {
+  const parsed = normalizeApiDate(value);
+  if (!parsed || Number.isNaN(parsed.getTime())) return "Không rõ";
+  return parsed.toLocaleString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",
@@ -77,7 +93,9 @@ function formatDate(value) {
 
 function formatShortDate(value) {
   if (!value) return "Không rõ";
-  return new Date(value).toLocaleDateString("vi-VN", {
+  const parsed = normalizeApiDate(value);
+  if (!parsed || Number.isNaN(parsed.getTime())) return "Không rõ";
+  return parsed.toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric"
@@ -96,6 +114,21 @@ function getLineAmount(item) {
   return Number(item?.lineTotal || item?.totalPrice || item?.price || 0);
 }
 
+function getItemUnitPrice(item) {
+  return Number(item?.price || item?.unitPrice || 0);
+}
+
+function getItemThumbnail(item) {
+  return resolveProductImage({
+    name: item?.productName || item?.name || "Sản phẩm",
+    sku: item?.sku || item?.skuCode || "",
+    imageUrl: item?.imageUrl || item?.image_url || item?.thumbnail || item?.productImage || item?.image || null,
+    image_url: item?.imageUrl || item?.image_url || item?.thumbnail || item?.productImage || item?.image || null,
+    category_name: item?.categoryName || item?.category_name || item?.product?.category_name || item?.product?.categoryName || undefined,
+    brand_name: item?.brandName || item?.brand_name || item?.product?.brand_name || item?.product?.brandName || undefined
+  });
+}
+
 function getPaymentTone(paymentStatus) {
   const normalized = String(paymentStatus || "").toUpperCase();
   if (normalized === "PAID") return "success";
@@ -105,9 +138,9 @@ function getPaymentTone(paymentStatus) {
 
 function getPaymentLabel(paymentStatus) {
   const normalized = String(paymentStatus || "").toUpperCase();
-  if (normalized === "PAID") return "Paid";
-  if (normalized === "PENDING") return "Pending";
-  return "Unpaid";
+  if (normalized === "PAID") return "Đã thanh toán";
+  if (normalized === "PENDING") return "Chờ thanh toán";
+  return "Chưa thanh toán";
 }
 
 function getTodayTotalValue(orders) {
@@ -148,11 +181,11 @@ function OrderListSkeleton() {
 function DetailSkeleton() {
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      {Array.from({ length: 4 }).map((_, index) => (
+      {Array.from({ length: 5 }).map((_, index) => (
         <div
           key={index}
           style={{
-            height: index === 0 ? 180 : 140,
+            height: index === 0 ? 148 : 128,
             borderRadius: 24,
             border: "1px solid #e2e8f0",
             background: "linear-gradient(90deg, #f8fafc 25%, #eef2ff 50%, #f8fafc 75%)",
@@ -162,6 +195,325 @@ function DetailSkeleton() {
         />
       ))}
     </div>
+  );
+}
+
+function InfoList({ rows }) {
+  return (
+    <div className="staff-info-list">
+      {rows.map((row) => (
+        <div key={row.label} className={`staff-info-row${row.full ? " is-full" : ""}`}>
+          <span>{row.label}</span>
+          <strong className={row.wrap ? "staff-wrap-anywhere" : ""}>{row.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StaffOrderQueue({
+  loading,
+  filteredOrders,
+  keyword,
+  setKeyword,
+  statusFilter,
+  setStatusFilter,
+  selectedOrderId,
+  setSelectedOrderId
+}) {
+  return (
+    <aside className="staff-orders-panel staff-orders-panel--sticky">
+      <div className="staff-orders-panel__body">
+        <div className="staff-orders-panel__stickyArea">
+          <div className="staff-orders-panel__head">
+            <div>
+              <h2>Danh sách đơn hàng</h2>
+              <p>Tìm kiếm, lọc trạng thái và chọn đơn để thao tác.</p>
+            </div>
+          </div>
+
+          <div className="staff-orders-toolbar">
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="Tìm mã đơn, khách hàng, email, vận đơn..."
+              aria-label="Tìm đơn hàng"
+            />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Lọc trạng thái đơn hàng">
+              {ORDER_STATUS_OPTIONS.map((status) => (
+                <option key={status || "all"} value={status}>
+                  {status ? getStatusMeta(status).label : "Tất cả trạng thái"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="staff-orders-tabs">
+            {ORDER_STATUS_OPTIONS.map((status) => (
+              <button
+                key={status || "all"}
+                type="button"
+                className={statusFilter === status ? "is-active" : ""}
+                onClick={() => setStatusFilter(status)}
+              >
+                {status ? getStatusMeta(status).label : "Tất cả"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="staff-orders-list">
+          {loading ? (
+            <OrderListSkeleton />
+          ) : filteredOrders.length === 0 ? (
+            <div className="staff-orders-empty">
+              <strong style={{ display: "block", marginBottom: 8, color: "#0f172a" }}>Chưa có đơn phù hợp</strong>
+              Thử đổi bộ lọc trạng thái hoặc từ khóa tìm kiếm.
+            </div>
+          ) : (
+            filteredOrders.map((order) => {
+              const isActive = order.id === selectedOrderId;
+              const statusMeta = getStatusMeta(order.status);
+              return (
+                <button
+                  key={order.id}
+                  type="button"
+                  className={`staff-order-card${isActive ? " staff-order-card--active" : ""}`}
+                  onClick={() => setSelectedOrderId(order.id)}
+                >
+                  <div className="staff-order-card__row">
+                    <span className={`staff-badge staff-badge--${statusMeta.tone}`}>{statusMeta.label}</span>
+                    <span className={`staff-badge staff-badge--${getPaymentTone(order.paymentStatus)}`}>{getPaymentLabel(order.paymentStatus)}</span>
+                  </div>
+                  <div className="staff-order-card__title">Đơn #{order.id}</div>
+                  <div className="staff-order-card__customer">{order.customer?.fullName || "Khách hàng"}</div>
+                  <div className="staff-order-card__meta">{order.paymentMethod || "COD"} · {formatShortDate(order.createdAt)}</div>
+                  <div className="staff-order-card__row">
+                    <span className="staff-order-card__meta staff-wrap-anywhere">{order.customer?.email || "Không có email"}</span>
+                    <span className="staff-order-card__amount">{formatCurrency(getOrderAmount(order))} đ</span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function StaffOrderHeader({ selectedOrder, selectedStatusMeta, customer, actionButtons }) {
+  return (
+    <header className="staff-detail-header">
+      <div className="staff-detail-header__top">
+        <div>
+          <span className={`staff-badge staff-badge--${selectedStatusMeta.tone}`}>{selectedStatusMeta.label}</span>
+          <h2>Đơn hàng #{selectedOrder.id}</h2>
+          <p>Tạo lúc {formatDate(selectedOrder.createdAt)} · Khách {customer.fullName || "Không rõ"}</p>
+        </div>
+        <div className="staff-detail-header__summary">
+          <div className="staff-detail-header__summaryLabel">Tổng thanh toán</div>
+          <div className="staff-detail-header__summaryValue">{formatCurrency(getOrderAmount(selectedOrder))} đ</div>
+        </div>
+      </div>
+      <div className="staff-detail-header__actions">{actionButtons}</div>
+    </header>
+  );
+}
+
+function StaffOrderTimeline({ orderTimeline }) {
+  return (
+    <section className="staff-card">
+      <div className="staff-orders-section__head">
+        <div>
+          <h3>Lịch sử xử lý</h3>
+          <p>Trạng thái đơn theo quy trình vận hành nội bộ.</p>
+        </div>
+      </div>
+      <div className="staff-stepper">
+        {orderTimeline.map((step, index) => (
+          <article key={step.status} className={`staff-step${step.isDone ? " staff-step--done" : ""}`}>
+            <div className="staff-step__index">{index + 1}</div>
+            <strong>{step.meta.label}</strong>
+            <small>{step.timestamp ? formatDate(step.timestamp) : "Đang chờ cập nhật"}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StaffCustomerInfo({ selectedOrder, customer, selectedStatusMeta }) {
+  return (
+    <section className="staff-card">
+      <div className="staff-orders-section__head">
+        <div>
+          <h3>Thông tin khách hàng</h3>
+          <p>Thông tin liên hệ và địa chỉ giao hàng của đơn.</p>
+        </div>
+      </div>
+      <InfoList
+        rows={[
+          { label: "Tên khách", value: customer.fullName || "Không rõ" },
+          { label: "Email", value: customer.email || "Không rõ", wrap: true },
+          { label: "Số điện thoại", value: customer.phone || "Không rõ" },
+          { label: "Địa chỉ giao hàng", value: selectedOrder.shippingAddress || "Chưa có địa chỉ giao hàng", wrap: true, full: true },
+          { label: "Trạng thái đơn", value: selectedStatusMeta.label },
+          { label: "Ghi chú hiện tại", value: selectedOrder.note || "Chưa có ghi chú", wrap: true, full: true }
+        ]}
+      />
+    </section>
+  );
+}
+
+function StaffOrderItemsTable({ selectedOrder }) {
+  return (
+    <section className="staff-card">
+      <div className="staff-orders-section__head">
+        <div>
+          <h3>Danh sách sản phẩm</h3>
+          <p>Kiểm tra lại cấu hình, số lượng và giá trị trước khi giao.</p>
+        </div>
+      </div>
+
+      {(selectedOrder.items || []).length === 0 ? (
+        <div className="staff-orders-empty">Đơn hàng chưa có dòng sản phẩm.</div>
+      ) : (
+        <div className="staff-items-table">
+          <div className="staff-items-table__head">
+            <span />
+            <span>Sản phẩm</span>
+            <span>SL</span>
+            <span>Đơn giá</span>
+            <span>Thành tiền</span>
+          </div>
+          <div className="staff-order-items">
+            {(selectedOrder.items || []).map((item) => (
+              <article key={item.id || `${item.productName}-${item.sku}`} className="staff-order-item">
+                <div className="staff-order-thumb">
+                  {getItemThumbnail(item) ? <img src={getItemThumbnail(item)} alt={item.productName || "Sản phẩm"} loading="lazy" /> : <span>PC Mall</span>}
+                </div>
+                <div className="staff-order-item__name">
+                  <strong>{item.productName || "Sản phẩm"}</strong>
+                  <span>SKU: {item.sku || "Không rõ"}</span>
+                </div>
+                <div className="staff-order-item__metric">
+                  <span className="staff-order-item__mobileLabel">SL</span>
+                  <strong>{item.quantity || 0}</strong>
+                </div>
+                <div className="staff-order-item__metric">
+                  <span className="staff-order-item__mobileLabel">Đơn giá</span>
+                  <strong>{formatCurrency(getItemUnitPrice(item))} đ</strong>
+                </div>
+                <div className="staff-order-item__metric">
+                  <span className="staff-order-item__mobileLabel">Thành tiền</span>
+                  <strong>{formatCurrency(getLineAmount(item))} đ</strong>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StaffPaymentPanel({ selectedOrder }) {
+  return (
+    <section className="staff-card">
+      <div className="staff-orders-section__head">
+        <div>
+          <h3>Thanh toán</h3>
+          <p>Trạng thái chi phí và giao dịch.</p>
+        </div>
+      </div>
+      <InfoList
+        rows={[
+          { label: "Phương thức", value: selectedOrder.paymentMethod || "COD" },
+          { label: "Trạng thái thanh toán", value: <span className={`staff-badge staff-badge--${getPaymentTone(selectedOrder.paymentStatus)}`}>{getPaymentLabel(selectedOrder.paymentStatus)}</span> },
+          { label: "Phí vận chuyển", value: `${formatCurrency(selectedOrder.shippingFee)} đ` },
+          { label: "Tổng tiền", value: `${formatCurrency(getOrderAmount(selectedOrder))} đ` },
+          { label: "Mã giao dịch", value: selectedOrder.transactionCode || selectedOrder.paymentTransactionId || "—", wrap: true, full: true }
+        ]}
+      />
+    </section>
+  );
+}
+
+function StaffShipmentPanel({
+  selectedOrder,
+  shippingCarrier,
+  setShippingCarrier,
+  trackingCode,
+  setTrackingCode,
+  trackingError,
+  handleGenerateTracking
+}) {
+  return (
+    <section className="staff-card">
+      <div className="staff-orders-section__head">
+        <div>
+          <h3>Vận đơn</h3>
+          <p>Nhập mã vận đơn và cập nhật giao hàng đúng bước.</p>
+        </div>
+      </div>
+      <InfoList
+        rows={[
+          { label: "Trạng thái vận đơn", value: selectedOrder.shipment?.status || "Chưa tạo vận đơn" },
+          { label: "Mã vận đơn hiện tại", value: selectedOrder.shipment?.trackingCode || "Chưa có", wrap: true }
+        ]}
+      />
+      <div className="staff-field-stack">
+        <label htmlFor="staff-carrier" className="staff-field-label">Đơn vị vận chuyển</label>
+        <select id="staff-carrier" className="staff-orders-field" value={shippingCarrier} onChange={(event) => setShippingCarrier(event.target.value)}>
+          {SHIPPING_CARRIERS.map((item) => (
+            <option key={item.id} value={item.id}>{item.label}</option>
+          ))}
+        </select>
+        <input
+          className="staff-orders-field"
+          value={trackingCode}
+          onChange={(event) => setTrackingCode(event.target.value)}
+          placeholder="Nhập mã vận đơn"
+        />
+      </div>
+      {trackingError ? <div className="staff-orders-alert staff-orders-alert--error">{trackingError}</div> : null}
+      <div className="staff-inline-actions">
+        <button type="button" className="staff-btn staff-btn--secondary" onClick={handleGenerateTracking}>
+          Tạo mã demo
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function StaffInternalNotes({ consultationNote, setConsultationNote, applyNoteTemplate, handleSaveNote, actionLoading }) {
+  return (
+    <section className="staff-card">
+      <div className="staff-orders-section__head">
+        <div>
+          <h3>Ghi chú nội bộ</h3>
+          <p>Ghi chú tư vấn, hẹn giao và lưu ý đặc biệt cho đơn hàng.</p>
+        </div>
+      </div>
+      <div className="staff-note-templates">
+        {NOTE_TEMPLATES.map((text) => (
+          <button key={text} type="button" onClick={() => applyNoteTemplate(text)}>
+            {text}
+          </button>
+        ))}
+      </div>
+      <textarea
+        className="staff-orders-textarea"
+        value={consultationNote}
+        onChange={(event) => setConsultationNote(event.target.value)}
+        rows={6}
+        placeholder="Nhập ghi chú xử lý đơn hàng"
+      />
+      <button type="button" className="staff-btn staff-btn--dark" onClick={handleSaveNote} disabled={Boolean(actionLoading)}>
+        {actionLoading === "note" ? "Đang lưu..." : "Lưu ghi chú"}
+      </button>
+    </section>
   );
 }
 
@@ -212,7 +564,7 @@ export function StaffOrdersPage() {
     const query = keyword.trim().toLowerCase();
     if (!query) return orders;
 
-    return orders.filter((order) => {
+    const matched = orders.filter((order) => {
       const customer = order.customer || {};
       const searchable = [
         order.id,
@@ -230,7 +582,43 @@ export function StaffOrdersPage() {
 
       return searchable.includes(query);
     });
+
+    const numericQuery = Number(query);
+    if (Number.isInteger(numericQuery) && numericQuery > 0) {
+      return matched.sort((a, b) => {
+        const aExact = Number(a.id) === numericQuery ? 1 : 0;
+        const bExact = Number(b.id) === numericQuery ? 1 : 0;
+        return bExact - aExact;
+      });
+    }
+
+    return matched;
   }, [keyword, orders]);
+
+  useEffect(() => {
+    if (!filteredOrders.length) return;
+
+    const query = keyword.trim();
+    if (!query) {
+      if (!selectedOrderId || !filteredOrders.some((order) => order.id === selectedOrderId)) {
+        setSelectedOrderId(filteredOrders[0].id);
+      }
+      return;
+    }
+
+    const numericQuery = Number(query);
+    if (Number.isInteger(numericQuery) && numericQuery > 0) {
+      const exactOrder = filteredOrders.find((order) => Number(order.id) === numericQuery);
+      if (exactOrder && exactOrder.id !== selectedOrderId) {
+        setSelectedOrderId(exactOrder.id);
+        return;
+      }
+    }
+
+    if (!filteredOrders.some((order) => order.id === selectedOrderId)) {
+      setSelectedOrderId(filteredOrders[0].id);
+    }
+  }, [filteredOrders, keyword, selectedOrderId]);
 
   const stats = useMemo(() => {
     const source = statsOrders.length ? statsOrders : orders;
@@ -371,11 +759,6 @@ export function StaffOrdersPage() {
       setActionLoading("delivered");
       setErrorMessage("");
       setTrackingError("");
-      await createStaffShipment(selectedOrder.id, {
-        trackingCode: normalizedTracking,
-        carrier: shippingCarrier,
-        status: "DELIVERED"
-      });
       const response = await updateStaffOrderStatus(selectedOrder.id, "DELIVERED");
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
@@ -491,11 +874,50 @@ export function StaffOrdersPage() {
     };
   });
 
+  const actionButtons = [
+    renderActionButton({
+      key: "processing",
+      enabled: canMoveToProcessing,
+      label: "Xác nhận xử lý",
+      loadingLabel: "Đang cập nhật...",
+      onClick: handleMoveToProcessing,
+      className: "staff-btn staff-btn--primary",
+      title: actionHelp.processing
+    }),
+    renderActionButton({
+      key: "ship",
+      enabled: canShip,
+      label: "Chuyển sang giao hàng",
+      loadingLabel: "Đang cập nhật...",
+      onClick: handleShipOrder,
+      className: "staff-btn staff-btn--shipping",
+      title: actionHelp.ship
+    }),
+    renderActionButton({
+      key: "delivered",
+      enabled: canComplete,
+      label: "Hoàn tất đơn",
+      loadingLabel: "Đang cập nhật...",
+      onClick: handleCompleteOrder,
+      className: "staff-btn staff-btn--success",
+      title: actionHelp.delivered
+    }),
+    renderActionButton({
+      key: "cancel",
+      enabled: canCancel,
+      label: "Hủy đơn",
+      loadingLabel: "Đang xử lý...",
+      onClick: () => setShowCancelDialog(true),
+      className: "staff-btn staff-btn--danger",
+      title: actionHelp.cancel
+    })
+  ];
+
   return (
     <div className="staff-orders-dashboard">
       <style>{`
         @keyframes staffOrderPulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .staff-orders-dashboard { width: min(1440px, calc(100% - 48px)); margin: 0 auto; display: grid; gap: 24px; padding: 28px 0 40px; }
+        .staff-orders-dashboard { width: min(1440px, calc(100% - 32px)); margin: 0 auto; display: grid; gap: 24px; padding: 24px 0 40px; }
         .staff-orders-hero { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 28px 30px; border-radius: 28px; background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 22px 44px rgba(15, 23, 42, 0.16); }
         .staff-orders-hero__copy { max-width: 760px; }
         .staff-orders-hero__copy p { margin: 10px 0 0; color: #cbd5e1; line-height: 1.7; }
@@ -506,8 +928,10 @@ export function StaffOrdersPage() {
         .staff-orders-stat strong { font-size: 34px; color: #0f172a; line-height: 1; }
         .staff-orders-stat small { color: #64748b; }
         .staff-orders-layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 24px; align-items: start; }
-        .staff-orders-panel, .staff-orders-detail { border-radius: 24px; border: 1px solid #dbe4ef; background: rgba(255,255,255,0.94); box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06); overflow: hidden; }
-        .staff-orders-panel__body, .staff-orders-detail__body { padding: 22px; display: grid; gap: 18px; }
+        .staff-orders-panel, .staff-orders-detail { min-width: 0; border-radius: 24px; border: 1px solid #dbe4ef; background: rgba(255,255,255,0.94); box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06); }
+        .staff-orders-panel--sticky { position: sticky; top: 18px; }
+        .staff-orders-panel__body, .staff-orders-detail__body { padding: 22px; display: grid; gap: 18px; min-width: 0; }
+        .staff-orders-panel__stickyArea { display: grid; gap: 12px; position: sticky; top: 0; background: rgba(255,255,255,0.96); z-index: 2; }
         .staff-orders-panel__head, .staff-orders-section__head { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
         .staff-orders-panel__head h2, .staff-orders-section__head h2, .staff-orders-section__head h3 { margin: 0; color: #0f172a; }
         .staff-orders-panel__head p, .staff-orders-section__head p { margin: 6px 0 0; color: #64748b; line-height: 1.6; }
@@ -517,18 +941,19 @@ export function StaffOrdersPage() {
         .staff-orders-tabs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
         .staff-orders-tabs button { border: 1px solid #dbe4ef; background: #fff; color: #475569; border-radius: 999px; min-height: 38px; padding: 0 14px; font-weight: 800; cursor: pointer; white-space: nowrap; }
         .staff-orders-tabs button.is-active { color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; }
-        .staff-orders-list { display: grid; gap: 12px; max-height: 980px; overflow-y: auto; padding-right: 4px; }
+        .staff-orders-list { display: grid; gap: 12px; max-height: calc(100vh - 360px); overflow-y: auto; padding-right: 4px; }
         .staff-order-card { width: 100%; text-align: left; border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; padding: 16px; display: grid; gap: 10px; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
         .staff-order-card:hover { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(37, 99, 235, 0.10); }
         .staff-order-card--active { border-color: #60a5fa; box-shadow: 0 18px 30px rgba(37, 99, 235, 0.12); background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }
-        .staff-order-card__row { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .staff-order-card__row { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; min-width: 0; }
         .staff-order-card__title { font-size: 16px; font-weight: 900; color: #0f172a; }
-        .staff-order-card__meta { color: #64748b; font-size: 13px; }
-        .staff-order-card__amount { color: #1d4ed8; font-size: 18px; font-weight: 900; }
-        .staff-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 900; }
+        .staff-order-card__customer { color: #0f172a; font-weight: 800; }
+        .staff-order-card__meta { color: #64748b; font-size: 13px; min-width: 0; }
+        .staff-order-card__amount { color: #1d4ed8; font-size: 18px; font-weight: 900; white-space: nowrap; }
+        .staff-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 900; white-space: nowrap; }
         .staff-badge--warning { color: #b45309; background: #fff7ed; }
         .staff-badge--info { color: #1d4ed8; background: #eff6ff; }
-        .staff-badge--shipping { color: #155e75; background: #ecfeff; }
+        .staff-badge--shipping { color: #6d28d9; background: #f5f3ff; }
         .staff-badge--success { color: #047857; background: #ecfdf5; }
         .staff-badge--danger { color: #b91c1c; background: #fef2f2; }
         .staff-badge--neutral { color: #475569; background: #f8fafc; }
@@ -536,10 +961,13 @@ export function StaffOrdersPage() {
         .staff-orders-alert { padding: 14px 16px; border-radius: 16px; font-weight: 800; }
         .staff-orders-alert--error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
         .staff-orders-alert--success { background: #ecfdf5; color: #047857; border: 1px solid #bbf7d0; }
-        .staff-detail-header { display: grid; gap: 18px; padding: 24px; border-bottom: 1px solid #e2e8f0; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }
+        .staff-detail-header { position: sticky; top: 0; z-index: 3; display: grid; gap: 18px; padding: 24px; border-bottom: 1px solid #e2e8f0; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); }
         .staff-detail-header__top { display: flex; justify-content: space-between; gap: 18px; align-items: start; flex-wrap: wrap; }
         .staff-detail-header__top h2 { margin: 8px 0 0; font-size: 30px; color: #0f172a; }
         .staff-detail-header__top p { margin: 8px 0 0; color: #64748b; }
+        .staff-detail-header__summary { text-align: right; }
+        .staff-detail-header__summaryLabel { color: #64748b; font-size: 13px; font-weight: 800; }
+        .staff-detail-header__summaryValue { margin-top: 6px; color: #1d4ed8; font-size: 30px; font-weight: 900; }
         .staff-detail-header__actions { display: flex; gap: 10px; flex-wrap: wrap; }
         .staff-btn { min-height: 44px; border-radius: 14px; border: 1px solid transparent; cursor: pointer; padding: 0 16px; font-weight: 900; transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
         .staff-btn:hover:not(:disabled) { transform: translateY(-1px); }
@@ -551,39 +979,64 @@ export function StaffOrdersPage() {
         .staff-btn--danger { background: #fff; color: #b91c1c; border-color: #fecaca; }
         .staff-btn--danger-fill { background: #dc2626; color: #fff; }
         .staff-btn--dark { background: #0f172a; color: #fff; }
-        .staff-detail-grid { padding: 24px; display: grid; gap: 18px; }
-        .staff-detail-main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
-        .staff-card { border: 1px solid #e2e8f0; border-radius: 22px; background: #fff; padding: 20px; display: grid; gap: 16px; }
-        .staff-section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-        .staff-info-card { border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; display: grid; gap: 6px; }
-        .staff-info-card span { color: #64748b; font-size: 12px; font-weight: 800; }
-        .staff-info-card strong { color: #0f172a; }
-        .staff-order-items { display: grid; gap: 12px; }
-        .staff-order-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; }
-        .staff-order-item strong { display: block; color: #0f172a; }
-        .staff-order-item span { display: block; margin-top: 4px; color: #64748b; font-size: 13px; }
+        .staff-detail-grid { display: grid; gap: 20px; min-width: 0; }
+        .staff-card { width: 100%; min-width: 0; border: 1px solid #e2e8f0; border-radius: 22px; background: #fff; padding: 20px; display: grid; gap: 16px; }
+        .staff-info-list { display: grid; gap: 10px; min-width: 0; }
+        .staff-info-row { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; min-width: 0; }
+        .staff-info-row.is-full { grid-template-columns: 180px minmax(0, 1fr); }
+        .staff-info-row span { color: #64748b; font-size: 12px; font-weight: 800; }
+        .staff-info-row strong { color: #0f172a; font-size: 15px; line-height: 1.55; min-width: 0; }
+        .staff-workspace-section { display: grid; gap: 20px; min-width: 0; }
         .staff-stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-        .staff-step { padding: 14px; border-radius: 16px; border: 1px solid #e2e8f0; background: #fff; display: grid; gap: 8px; }
+        .staff-step { padding: 14px; border-radius: 16px; border: 1px solid #e2e8f0; background: #fff; display: grid; gap: 8px; min-width: 0; }
         .staff-step--done { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); border-color: #bfdbfe; }
         .staff-step__index { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; font-weight: 900; background: #e2e8f0; color: #0f172a; }
         .staff-step--done .staff-step__index { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; }
         .staff-step strong { color: #0f172a; }
         .staff-step small { color: #64748b; line-height: 1.5; }
-        .staff-orders-textarea { width: 100%; box-sizing: border-box; min-height: 120px; padding: 14px; border-radius: 14px; border: 1px solid #dbe4ef; background: #f8fafc; resize: vertical; font: inherit; }
-        .staff-note-templates { display: flex; gap: 8px; flex-wrap: wrap; }
-        .staff-note-templates button { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid #dbe4ef; background: #fff; color: #475569; cursor: pointer; font-weight: 700; }
+        .staff-items-table { display: grid; gap: 12px; min-width: 0; }
+        .staff-items-table__head { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px 132px 132px; gap: 14px; padding: 0 16px; color: #64748b; font-size: 12px; font-weight: 800; }
+        .staff-order-items { display: grid; gap: 12px; min-width: 0; }
+        .staff-order-item { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px 132px 132px; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; min-width: 0; }
+        .staff-order-item > * { min-width: 0; }
+        .staff-order-thumb { width: 64px; height: 64px; border-radius: 14px; border: 1px solid #dbe4ef; background: #fff; display: grid; place-items: center; overflow: hidden; }
+        .staff-order-thumb img { width: 100%; height: 100%; object-fit: contain; }
+        .staff-order-thumb span { color: #94a3b8; font-size: 11px; font-weight: 900; }
+        .staff-order-item__name strong { display: block; color: #0f172a; font-size: 15px; line-height: 1.45; word-break: normal; overflow-wrap: normal; }
+        .staff-order-item__name span { display: block; margin-top: 4px; color: #64748b; font-size: 13px; }
+        .staff-order-item__metric { display: grid; gap: 4px; justify-items: end; text-align: right; }
+        .staff-order-item__metric strong { color: #0f172a; font-size: 15px; }
+        .staff-order-item__mobileLabel { display: none; color: #64748b; font-size: 12px; font-weight: 800; }
+        .staff-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+        .staff-field-stack { display: grid; gap: 12px; min-width: 0; }
+        .staff-field-label { font-size: 13px; font-weight: 800; color: #475569; }
+        .staff-orders-field { min-height: 46px; padding: 0 14px; font-weight: 650; }
+        .staff-note-templates { display: flex; flex-wrap: wrap; gap: 10px; }
+        .staff-note-templates button { padding: 10px 14px; border-radius: 999px; border: 1px solid #dbe4ef; background: #fff; color: #334155; cursor: pointer; font-weight: 700; line-height: 1.4; }
+        .staff-orders-textarea { min-height: 138px; padding: 14px; border-radius: 14px; border: 1px solid #dbe4ef; background: #f8fafc; resize: vertical; font: inherit; }
+        .staff-inline-actions { display: flex; gap: 10px; flex-wrap: wrap; }
         .staff-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.44); display: grid; place-items: center; z-index: 70; padding: 20px; }
         .staff-modal__panel { width: min(560px, 100%); border-radius: 24px; background: #fff; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 26px 60px rgba(15, 23, 42, 0.24); display: grid; gap: 16px; }
         .staff-modal__panel h2 { margin: 0; color: #0f172a; }
         .staff-modal__panel p { margin: 0; color: #64748b; line-height: 1.6; }
         .staff-modal__actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
-        @media (max-width: 1180px) {
-          .staff-orders-layout, .staff-detail-main-grid, .staff-orders-stats, .staff-stepper { grid-template-columns: 1fr 1fr; }
+        @media (max-width: 1279px) {
+          .staff-orders-dashboard { width: min(100%, calc(100% - 24px)); }
+          .staff-orders-layout { grid-template-columns: 320px minmax(0, 1fr); }
+          .staff-orders-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .staff-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .staff-items-table__head, .staff-order-item { grid-template-columns: 72px minmax(0, 1fr) 72px 110px 110px; }
         }
         @media (max-width: 920px) {
-          .staff-orders-dashboard { width: min(100%, calc(100% - 24px)); }
-          .staff-orders-hero, .staff-detail-header__top { grid-template-columns: 1fr; display: grid; }
-          .staff-orders-layout, .staff-detail-main-grid, .staff-orders-stats, .staff-stepper, .staff-section-grid { grid-template-columns: 1fr; }
+          .staff-orders-hero, .staff-detail-header__top { display: grid; grid-template-columns: 1fr; }
+          .staff-orders-layout, .staff-orders-stats, .staff-stepper { grid-template-columns: 1fr; }
+          .staff-orders-panel--sticky, .staff-detail-header { position: static; }
+          .staff-orders-list { max-height: none; }
+          .staff-info-row { grid-template-columns: 1fr; }
+          .staff-items-table__head { display: none; }
+          .staff-order-item { grid-template-columns: 72px minmax(0, 1fr); }
+          .staff-order-item__metric { justify-items: start; text-align: left; }
+          .staff-order-item__mobileLabel { display: inline; }
         }
       `}</style>
 
@@ -630,81 +1083,16 @@ export function StaffOrdersPage() {
       {successMessage ? <div className="staff-orders-alert staff-orders-alert--success">{successMessage}</div> : null}
 
       <div className="staff-orders-layout">
-        <aside className="staff-orders-panel">
-          <div className="staff-orders-panel__body">
-            <div className="staff-orders-panel__head">
-              <div>
-                <h2>Danh sách đơn hàng</h2>
-                <p>Tìm kiếm, lọc trạng thái và chọn đơn để thao tác.</p>
-              </div>
-            </div>
-
-            <div className="staff-orders-toolbar">
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="Tìm mã đơn, khách hàng, email, vận đơn..."
-                aria-label="Tìm đơn hàng"
-              />
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Lọc trạng thái đơn hàng">
-                {ORDER_STATUS_OPTIONS.map((status) => (
-                  <option key={status || "all"} value={status}>
-                    {status ? getStatusMeta(status).label : "Tất cả trạng thái"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="staff-orders-tabs">
-              {ORDER_STATUS_OPTIONS.map((status) => (
-                <button
-                  key={status || "all"}
-                  type="button"
-                  className={statusFilter === status ? "is-active" : ""}
-                  onClick={() => setStatusFilter(status)}
-                >
-                  {status ? getStatusMeta(status).label : "Tất cả"}
-                </button>
-              ))}
-            </div>
-
-            <div className="staff-orders-list">
-              {loading ? (
-                <OrderListSkeleton />
-              ) : filteredOrders.length === 0 ? (
-                <div className="staff-orders-empty">
-                  <strong style={{ display: "block", marginBottom: 8, color: "#0f172a" }}>Chưa có đơn phù hợp</strong>
-                  Thử đổi bộ lọc trạng thái hoặc từ khóa tìm kiếm.
-                </div>
-              ) : (
-                filteredOrders.map((order) => {
-                  const isActive = order.id === selectedOrderId;
-                  const statusMeta = getStatusMeta(order.status);
-                  return (
-                    <button
-                      key={order.id}
-                      type="button"
-                      className={`staff-order-card${isActive ? " staff-order-card--active" : ""}`}
-                      onClick={() => setSelectedOrderId(order.id)}
-                    >
-                      <div className="staff-order-card__row">
-                        <span className={`staff-badge staff-badge--${statusMeta.tone}`}>{statusMeta.label}</span>
-                        <span className={`staff-badge staff-badge--${getPaymentTone(order.paymentStatus)}`}>{getPaymentLabel(order.paymentStatus)}</span>
-                      </div>
-                      <div className="staff-order-card__title">Đơn #{order.id}</div>
-                      <div style={{ color: "#0f172a", fontWeight: 800 }}>{order.customer?.fullName || "Khách hàng"}</div>
-                      <div className="staff-order-card__meta">{order.paymentMethod || "COD"} · {formatShortDate(order.createdAt)}</div>
-                      <div className="staff-order-card__row">
-                        <span className="staff-order-card__meta">{order.customer?.email || "Không có email"}</span>
-                        <span className="staff-order-card__amount">{formatCurrency(getOrderAmount(order))} đ</span>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </aside>
+        <StaffOrderQueue
+          loading={loading}
+          filteredOrders={filteredOrders}
+          keyword={keyword}
+          setKeyword={setKeyword}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          selectedOrderId={selectedOrderId}
+          setSelectedOrderId={setSelectedOrderId}
+        />
 
         <main className="staff-orders-detail">
           {detailLoading ? (
@@ -719,212 +1107,37 @@ export function StaffOrdersPage() {
               </div>
             </div>
           ) : (
-            <>
-              <header className="staff-detail-header">
-                <div className="staff-detail-header__top">
-                  <div>
-                    <span className={`staff-badge staff-badge--${selectedStatusMeta.tone}`}>{selectedStatusMeta.label}</span>
-                    <h2>Đơn hàng #{selectedOrder.id}</h2>
-                    <p>Tạo lúc {formatDate(selectedOrder.createdAt)} · Khách {customer.fullName || "Không rõ"}</p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>Tổng thanh toán</div>
-                    <div style={{ marginTop: 6, color: "#1d4ed8", fontSize: 30, fontWeight: 900 }}>{formatCurrency(getOrderAmount(selectedOrder))} đ</div>
-                  </div>
-                </div>
-                <div className="staff-detail-header__actions">
-                  {renderActionButton({
-                    key: "processing",
-                    enabled: canMoveToProcessing,
-                    label: "Xác nhận xử lý",
-                    loadingLabel: "Đang cập nhật...",
-                    onClick: handleMoveToProcessing,
-                    className: "staff-btn staff-btn--primary",
-                    title: actionHelp.processing
-                  })}
-                  {renderActionButton({
-                    key: "ship",
-                    enabled: canShip,
-                    label: "Chuyển sang giao hàng",
-                    loadingLabel: "Đang cập nhật...",
-                    onClick: handleShipOrder,
-                    className: "staff-btn staff-btn--shipping",
-                    title: actionHelp.ship
-                  })}
-                  {renderActionButton({
-                    key: "delivered",
-                    enabled: canComplete,
-                    label: "Hoàn tất đơn",
-                    loadingLabel: "Đang cập nhật...",
-                    onClick: handleCompleteOrder,
-                    className: "staff-btn staff-btn--success",
-                    title: actionHelp.delivered
-                  })}
-                  {renderActionButton({
-                    key: "cancel",
-                    enabled: canCancel,
-                    label: "Hủy đơn",
-                    loadingLabel: "Đang xử lý...",
-                    onClick: () => setShowCancelDialog(true),
-                    className: "staff-btn staff-btn--danger",
-                    title: actionHelp.cancel
-                  })}
-                </div>
-              </header>
+            <div className="staff-orders-detail__body">
+              <StaffOrderHeader
+                selectedOrder={selectedOrder}
+                selectedStatusMeta={selectedStatusMeta}
+                customer={customer}
+                actionButtons={actionButtons}
+              />
 
-              <div className="staff-detail-grid">
-                <section className="staff-card">
-                  <div className="staff-orders-section__head">
-                    <div>
-                      <h3>Lịch sử xử lý</h3>
-                      <p>Trạng thái đơn theo quy trình vận hành nội bộ.</p>
-                    </div>
-                  </div>
-                  <div className="staff-stepper">
-                    {orderTimeline.map((step, index) => (
-                      <article key={step.status} className={`staff-step${step.isDone ? " staff-step--done" : ""}`}>
-                        <div className="staff-step__index">{index + 1}</div>
-                        <strong>{step.meta.label}</strong>
-                        <small>{step.timestamp ? formatDate(step.timestamp) : "Đang chờ cập nhật"}</small>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-
-                <div className="staff-detail-main-grid">
-                  <div style={{ display: "grid", gap: 18 }}>
-                    <section className="staff-card">
-                      <div className="staff-orders-section__head">
-                        <div>
-                          <h3>Tổng quan đơn hàng</h3>
-                          <p>Thông tin nhận diện nhanh để xử lý đúng luồng.</p>
-                        </div>
-                      </div>
-                      <div className="staff-section-grid">
-                        <article className="staff-info-card"><span>Mã đơn</span><strong>#{selectedOrder.id}</strong></article>
-                        <article className="staff-info-card"><span>Ngày đặt</span><strong>{formatDate(selectedOrder.createdAt)}</strong></article>
-                        <article className="staff-info-card"><span>Trạng thái đơn</span><strong>{selectedStatusMeta.label}</strong></article>
-                        <article className="staff-info-card"><span>Ghi chú hiện tại</span><strong>{selectedOrder.note || "Chưa có ghi chú"}</strong></article>
-                      </div>
-                    </section>
-
-                    <section className="staff-card">
-                      <div className="staff-orders-section__head">
-                        <div>
-                          <h3>Thông tin khách hàng</h3>
-                          <p>Thông tin liên hệ và địa chỉ giao hàng.</p>
-                        </div>
-                      </div>
-                      <div className="staff-section-grid">
-                        <article className="staff-info-card"><span>Tên khách</span><strong>{customer.fullName || "Không rõ"}</strong></article>
-                        <article className="staff-info-card"><span>Email</span><strong>{customer.email || "Không rõ"}</strong></article>
-                        <article className="staff-info-card"><span>Số điện thoại</span><strong>{customer.phone || "Không rõ"}</strong></article>
-                        <article className="staff-info-card"><span>Địa chỉ giao hàng</span><strong>{selectedOrder.shippingAddress || "Chưa có địa chỉ giao hàng"}</strong></article>
-                      </div>
-                    </section>
-
-                    <section className="staff-card">
-                      <div className="staff-orders-section__head">
-                        <div>
-                          <h3>Danh sách sản phẩm</h3>
-                          <p>Kiểm tra lại cấu hình và số lượng trước khi giao.</p>
-                        </div>
-                      </div>
-                      <div className="staff-order-items">
-                        {(selectedOrder.items || []).length === 0 ? (
-                          <div className="staff-orders-empty">Đơn hàng chưa có dòng sản phẩm.</div>
-                        ) : (
-                          (selectedOrder.items || []).map((item) => (
-                            <article key={item.id || `${item.productName}-${item.sku}`} className="staff-order-item">
-                              <div>
-                                <strong>{item.productName || "Sản phẩm"}</strong>
-                                <span>SKU: {item.sku || "Không rõ"} · Số lượng: {item.quantity || 0}</span>
-                              </div>
-                              <b style={{ color: "#0f172a" }}>{formatCurrency(getLineAmount(item))} đ</b>
-                            </article>
-                          ))
-                        )}
-                      </div>
-                    </section>
-                  </div>
-
-                  <div style={{ display: "grid", gap: 18 }}>
-                    <section className="staff-card">
-                      <div className="staff-orders-section__head">
-                        <div>
-                          <h3>Thanh toán</h3>
-                          <p>Trạng thái chi phí và giao dịch.</p>
-                        </div>
-                      </div>
-                      <div className="staff-section-grid" style={{ gridTemplateColumns: "1fr" }}>
-                        <article className="staff-info-card"><span>Phương thức</span><strong>{selectedOrder.paymentMethod || "COD"}</strong></article>
-                        <article className="staff-info-card"><span>Trạng thái thanh toán</span><strong><span className={`staff-badge staff-badge--${getPaymentTone(selectedOrder.paymentStatus)}`}>{getPaymentLabel(selectedOrder.paymentStatus)}</span></strong></article>
-                        <article className="staff-info-card"><span>Phí vận chuyển</span><strong>{formatCurrency(selectedOrder.shippingFee)} đ</strong></article>
-                        <article className="staff-info-card"><span>Tổng tiền</span><strong>{formatCurrency(getOrderAmount(selectedOrder))} đ</strong></article>
-                        <article className="staff-info-card"><span>Mã giao dịch</span><strong>{selectedOrder.transactionCode || selectedOrder.paymentTransactionId || "—"}</strong></article>
-                      </div>
-                    </section>
-
-                    <section className="staff-card">
-                      <div className="staff-orders-section__head">
-                        <div>
-                          <h3>Vận đơn</h3>
-                          <p>Nhập mã vận đơn và cập nhật giao hàng đúng bước.</p>
-                        </div>
-                      </div>
-                      <div className="staff-section-grid" style={{ gridTemplateColumns: "1fr" }}>
-                        <article className="staff-info-card"><span>Trạng thái vận đơn</span><strong>{selectedOrder.shipment?.status || "Chưa tạo vận đơn"}</strong></article>
-                        <article className="staff-info-card"><span>Mã vận đơn hiện tại</span><strong>{selectedOrder.shipment?.trackingCode || "Chưa có"}</strong></article>
-                      </div>
-                      <label htmlFor="staff-carrier" style={{ fontSize: 13, fontWeight: 800, color: "#475569" }}>Đơn vị vận chuyển</label>
-                      <select id="staff-carrier" className="staff-orders-field" value={shippingCarrier} onChange={(event) => setShippingCarrier(event.target.value)}>
-                        {SHIPPING_CARRIERS.map((item) => (
-                          <option key={item.id} value={item.id}>{item.label}</option>
-                        ))}
-                      </select>
-                      <input
-                        className="staff-orders-field"
-                        value={trackingCode}
-                        onChange={(event) => setTrackingCode(event.target.value)}
-                        placeholder="Nhập mã vận đơn"
-                      />
-                      {trackingError ? <div className="staff-orders-alert staff-orders-alert--error">{trackingError}</div> : null}
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        <button type="button" className="staff-btn staff-btn--secondary" onClick={handleGenerateTracking}>
-                          Tạo mã demo
-                        </button>
-                      </div>
-                    </section>
-
-                    <section className="staff-card">
-                      <div className="staff-orders-section__head">
-                        <div>
-                          <h3>Lịch sử xử lý nội bộ</h3>
-                          <p>Ghi chú tư vấn, hẹn giao, lưu ý đặc biệt.</p>
-                        </div>
-                      </div>
-                      <div className="staff-note-templates">
-                        {NOTE_TEMPLATES.map((text) => (
-                          <button key={text} type="button" onClick={() => applyNoteTemplate(text)}>
-                            {text}
-                          </button>
-                        ))}
-                      </div>
-                      <textarea
-                        className="staff-orders-textarea"
-                        value={consultationNote}
-                        onChange={(event) => setConsultationNote(event.target.value)}
-                        rows={5}
-                        placeholder="Nhập ghi chú xử lý đơn hàng"
-                      />
-                      <button type="button" className="staff-btn staff-btn--dark" onClick={handleSaveNote} disabled={Boolean(actionLoading)}>
-                        {actionLoading === "note" ? "Đang lưu..." : "Lưu ghi chú"}
-                      </button>
-                    </section>
-                  </div>
-                </div>
+              <div className="staff-workspace-section">
+                <StaffOrderTimeline orderTimeline={orderTimeline} />
+                <StaffCustomerInfo selectedOrder={selectedOrder} customer={customer} selectedStatusMeta={selectedStatusMeta} />
+                <StaffOrderItemsTable selectedOrder={selectedOrder} />
+                <StaffPaymentPanel selectedOrder={selectedOrder} />
+                <StaffShipmentPanel
+                  selectedOrder={selectedOrder}
+                  shippingCarrier={shippingCarrier}
+                  setShippingCarrier={setShippingCarrier}
+                  trackingCode={trackingCode}
+                  setTrackingCode={setTrackingCode}
+                  trackingError={trackingError}
+                  handleGenerateTracking={handleGenerateTracking}
+                />
+                <StaffInternalNotes
+                  consultationNote={consultationNote}
+                  setConsultationNote={setConsultationNote}
+                  applyNoteTemplate={applyNoteTemplate}
+                  handleSaveNote={handleSaveNote}
+                  actionLoading={actionLoading}
+                />
               </div>
-            </>
+            </div>
           )}
         </main>
       </div>

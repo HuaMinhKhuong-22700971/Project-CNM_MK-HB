@@ -18,6 +18,8 @@ const CATEGORY_PLACEHOLDERS = {
 
 const FALLBACK_IMAGES = {
   default: "https://placehold.co/800x800/f8fafc/1e293b?text=PC+Mall",
+  cpu: "/assets/products/i5.png",
+  gpu: "/assets/products/rtx4060.png",
   cooling: "/assets/products/cooling-real/deepcool-ag400.webp",
   laptop: "/assets/products/laptop-acer-predator-helios-16.svg",
   storage: "/assets/products/ssd-samsung-980-pro-2tb.svg",
@@ -28,9 +30,11 @@ function pickLabel(categoryName, productName) {
   const key = String(categoryName || productName || "")
     .trim()
     .toLowerCase();
+
   for (const [token, label] of Object.entries(CATEGORY_PLACEHOLDERS)) {
     if (key.includes(token)) return label;
   }
+
   return CATEGORY_PLACEHOLDERS.default;
 }
 
@@ -44,7 +48,14 @@ function isBrokenImage(url) {
 }
 
 function getProductCategoryKey(product = {}) {
-  return String(product?.category_name || product?.categoryName || product?.category?.name || product?.product_name || product?.name || "")
+  return String(
+    product?.category_name ||
+      product?.categoryName ||
+      product?.category?.name ||
+      product?.product_name ||
+      product?.name ||
+      ""
+  )
     .trim()
     .toLowerCase();
 }
@@ -52,7 +63,13 @@ function getProductCategoryKey(product = {}) {
 function getCategoryFallbackKey(product = {}, options = {}) {
   const key = `${getProductCategoryKey(product)} ${String(options.label || "").toLowerCase()}`;
 
-  if (["cooling", "cooler", "fan", "aio", "radiator", "tản nhiệt", "tan nhiet"].some((token) => key.includes(token))) {
+  if (["cpu", "processor", "intel", "ryzen"].some((token) => key.includes(token))) {
+    return "cpu";
+  }
+  if (["gpu", "vga", "rtx", "radeon", "graphics card"].some((token) => key.includes(token))) {
+    return "gpu";
+  }
+  if (["cooling", "cooler", "fan", "aio", "radiator", "tan nhiet", "tản nhiệt"].some((token) => key.includes(token))) {
     return "cooling";
   }
   if (["laptop", "notebook"].some((token) => key.includes(token))) {
@@ -61,7 +78,7 @@ function getCategoryFallbackKey(product = {}, options = {}) {
   if (["storage", "ssd", "hdd", "nvme"].some((token) => key.includes(token))) {
     return "storage";
   }
-  if (["complete pc", "pc bộ", "pc build", "custom build"].some((token) => key.includes(token))) {
+  if (["complete pc", "pc bo", "pc bộ", "pc build", "custom build"].some((token) => key.includes(token))) {
     return "completepc";
   }
 
@@ -82,6 +99,13 @@ export function resolveProductImage(product = {}, options = {}) {
     product?.imageUrl,
     product?.thumbnail,
     product?.thumbnail_url,
+    product?.product?.image_url,
+    product?.product?.imageUrl,
+    product?.product?.thumbnail,
+    product?.sku?.image_url,
+    product?.sku?.imageUrl,
+    product?.skuData?.image_url,
+    product?.skuData?.imageUrl,
     product?.defaultVariant?.imageUrl,
     product?.primaryVariant?.image_url,
     product?.variants?.[0]?.image_url,
@@ -105,6 +129,9 @@ export function resolveProductImage(product = {}, options = {}) {
   const categoryFallback = getFallbackImage(product, options);
   if (categoryFallback) return categoryFallback;
 
-  const label = encodeURIComponent(options.label || pickLabel(product?.category_name || product?.category?.name, product?.product_name || product?.name));
+  const label = encodeURIComponent(
+    options.label || pickLabel(product?.category_name || product?.category?.name, product?.product_name || product?.name)
+  );
+
   return `https://placehold.co/800x800/f8fafc/334155?text=${label}`;
 }

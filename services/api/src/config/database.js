@@ -5,7 +5,7 @@ const { env } = require("./env");
 let pool;
 
 function createPool() {
-  return mysql.createPool({
+  const nextPool = mysql.createPool({
     host: env.dbHost,
     port: env.dbPort,
     user: env.dbUser,
@@ -16,6 +16,12 @@ function createPool() {
     connectionLimit: 10,
     queueLimit: 0
   });
+
+  nextPool.on("connection", (connection) => {
+    connection.query("SET time_zone = '+07:00'");
+  });
+
+  return nextPool;
 }
 
 function getDbPool() {
