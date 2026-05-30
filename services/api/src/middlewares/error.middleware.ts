@@ -11,9 +11,15 @@ export function errorHandler(
   _next: NextFunction
 ) {
   if (err instanceof ZodError) {
+    const firstIssue = err.issues[0];
+    const firstField = firstIssue?.path?.join(".");
+    const firstMessage = firstIssue
+      ? `${firstField ? `${firstField}: ` : ""}${firstIssue.message}`
+      : "Dữ liệu không hợp lệ";
+
     return res.status(400).json({
       success: false,
-      message: "Validation failed",
+      message: firstMessage,
       errors: err.flatten()
     });
   }

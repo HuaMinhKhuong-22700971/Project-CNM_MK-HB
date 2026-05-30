@@ -30,6 +30,7 @@ services/api/prisma/dev.db
 
 # Demo chat persistence (staff)
 services/api/src/data/chat-sessions.json
+services/api/uploads/
 
 # Frontend
 apps/web/.vite/

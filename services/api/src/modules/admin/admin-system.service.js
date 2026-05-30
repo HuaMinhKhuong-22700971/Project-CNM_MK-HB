@@ -133,8 +133,39 @@ async function countIfExists(tableName) {
   return Number(rows[0]?.total || 0);
 }
 
+async function countOrdersByPaymentStatus(statuses) {
+  if (!(await tableExists("orders"))) {
+    return 0;
+  }
+
+  const placeholders = statuses.map(() => "?").join(", ");
+  const rows = await query(
+    `
+      SELECT COUNT(*) AS total
+      FROM orders
+      WHERE payment_method = 'BANK_TRANSFER'
+        AND payment_status IN (${placeholders})
+    `,
+    statuses
+  );
+
+  return Number(rows[0]?.total || 0);
+}
+
 async function getSystemOverview() {
-  const [dbHealth, users, products, orders, tickets, payments, shipments, settings, auditLogs] = await Promise.all([
+  const [
+    dbHealth,
+    users,
+    products,
+    orders,
+    tickets,
+    payments,
+    shipments,
+    pendingPaymentApprovals,
+    bankTransferOrders,
+    settings,
+    auditLogs
+  ] = await Promise.all([
     checkDatabaseHealth(),
     countIfExists("users"),
     countIfExists("products"),
@@ -142,6 +173,8 @@ async function getSystemOverview() {
     countIfExists("tickets"),
     countIfExists("payments"),
     countIfExists("shipments"),
+    countOrdersByPaymentStatus(["AWAITING_ADMIN_CONFIRMATION", "PENDING_VERIFICATION"]),
+    countOrdersByPaymentStatus(["PENDING_GATEWAY", "AWAITING_ADMIN_CONFIRMATION", "PENDING_VERIFICATION", "PAID", "REJECTED"]),
     getSettings(),
     getRecentAuditLogs(12)
   ]);
@@ -163,7 +196,9 @@ async function getSystemOverview() {
       orders,
       tickets,
       payments,
-      shipments
+      shipments,
+      pendingPaymentApprovals,
+      bankTransferOrders
     },
     settings,
     auditLogs

@@ -32,6 +32,11 @@ const getAllTickets = asyncHandler(async (req, res) => {
   return sendSuccess(res, "Tickets fetched successfully", result);
 });
 
+const getTicketStats = asyncHandler(async (req, res) => {
+  const result = await ticketsService.getTicketStats(req.user);
+  return sendSuccess(res, "Ticket stats fetched successfully", result);
+});
+
 const updateTicket = asyncHandler(async (req, res) => {
   const result = await ticketsService.updateTicket(req.user, req.params.ticketId, req.validatedTicketPayload);
   await recordAuditLog({
@@ -64,6 +69,7 @@ module.exports = {
   getMyTickets,
   getTicketDetail,
   getAllTickets,
+  getTicketStats,
   updateTicket,
   addTicketMessage
 };

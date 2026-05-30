@@ -76,6 +76,12 @@ function assertWarrantyOwnership(req: Request, warranty: any) {
   }
 }
 
+function isWarrantyRequestable(warranty: any) {
+  const status = String(warranty?.status || "ACTIVE").toUpperCase();
+  const expiresAt = warranty?.expires_at ? new Date(warranty.expires_at) : null;
+  return status === "ACTIVE" && (!expiresAt || expiresAt.getTime() >= Date.now());
+}
+
 async function queryRows<T = any>(sql: string, ...params: any[]) {
   return prisma.$queryRawUnsafe<T[]>(sql, ...params);
 }
@@ -357,7 +363,88 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
         c.name AS categoryName,
         u.email AS accountEmail,
         u.full_name AS accountName,
-        u.phone AS accountPhone
+        u.phone AS accountPhone,
+        (
+          SELECT mu.email
+          FROM users mu
+          WHERE wr.user_id IS NULL
+            AND (
+              (
+                wr.customer_email IS NOT NULL
+                AND wr.customer_email <> ''
+                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+              )
+              OR (
+                wr.customer_phone IS NOT NULL
+                AND wr.customer_phone <> ''
+                AND mu.phone COLLATE utf8mb4_general_ci = wr.customer_phone COLLATE utf8mb4_general_ci
+              )
+            )
+          ORDER BY
+            CASE
+              WHEN wr.customer_email IS NOT NULL
+                AND wr.customer_email <> ''
+                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+              THEN 0
+              ELSE 1
+            END,
+            mu.id DESC
+          LIMIT 1
+        ) AS matchedEmail,
+        (
+          SELECT mu.full_name
+          FROM users mu
+          WHERE wr.user_id IS NULL
+            AND (
+              (
+                wr.customer_email IS NOT NULL
+                AND wr.customer_email <> ''
+                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+              )
+              OR (
+                wr.customer_phone IS NOT NULL
+                AND wr.customer_phone <> ''
+                AND mu.phone COLLATE utf8mb4_general_ci = wr.customer_phone COLLATE utf8mb4_general_ci
+              )
+            )
+          ORDER BY
+            CASE
+              WHEN wr.customer_email IS NOT NULL
+                AND wr.customer_email <> ''
+                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+              THEN 0
+              ELSE 1
+            END,
+            mu.id DESC
+          LIMIT 1
+        ) AS matchedName,
+        (
+          SELECT mu.phone
+          FROM users mu
+          WHERE wr.user_id IS NULL
+            AND (
+              (
+                wr.customer_email IS NOT NULL
+                AND wr.customer_email <> ''
+                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+              )
+              OR (
+                wr.customer_phone IS NOT NULL
+                AND wr.customer_phone <> ''
+                AND mu.phone COLLATE utf8mb4_general_ci = wr.customer_phone COLLATE utf8mb4_general_ci
+              )
+            )
+          ORDER BY
+            CASE
+              WHEN wr.customer_email IS NOT NULL
+                AND wr.customer_email <> ''
+                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+              THEN 0
+              ELSE 1
+            END,
+            mu.id DESC
+          LIMIT 1
+        ) AS matchedPhone
       FROM warranty_requests wr
       LEFT JOIN warranties w ON w.id = wr.warranty_id
       LEFT JOIN order_items oi ON oi.id = w.order_item_id
@@ -413,9 +500,9 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
     warrantyId: row.warrantyId,
     userId: row.userId,
     lookupValue: row.lookupValue,
-    customerName: row.customerName || row.accountName || null,
-    customerPhone: row.customerPhone || row.accountPhone || null,
-    customerEmail: row.customerEmail || row.accountEmail || null,
+    customerName: row.customerName || row.accountName || row.matchedName || null,
+    customerPhone: row.customerPhone || row.accountPhone || row.matchedPhone || null,
+    customerEmail: row.customerEmail || row.accountEmail || row.matchedEmail || null,
     productName: row.productName || row.orderItemProductName || "Sản phẩm",
     serialNumber: row.serialNumber || row.orderItemSku || null,
     orderId: row.orderId,
@@ -677,13 +764,33 @@ export const submitWarrantyRequest = asyncHandler(async (req: Request, res: Resp
 
   assertWarrantyOwnership(req, warranty);
 
+  if (!isWarrantyRequestable(warranty)) {
+    throw new AppError("Sản phẩm đã hết hạn hoặc không còn hiệu lực bảo hành", 400);
+  }
+
+  const openRequests = await queryRows<{ id: number; status: string }>(
+    `
+      SELECT id, status
+      FROM warranty_requests
+      WHERE warranty_id = ?
+        AND status <> 'COMPLETED'
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+    warranty.id
+  );
+
+  if (openRequests.length > 0) {
+    throw new AppError("Sản phẩm này đã có yêu cầu bảo hành đang được xử lý", 409);
+  }
+
   const userId = getAuthenticatedUserId(req) || warranty.user_id || null;
   const customerName = String(req.body?.customerName || req.body?.fullName || warranty?.User?.full_name || "").trim() || null;
   const customerPhone = String(req.body?.customerPhone || req.body?.phone || warranty?.User?.phone || "").trim() || null;
   const customerEmail = String(req.body?.customerEmail || req.body?.email || warranty?.User?.email || "").trim() || null;
-  const productName = String(req.body?.productName || warranty?.OrderItem?.name_snapshot || "").trim() || null;
-  const serialNumber = String(req.body?.serialNumber || warranty?.OrderItem?.sku_snapshot || lookupValue || "").trim() || null;
-  const orderId = req.body?.orderId ? Number(req.body.orderId) : warranty?.order_id || null;
+  const productName = String(warranty?.OrderItem?.name_snapshot || req.body?.productName || "").trim() || null;
+  const serialNumber = String(warranty?.OrderItem?.sku_snapshot || req.body?.serialNumber || lookupValue || "").trim() || null;
+  const orderId = warranty?.order_id || (req.body?.orderId ? Number(req.body.orderId) : null);
 
   await execute(
     `

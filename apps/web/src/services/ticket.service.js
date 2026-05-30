@@ -1,7 +1,19 @@
 import { httpClient } from "./http";
 
+function getUploadConfig(payload) {
+  if (payload instanceof FormData) {
+    return {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    };
+  }
+
+  return undefined;
+}
+
 export async function createTicket(payload) {
-  const response = await httpClient.post("/tickets", payload);
+  const response = await httpClient.post("/tickets", payload, getUploadConfig(payload));
   return response.data;
 }
 
@@ -31,6 +43,6 @@ export async function updateTicket(ticketId, payload) {
 }
 
 export async function addTicketMessage(ticketId, payload) {
-  const response = await httpClient.post(`/tickets/${ticketId}/messages`, payload);
+  const response = await httpClient.post(`/tickets/${ticketId}/messages`, payload, getUploadConfig(payload));
   return response.data;
 }

@@ -5,6 +5,7 @@ import { ROLES } from "../../constants/roles";
 import { AppError } from "../../errors/app-error";
 import { asyncHandler } from "../../utils/async-handler";
 import {
+  completeDeliveredOrder,
   ensurePaymentProofColumn,
   getOrderById,
   getOrdersByUser,
@@ -18,6 +19,12 @@ import {
 import { checkoutSchema, updateOrderStatusSchema } from "./orders.validator";
 import { generateVnpayUrl, verifyVnpayReturn } from "../../utils/vnpay";
 import { env } from "../../config/env";
+import jwt from "jsonwebtoken";
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { createWarrantyRecordsForDeliveredOrder } = require("../warranties/warranty-sync.service");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { publishOrderEvent, subscribeOrderEvents } = require("../../services/order-events");
 
 type UploadedPaymentProofFile = {
   filename: string;
@@ -164,6 +171,24 @@ export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+export const streamOrderEvents = asyncHandler(async (req: Request, res: Response) => {
+  const token = String(req.query.token || "");
+  if (!token) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  try {
+    const payload = jwt.verify(token, env.jwtAccessSecret) as { userId?: string; sub?: string };
+    const userId = payload.userId || payload.sub;
+    if (!userId) {
+      throw new Error("Token does not include user id");
+    }
+    subscribeOrderEvents(userId, res);
+  } catch (_error) {
+    throw new AppError("Invalid or expired token", 401);
+  }
+});
+
 export const getOrderDetail = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError("Unauthorized", 401);
@@ -221,10 +246,51 @@ export const patchOrderStatus = asyncHandler(async (req: Request, res: Response)
 
   // Return full order to show new trackingCode or details
   const finalOrder = await getOrderById(req.params.id);
+  if (finalOrder?.user_id) {
+    publishOrderEvent(finalOrder.user_id, {
+      orderId: finalOrder.id,
+      status: finalOrder.status,
+      paymentStatus: finalOrder.payment_status
+    });
+  }
 
   res.status(200).json({
     success: true,
     data: await normalizeOrderRecord(finalOrder)
+  });
+});
+
+export const confirmOrderReceived = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError("Unauthorized", 401);
+  }
+
+  const order = await getOrderById(req.params.id);
+  if (!order || order.user_id !== Number(req.user.userId)) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.status !== "DELIVERED") {
+    throw new AppError("Only delivered orders can be confirmed as received", 400);
+  }
+
+  const result = await completeDeliveredOrder(req.params.id, req.user.userId);
+  if (result.count === 0) {
+    throw new AppError("Order status was changed. Please reload and try again.", 409);
+  }
+
+  const updatedOrder = await getOrderById(req.params.id);
+  await createWarrantyRecordsForDeliveredOrder(req.params.id);
+  publishOrderEvent(req.user.userId, {
+    orderId: updatedOrder?.id || req.params.id,
+    status: updatedOrder?.status || "COMPLETED",
+    paymentStatus: updatedOrder?.payment_status
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Order received confirmed",
+    data: await normalizeOrderRecord(updatedOrder)
   });
 });
 
@@ -344,6 +410,13 @@ export const uploadPaymentProof = asyncHandler(async (req: Request, res: Respons
   await saveOrderPaymentProof(req.params.id, proofUrl);
 
   const updatedOrder = await getOrderById(req.params.id);
+  if (updatedOrder?.user_id) {
+    publishOrderEvent(updatedOrder.user_id, {
+      orderId: updatedOrder.id,
+      status: updatedOrder.status,
+      paymentStatus: updatedOrder.payment_status
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -395,6 +468,13 @@ export const approvePaymentProof = asyncHandler(async (req: Request, res: Respon
   }
 
   const updatedOrder = await getOrderById(req.params.id);
+  if (updatedOrder?.user_id) {
+    publishOrderEvent(updatedOrder.user_id, {
+      orderId: updatedOrder.id,
+      status: updatedOrder.status,
+      paymentStatus: updatedOrder.payment_status
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -446,6 +526,14 @@ export const vnpayIpn = asyncHandler(async (req: Request, res: Response) => {
     }
 
     await markOrderPaid(orderId);
+    const updatedOrder = await getOrderById(orderId);
+    if (updatedOrder?.user_id) {
+      publishOrderEvent(updatedOrder.user_id, {
+        orderId: updatedOrder.id,
+        status: updatedOrder.status,
+        paymentStatus: updatedOrder.payment_status
+      });
+    }
     console.log(`[VNPay IPN] Order marked as paid: ${orderId}`);
   }
 
@@ -503,5 +591,11 @@ export const cancelMyOrder = asyncHandler(async (req: Request, res: Response) =>
     success: true,
     data: result,
     message: "Order canceled successfully"
+  });
+
+  publishOrderEvent(userId, {
+    orderId,
+    status: "CANCELED",
+    paymentStatus: result.payment_status
   });
 });

@@ -17,12 +17,13 @@ const STATUS_META = {
   PENDING: { label: "Chờ xử lý", tone: "warning" },
   PROCESSING: { label: "Đang xử lý", tone: "info" },
   SHIPPED: { label: "Đang giao", tone: "shipping" },
-  DELIVERED: { label: "Hoàn thành", tone: "success" },
+  DELIVERED: { label: "Đã giao", tone: "success" },
+  COMPLETED: { label: "Hoàn thành", tone: "success" },
   CANCELED: { label: "Đã hủy", tone: "danger" }
 };
 
-const ORDER_STATUS_OPTIONS = ["", "PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELED"];
-const ORDER_FLOW = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"];
+const ORDER_STATUS_OPTIONS = ["", "PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELED"];
+const ORDER_FLOW = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"];
 
 const SHIPPING_CARRIERS = [
   { id: "GHTK", label: "GHTK" },
@@ -746,7 +747,7 @@ export function StaffOrdersPage() {
     }
   }
 
-  async function handleCompleteOrder() {
+  async function handleMarkDelivered() {
     if (!selectedOrder) return;
 
     const normalizedTracking = (selectedOrder.shipment?.trackingCode || trackingCode || "").trim();
@@ -762,11 +763,11 @@ export function StaffOrdersPage() {
       const response = await updateStaffOrderStatus(selectedOrder.id, "DELIVERED");
       const order = getEnvelopeData(response, null);
       applyOrderUpdate(order);
-      setSuccessMessage(`Đơn #${selectedOrder.id} đã hoàn thành.`);
+      setSuccessMessage(`Đơn #${selectedOrder.id} đã được xác nhận đã giao. Khách hàng sẽ xác nhận hoàn tất.`);
       await Promise.all([loadOrders("DELIVERED"), loadStatsOrders()]);
       setStatusFilter("DELIVERED");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể chuyển đơn sang Hoàn thành."));
+      setErrorMessage(getErrorMessage(error, "Không thể chuyển đơn sang Đã giao."));
     } finally {
       setActionLoading("");
     }
@@ -820,14 +821,14 @@ export function StaffOrdersPage() {
   const customer = selectedOrder?.customer || {};
   const canMoveToProcessing = selectedOrder?.status === "PENDING";
   const canShip = selectedOrder?.status === "PROCESSING";
-  const canComplete = selectedOrder?.status === "SHIPPED";
+  const canMarkDelivered = selectedOrder?.status === "SHIPPED";
   const canCancel = selectedOrder?.status === "PENDING";
   const currentFlowIndex = ORDER_FLOW.indexOf(selectedOrder?.status);
 
   const actionHelp = {
     processing: canMoveToProcessing ? "Xác nhận đơn và chuyển sang bước xử lý." : "Chỉ đơn chờ xử lý mới có thể xác nhận.",
     ship: canShip ? "Nhập mã vận đơn và chuyển đơn sang đang giao." : "Đơn phải ở trạng thái Đang xử lý trước khi giao hàng.",
-    delivered: canComplete ? "Xác nhận giao thành công để hoàn tất đơn và kích hoạt bảo hành." : "Đơn phải ở trạng thái Đang giao trước khi hoàn tất.",
+    delivered: canMarkDelivered ? "Xác nhận đơn vị vận chuyển đã giao hàng. Khách hàng sẽ bấm xác nhận đã nhận hàng để hoàn tất." : "Đơn phải ở trạng thái Đang giao trước khi xác nhận đã giao.",
     cancel: canCancel ? "Hủy đơn khi đơn vẫn còn ở trạng thái chờ xử lý." : "Chỉ đơn chờ xử lý mới được hủy."
   };
 
@@ -895,10 +896,10 @@ export function StaffOrdersPage() {
     }),
     renderActionButton({
       key: "delivered",
-      enabled: canComplete,
-      label: "Hoàn tất đơn",
+      enabled: canMarkDelivered,
+      label: "Xác nhận đã giao",
       loadingLabel: "Đang cập nhật...",
-      onClick: handleCompleteOrder,
+      onClick: handleMarkDelivered,
       className: "staff-btn staff-btn--success",
       title: actionHelp.delivered
     }),
@@ -987,7 +988,7 @@ export function StaffOrdersPage() {
         .staff-info-row span { color: #64748b; font-size: 12px; font-weight: 800; }
         .staff-info-row strong { color: #0f172a; font-size: 15px; line-height: 1.55; min-width: 0; }
         .staff-workspace-section { display: grid; gap: 20px; min-width: 0; }
-        .staff-stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+        .staff-stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
         .staff-step { padding: 14px; border-radius: 16px; border: 1px solid #e2e8f0; background: #fff; display: grid; gap: 8px; min-width: 0; }
         .staff-step--done { background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%); border-color: #bfdbfe; }
         .staff-step__index { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; font-weight: 900; background: #e2e8f0; color: #0f172a; }

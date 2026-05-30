@@ -43,7 +43,7 @@ async function createWarrantyRecordsForDeliveredOrder(orderId) {
   );
 
   const order = orderRows?.[0];
-  if (!order || String(order.status || "").toUpperCase() !== "DELIVERED" || !order.userId) {
+  if (!order || !["DELIVERED", "COMPLETED"].includes(String(order.status || "").toUpperCase()) || !order.userId) {
     return [];
   }
 
@@ -82,7 +82,7 @@ async function createWarrantyRecordsForDeliveredOrder(orderId) {
           item.id,
           item.skuId || null,
           generateWarrantyCode(item.id),
-          "Auto-created when order was delivered",
+          "Auto-created when order was completed",
           now,
           expiresAt
         ]

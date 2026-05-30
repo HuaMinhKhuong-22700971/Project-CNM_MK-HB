@@ -19,6 +19,7 @@ import { getAdminErrorMessage, normalizeAdminList } from "../../utils/adminUi";
 import {
   changeAdminProductStatus,
   createAdminProduct,
+  deleteAdminProduct,
   getAdminProducts,
   updateAdminProduct
 } from "../../services/admin-products.service";
@@ -85,6 +86,10 @@ function validateForm(values) {
   return errors;
 }
 
+function getProductStatusLabel(status) {
+  return String(status || "").toUpperCase() === "ACTIVE" ? "Đang hiển thị" : "Đã ẩn";
+}
+
 export function AdminProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -97,6 +102,7 @@ export function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [statusLoadingId, setStatusLoadingId] = useState(null);
+  const [deleteLoadingId, setDeleteLoadingId] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -249,6 +255,14 @@ export function AdminProductsPage() {
 
   async function handleToggleStatus(product) {
     const nextStatus = product.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    const nextActionLabel = nextStatus === "INACTIVE" ? "ẩn" : "bật hiển thị lại";
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn ${nextActionLabel} sản phẩm "${product.name}"?\n\nThao tác này chỉ đổi trạng thái hiển thị, không xóa dữ liệu sản phẩm.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
 
     try {
       setStatusLoadingId(product.id);
@@ -259,11 +273,45 @@ export function AdminProductsPage() {
       const updatedProduct = normalizeProductRow(response?.data || response);
 
       setProducts((prevState) => prevState.map((item) => (item.id === updatedProduct.id ? updatedProduct : item)));
-      setSuccessMessage(`Đã chuyển trạng thái sản phẩm sang ${nextStatus}.`);
+      setSuccessMessage(`Đã chuyển trạng thái sản phẩm sang "${getProductStatusLabel(nextStatus)}".`);
     } catch (error) {
       setErrorMessage(getAdminErrorMessage(error, "Không thể cập nhật trạng thái sản phẩm."));
     } finally {
       setStatusLoadingId(null);
+    }
+  }
+
+  async function handleDeleteProduct(product) {
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa vĩnh viễn sản phẩm "${product.name}"?\n\nChỉ nên xóa sản phẩm tạo nhầm/chưa có SKU. Nếu sản phẩm đã có SKU hoặc phát sinh dữ liệu liên quan, hệ thống sẽ chặn xóa và bạn nên dùng nút "Ẩn".`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeleteLoadingId(product.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      await deleteAdminProduct(product.id);
+      setProducts((prevState) => prevState.filter((item) => item.id !== product.id));
+
+      if (editingProductId === product.id) {
+        resetForm();
+      }
+
+      setSuccessMessage("Đã xóa sản phẩm.");
+    } catch (error) {
+      setErrorMessage(
+        getAdminErrorMessage(
+          error,
+          "Không thể xóa sản phẩm. Nếu sản phẩm đã có SKU hoặc dữ liệu liên quan, hãy dùng nút Ẩn thay vì xóa."
+        )
+      );
+    } finally {
+      setDeleteLoadingId(null);
     }
   }
 
@@ -367,7 +415,9 @@ export function AdminProductsPage() {
                       <td>{product.categoryName || "—"}</td>
                       <td>{product.brandName || "—"}</td>
                       <td>
-                        <AdminBadge tone={product.status === "ACTIVE" ? "success" : "neutral"}>{product.status}</AdminBadge>
+                        <AdminBadge tone={product.status === "ACTIVE" ? "success" : "neutral"}>
+                          {getProductStatusLabel(product.status)}
+                        </AdminBadge>
                       </td>
                       <td>
                         <div className="admin-action-row">
@@ -375,7 +425,10 @@ export function AdminProductsPage() {
                             Sửa
                           </AdminBtn>
                           <AdminBtn variant="secondary" disabled={statusLoadingId === product.id} onClick={() => handleToggleStatus(product)}>
-                            {product.status === "ACTIVE" ? "Ẩn" : "Bật"}
+                            {statusLoadingId === product.id ? "Đang xử lý..." : product.status === "ACTIVE" ? "Ẩn" : "Bật hiển thị"}
+                          </AdminBtn>
+                          <AdminBtn variant="secondary" disabled={deleteLoadingId === product.id} onClick={() => handleDeleteProduct(product)}>
+                            {deleteLoadingId === product.id ? "Đang xóa..." : "Xóa"}
                           </AdminBtn>
                         </div>
                       </td>

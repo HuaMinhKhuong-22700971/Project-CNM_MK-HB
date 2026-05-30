@@ -2,8 +2,9 @@ export const ORDER_STATUS_META = {
   PENDING: { label: "Chờ xác nhận", tone: "#b45309", bg: "#fffbeb", border: "#fde68a" },
   PAID: { label: "Đã thanh toán", tone: "#047857", bg: "#ecfdf5", border: "#a7f3d0" },
   PROCESSING: { label: "Đang xử lý", tone: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
-  SHIPPED: { label: "Đã giao vận", tone: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
-  DELIVERED: { label: "Hoàn thành", tone: "#047857", bg: "#ecfdf5", border: "#86efac" },
+  SHIPPED: { label: "Đang giao", tone: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+  DELIVERED: { label: "Đã giao", tone: "#0f766e", bg: "#f0fdfa", border: "#99f6e4" },
+  COMPLETED: { label: "Hoàn thành", tone: "#047857", bg: "#ecfdf5", border: "#86efac" },
   CANCELED: { label: "Đã hủy", tone: "#b91c1c", bg: "#fef2f2", border: "#fecaca" }
 };
 
@@ -41,4 +42,8 @@ export function canCustomerPayOrder(order) {
   const paymentStatus = String(order?.paymentStatus || order?.payment_status || "").toUpperCase();
   const method = String(order?.paymentMethod || order?.payment_method || "").toUpperCase();
   return status === "PENDING" && method === "VNPAY" && paymentStatus !== "PAID";
+}
+
+export function canCustomerConfirmReceived(order) {
+  return String(order?.status || "").toUpperCase() === "DELIVERED";
 }

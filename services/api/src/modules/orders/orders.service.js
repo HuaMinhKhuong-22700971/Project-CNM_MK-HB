@@ -4,15 +4,17 @@ const { buildActiveCondition, getTableColumns, pickColumn } = require("../../uti
 const { ROLES, hasAnyRole, normalizeRole } = require("../../utils/role-helpers");
 const { env } = require("../../config/env");
 const { createWarrantyRecordsForDeliveredOrder } = require("../warranties/warranty-sync.service");
+const { publishOrderEvent } = require("../../services/order-events");
 
 let schemaCache = null;
-const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELED"];
-const STAFF_VISIBLE_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"];
+const ORDER_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELED"];
+const STAFF_VISIBLE_STATUSES = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"];
 const ORDER_STATUS_TRANSITIONS = {
   PENDING: ["PROCESSING", "CANCELED"],
   PROCESSING: ["SHIPPED"],
   SHIPPED: ["DELIVERED"],
-  DELIVERED: [],
+  DELIVERED: ["COMPLETED"],
+  COMPLETED: [],
   CANCELED: []
 };
 
@@ -952,11 +954,18 @@ async function updateOrderStatus(actor, orderId, statusOrPayload) {
     [...params, parsedOrderId]
   );
 
-  if (nextStatus === "DELIVERED") {
+  if (nextStatus === "COMPLETED") {
     await createWarrantyRecordsForDeliveredOrder(parsedOrderId);
   }
 
-  return getOrderDetail(actor, parsedOrderId);
+  const updatedOrder = await getOrderDetail(actor, parsedOrderId);
+  publishOrderEvent(updatedOrder?.userId || updatedOrder?.user_id || existingOrder.user_id, {
+    orderId: parsedOrderId,
+    status: nextStatus,
+    paymentStatus: updatedOrder?.paymentStatus || updatedOrder?.payment_status || existingOrder.payment_status
+  });
+
+  return updatedOrder;
 }
 
 async function markOrderPaid(actor, orderId) {

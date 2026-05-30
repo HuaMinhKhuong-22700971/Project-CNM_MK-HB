@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 
@@ -94,14 +94,22 @@ export function TicketCreatePage() {
     try {
       setSubmitting(true);
       setErrorMessage("");
-      const attachmentNote = attachments.length
-        ? `\n\n[Tệp đính kèm khách đã chọn: ${attachments.map((file) => `${file.name} (${formatFileSize(file.size)})`).join(", ")}]`
-        : "";
-      const response = await createTicket({
+      let payload = {
         title: `[${category}] ${title.trim()}`,
         priority,
-        description: `${description.trim()}${attachmentNote}`
-      });
+        description: description.trim()
+      };
+
+      if (attachments.length) {
+        const formData = new FormData();
+        formData.append("title", payload.title);
+        formData.append("priority", payload.priority);
+        formData.append("description", payload.description);
+        attachments.forEach((file) => formData.append("attachments", file));
+        payload = formData;
+      }
+
+      const response = await createTicket(payload);
       const ticket = response?.data;
       navigate(routeConfig.public.ticketDetail.replace(":ticketId", String(ticket.id)));
     } catch (error) {

@@ -7,8 +7,7 @@ import { getTicketStats } from "../services/ticket.service";
 const TECH_NAV_ITEMS = [
   { to: "/tech/tickets", label: "Ticket kỹ thuật", icon: "🎫", showQueueBadge: true },
   { to: "/tech/compatibility", label: "Luật tương thích", icon: "🔗" },
-  { to: "/tech/warranties", label: "Xử lý bảo hành", icon: "🛠️" },
-  { to: "/warranties", label: "Tra cứu bảo hành", icon: "🛡️", external: true }
+  { to: "/tech/warranties", label: "Xử lý bảo hành", icon: "🛠️" }
 ];
 
 const ROLE_LABELS = {

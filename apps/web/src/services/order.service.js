@@ -49,3 +49,8 @@ export async function cancelMyOrder(orderId) {
   const response = await httpClient.post(`/orders/${orderId}/cancel`);
   return response.data;
 }
+
+export async function confirmOrderReceived(orderId) {
+  const response = await httpClient.post(`/orders/${orderId}/confirm-received`);
+  return response.data;
+}

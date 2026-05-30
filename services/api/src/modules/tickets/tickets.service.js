@@ -391,6 +391,8 @@ async function listTickets(actor, params = {}) {
   if (filters.scope === "ASSIGNED" && schema.tickets.assignedToId) {
     whereClauses.push(`t.${schema.tickets.assignedToId} = ?`);
     queryParams.push(actor.id);
+  } else if (filters.scope === "UNASSIGNED" && schema.tickets.assignedToId) {
+    whereClauses.push(`t.${schema.tickets.assignedToId} IS NULL`);
   } else if (filters.assignedToId && schema.tickets.assignedToId) {
     whereClauses.push(`t.${schema.tickets.assignedToId} = ?`);
     queryParams.push(filters.assignedToId);
@@ -406,6 +408,38 @@ async function listTickets(actor, params = {}) {
   );
 
   return rows.map(formatTicket);
+}
+
+async function getTicketStats(actor) {
+  const schema = await getTicketSchema();
+
+  if (!canManageTickets(actor.role)) {
+    throw createError("Forbidden: you do not have permission to manage tickets", 403);
+  }
+
+  const selectParts = [
+    `COUNT(*) AS total`,
+    schema.tickets.status ? `SUM(CASE WHEN ${schema.tickets.status} = 'OPEN' THEN 1 ELSE 0 END) AS open` : `COUNT(*) AS open`,
+    schema.tickets.status ? `SUM(CASE WHEN ${schema.tickets.status} = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS inProgress` : `0 AS inProgress`,
+    schema.tickets.status ? `SUM(CASE WHEN ${schema.tickets.status} = 'RESOLVED' THEN 1 ELSE 0 END) AS resolved` : `0 AS resolved`,
+    schema.tickets.status ? `SUM(CASE WHEN ${schema.tickets.status} = 'CLOSED' THEN 1 ELSE 0 END) AS closed` : `0 AS closed`,
+    schema.tickets.assignedToId ? `SUM(CASE WHEN ${schema.tickets.assignedToId} IS NULL THEN 1 ELSE 0 END) AS unassigned` : `COUNT(*) AS unassigned`,
+    schema.tickets.assignedToId ? `SUM(CASE WHEN ${schema.tickets.assignedToId} = ? THEN 1 ELSE 0 END) AS assignedToMe` : `0 AS assignedToMe`
+  ];
+
+  const params = schema.tickets.assignedToId ? [actor.id] : [];
+  const rows = await query(`SELECT ${selectParts.join(", ")} FROM ${schema.tickets.table}`, params);
+  const stats = rows[0] || {};
+
+  return {
+    total: Number(stats.total || 0),
+    open: Number(stats.open || 0),
+    inProgress: Number(stats.inProgress || 0),
+    resolved: Number(stats.resolved || 0),
+    closed: Number(stats.closed || 0),
+    unassigned: Number(stats.unassigned || 0),
+    assignedToMe: Number(stats.assignedToMe || 0)
+  };
 }
 
 async function getMyTickets(userId) {
@@ -563,6 +597,7 @@ module.exports = {
   TICKET_STATUSES,
   createTicket,
   listTickets,
+  getTicketStats,
   getMyTickets,
   getTicketDetail,
   updateTicket,

@@ -4,9 +4,10 @@ import axios from "axios";
 
 import { OrderStatusBadge } from "../../components/marketplace/OrderStatusBadge";
 import { useAuth } from "../../hooks/useAuth";
-import { cancelMyOrder, createVnpayUrl, getMyOrders } from "../../services/order.service";
+import { cancelMyOrder, confirmOrderReceived, createVnpayUrl, getMyOrders } from "../../services/order.service";
+import { subscribeToOrderEvents } from "../../services/order-events.service";
 import { routeConfig } from "../../routes/routeConfig";
-import { PAYMENT_STATUS_META, canCustomerCancelOrder, canCustomerPayOrder } from "../../utils/orderStatus";
+import { PAYMENT_STATUS_META, canCustomerCancelOrder, canCustomerConfirmReceived, canCustomerPayOrder } from "../../utils/orderStatus";
 import { resolveProductImage } from "../../utils/productImage";
 
 function getErrorMessage(error, fallbackMessage) {
@@ -74,7 +75,7 @@ function normalizePaymentMethod(method) {
 }
 
 function isDeliveredStatus(status) {
-  return ["DELIVERED", "SHIPPED", "COMPLETED"].includes(normalizeStatus(status));
+  return normalizeStatus(status) === "DELIVERED";
 }
 
 function getPaymentMethodLabel(method) {
@@ -115,14 +116,16 @@ function getTrackingText(order) {
   if (status === "PENDING") return "Đơn hàng đang chờ xác nhận từ cửa hàng.";
   if (status === "PROCESSING" || status === "PAID") return "Đơn hàng đang được chuẩn bị và đóng gói.";
   if (status === "SHIPPED") return "Đơn hàng đang trên đường giao đến bạn.";
-  if (status === "DELIVERED") return "Đơn hàng đã giao thành công.";
+  if (status === "DELIVERED") return "Đơn hàng đã giao thành công. Vui lòng xác nhận khi bạn đã nhận đủ hàng.";
+  if (status === "COMPLETED") return "Đơn hàng đã hoàn tất.";
   if (status === "CANCELED") return "Đơn hàng đã được hủy.";
   return "Trạng thái vận chuyển sẽ được cập nhật sớm.";
 }
 
 function getProgressStep(status) {
   const normalized = normalizeStatus(status);
-  if (normalized === "DELIVERED") return 4;
+  if (normalized === "COMPLETED") return 4;
+  if (normalized === "DELIVERED") return 3;
   if (normalized === "SHIPPED") return 3;
   if (normalized === "PROCESSING" || normalized === "PAID") return 2;
   if (normalized === "CANCELED") return 0;
@@ -134,6 +137,7 @@ const FILTER_TABS = [
   { id: "PENDING", label: "Chờ xác nhận", icon: "⏳" },
   { id: "PROCESSING", label: "Đang xử lý", icon: "⚙️" },
   { id: "DELIVERED", label: "Đã giao", icon: "✅" },
+  { id: "COMPLETED", label: "Hoàn tất", icon: "✓" },
   { id: "CANCELED", label: "Đã hủy", icon: "✕" }
 ];
 
@@ -215,9 +219,11 @@ export function OrdersPage() {
   const createdOrderId = useMemo(() => location.state?.createdOrderId || null, [location.state]);
   const buildsMigrated = useMemo(() => location.state?.buildsMigrated || 0, [location.state]);
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setErrorMessage("");
       const response = await getMyOrders();
       const normalized = normalizeOrdersResponse(response);
@@ -237,6 +243,23 @@ export function OrdersPage() {
     loadOrders();
   }, [isAuthenticated, loadOrders]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      loadOrders({ silent: true });
+    }, 8000);
+
+    const unsubscribe = subscribeToOrderEvents(() => {
+      loadOrders({ silent: true });
+    });
+
+    return () => {
+      window.clearInterval(intervalId);
+      unsubscribe();
+    };
+  }, [isAuthenticated, loadOrders]);
+
   const stats = useMemo(() => {
     return orders.reduce(
       (acc, order) => {
@@ -245,10 +268,11 @@ export function OrdersPage() {
         if (status === "PENDING") acc.pending += 1;
         if (status === "PROCESSING" || status === "PAID") acc.processing += 1;
         if (isDeliveredStatus(status)) acc.delivered += 1;
+        if (status === "COMPLETED") acc.completed += 1;
         if (status === "CANCELED") acc.canceled += 1;
         return acc;
       },
-      { total: 0, pending: 0, processing: 0, delivered: 0, canceled: 0 }
+      { total: 0, pending: 0, processing: 0, delivered: 0, completed: 0, canceled: 0 }
     );
   }, [orders]);
 
@@ -260,7 +284,7 @@ export function OrdersPage() {
       const matchesStatus =
         statusFilter === "ALL" ||
         status === statusFilter ||
-        (statusFilter === "DELIVERED" && isDeliveredStatus(status));
+        (statusFilter === "DELIVERED" && status === "DELIVERED");
       const matchesPayment =
         paymentFilter === "ALL" ||
         method === paymentFilter ||
@@ -276,6 +300,7 @@ export function OrdersPage() {
       PENDING: stats.pending,
       PROCESSING: stats.processing,
       DELIVERED: stats.delivered,
+      COMPLETED: stats.completed,
       CANCELED: stats.canceled
     }),
     [stats]
@@ -310,6 +335,21 @@ export function OrdersPage() {
       throw new Error("Không lấy được liên kết thanh toán");
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Không thể mở cổng thanh toán"));
+      setActionOrderId(null);
+    }
+  }
+
+  async function handleConfirmReceived(orderId) {
+    if (!confirm(`Xác nhận bạn đã nhận đủ hàng cho đơn #${orderId}?`)) return;
+    try {
+      setActionOrderId(orderId);
+      setErrorMessage("");
+      await confirmOrderReceived(orderId);
+      setSuccessMessage(`Đã xác nhận nhận hàng cho đơn #${orderId}.`);
+      await loadOrders({ silent: true });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Không thể xác nhận nhận hàng"));
+    } finally {
       setActionOrderId(null);
     }
   }
@@ -528,6 +568,11 @@ export function OrdersPage() {
                   {canCustomerCancelOrder(order) ? (
                     <button type="button" className="order-action order-action--danger" disabled={isBusy} onClick={() => handleCancelOrder(order.id)}>
                       {isBusy ? "Đang xử lý..." : "Hủy đơn"}
+                    </button>
+                  ) : null}
+                  {canCustomerConfirmReceived(order) ? (
+                    <button type="button" className="order-action order-action--success" disabled={isBusy} onClick={() => handleConfirmReceived(order.id)}>
+                      {isBusy ? "Đang xác nhận..." : "Xác nhận đã nhận hàng"}
                     </button>
                   ) : null}
                 </div>
@@ -1079,6 +1124,12 @@ const ordersStyles = `
   color: #b91c1c;
   border-color: #fecaca;
   background: #fff;
+}
+
+.order-action--success {
+  color: #fff;
+  border-color: transparent;
+  background: #059669;
 }
 
 .orders-loading,

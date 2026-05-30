@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import axios from "axios";
 
 import { addTicketMessage, getTicketDetail } from "../../services/ticket.service";
 import { useAuth } from "../../hooks/useAuth";
 import { routeConfig } from "../../routes/routeConfig";
+import {
+  extractAttachmentMentions,
+  getAttachmentUrl,
+  isImageAttachment,
+  isVideoAttachment,
+  stripAttachmentMarker,
+  downloadAttachment
+} from "../../utils/ticketTech";
 
 const STATUS_META = {
   OPEN: { label: "Đang mở", color: "#2563eb", bg: "#eff6ff" },
@@ -73,6 +81,61 @@ function isStaffSender(message) {
   return ["ADMIN", "TECH_STAFF", "TECHNICIAN", "SALES_STAFF", "SALES"].includes(role);
 }
 
+function TicketAttachmentCard({ attachment }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const attachmentUrl = getAttachmentUrl(attachment);
+  const canPreviewImage = isImageAttachment(attachment) && attachmentUrl && !previewFailed;
+  const canPreviewVideo = isVideoAttachment(attachment) && attachmentUrl && !previewFailed;
+
+  return (
+    <article className="ticket-attachment-card" aria-disabled={!attachmentUrl}>
+      <a
+        className="ticket-attachment-card__preview"
+        href={attachmentUrl || undefined}
+        target={attachmentUrl ? "_blank" : undefined}
+        rel={attachmentUrl ? "noreferrer" : undefined}
+        onClick={(event) => {
+          if (!attachmentUrl) event.preventDefault();
+        }}
+      >
+        {canPreviewImage ? (
+          <img src={attachmentUrl} alt={attachment.name} loading="lazy" onError={() => setPreviewFailed(true)} />
+        ) : canPreviewVideo ? (
+          <video src={attachmentUrl} controls onError={() => setPreviewFailed(true)} />
+        ) : (
+          <span>{attachmentUrl ? "FILE" : "INFO"}</span>
+        )}
+      </a>
+      <div className="ticket-attachment-card__body">
+        <strong>{attachment.name}</strong>
+        <small>{attachment.sizeLabel || (attachmentUrl ? "Tệp đính kèm" : "Chưa có file để xem")}</small>
+        <div className="ticket-attachment-card__actions">
+          {attachmentUrl ? (
+            <>
+              <a href={attachmentUrl} target="_blank" rel="noreferrer">Xem tệp</a>
+              <button type="button" onClick={() => downloadAttachment(attachment)}>Tải xuống</button>
+            </>
+          ) : (
+            <span>Chỉ có thông tin tệp</span>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function TicketAttachmentList({ attachments = [] }) {
+  if (!attachments.length) return null;
+
+  return (
+    <div className="ticket-attachment-list">
+      {attachments.map((attachment) => (
+        <TicketAttachmentCard key={attachment.id} attachment={attachment} />
+      ))}
+    </div>
+  );
+}
+
 export function TicketDetailPage() {
   const { ticketId } = useParams();
   const { authState, isAuthenticated } = useAuth();
@@ -81,27 +144,73 @@ export function TicketDetailPage() {
   const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const messageCountRef = useRef(0);
 
-  useEffect(() => {
-    async function loadTicket() {
-      try {
+  const loadTicket = useCallback(async ({ silent = false } = {}) => {
+    try {
+      if (silent) {
+        setSyncing(true);
+      } else {
         setLoading(true);
-        setErrorMessage("");
-        const response = await getTicketDetail(ticketId);
-        setTicket(response?.data || null);
-      } catch (error) {
+      }
+      if (!silent) setErrorMessage("");
+
+      const response = await getTicketDetail(ticketId);
+      const nextTicket = response?.data || null;
+      const nextMessages = nextTicket?.messages || [];
+      const previousMessageCount = messageCountRef.current;
+      const latestMessage = nextMessages[nextMessages.length - 1];
+      const latestFromCurrentUser = Number(latestMessage?.sender?.id) === Number(authState?.user?.id);
+
+      if (silent && nextMessages.length > previousMessageCount && !latestFromCurrentUser) {
+        setSuccessMessage("Có phản hồi mới từ nhân viên hỗ trợ. Hội thoại đã được cập nhật.");
+      }
+
+      messageCountRef.current = nextMessages.length;
+      setTicket(nextTicket);
+      setLastSyncedAt(new Date());
+    } catch (error) {
+      if (!silent) {
         setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết ticket"));
-      } finally {
+      }
+    } finally {
+      if (silent) {
+        setSyncing(false);
+      } else {
         setLoading(false);
       }
     }
+  }, [authState?.user?.id, ticketId]);
 
+  useEffect(() => {
     if (isAuthenticated) {
       loadTicket();
     }
-  }, [isAuthenticated, ticketId]);
+  }, [isAuthenticated, loadTicket]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !ticketId) return undefined;
+
+    const syncLatest = () => {
+      if (document.visibilityState === "visible" && !submitting) {
+        loadTicket({ silent: true });
+      }
+    };
+
+    const timer = window.setInterval(syncLatest, 5000);
+    window.addEventListener("focus", syncLatest);
+    document.addEventListener("visibilitychange", syncLatest);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", syncLatest);
+      document.removeEventListener("visibilitychange", syncLatest);
+    };
+  }, [isAuthenticated, loadTicket, submitting, ticketId]);
 
   if (!isAuthenticated) {
     return <Navigate to={routeConfig.public.login} replace />;
@@ -123,11 +232,20 @@ export function TicketDetailPage() {
       setSubmitting(true);
       setErrorMessage("");
       setSuccessMessage("");
-      const attachmentNote = attachments.length
-        ? `\n\n[Tệp đính kèm khách đã chọn: ${attachments.map((file) => `${file.name} (${formatFileSize(file.size)})`).join(", ")}]`
-        : "";
-      const response = await addTicketMessage(ticketId, { message: `${replyMessage.trim() || "Khách hàng đã gửi tệp đính kèm."}${attachmentNote}` });
-      setTicket(response?.data || null);
+      let payload = { message: replyMessage.trim() || "Khách hàng đã gửi tệp đính kèm." };
+
+      if (attachments.length) {
+        const formData = new FormData();
+        formData.append("message", payload.message);
+        attachments.forEach((file) => formData.append("attachments", file));
+        payload = formData;
+      }
+
+      const response = await addTicketMessage(ticketId, payload);
+      const nextTicket = response?.data || null;
+      messageCountRef.current = nextTicket?.messages?.length || 0;
+      setTicket(nextTicket);
+      setLastSyncedAt(new Date());
       setReplyMessage("");
       setAttachments([]);
       setSuccessMessage("Đã gửi phản hồi vào ticket");
@@ -141,6 +259,8 @@ export function TicketDetailPage() {
   const statusMeta = getStatusMeta(ticket?.status);
   const priorityMeta = getPriorityMeta(ticket?.priority);
   const isClosed = ["CLOSED"].includes(String(ticket?.status || "").toUpperCase());
+  const ticketDescription = stripAttachmentMarker(ticket?.description);
+  const ticketAttachments = extractAttachmentMentions(ticket?.description);
 
   return (
     <div className="ticket-detail">
@@ -165,7 +285,8 @@ export function TicketDetailPage() {
             <div>
               <span>Ticket #{ticket.id} · {formatDate(ticket.createdAt)}</span>
               <h1>{ticket.title}</h1>
-              <p>{ticket.description}</p>
+              {ticketDescription ? <p>{ticketDescription}</p> : null}
+              <TicketAttachmentList attachments={ticketAttachments} />
             </div>
             <aside>
               <strong style={{ color: statusMeta.color, background: statusMeta.bg }}>{statusMeta.label}</strong>
@@ -179,8 +300,14 @@ export function TicketDetailPage() {
           <section className="ticket-detail__grid">
             <div className="ticket-conversation">
               <div className="ticket-section-head">
-                <span>Conversation Timeline</span>
-                <h2>Lịch sử trao đổi</h2>
+                <div>
+                  <span>Conversation Timeline</span>
+                  <h2>Lịch sử trao đổi</h2>
+                </div>
+                <div className={`ticket-live-sync${syncing ? " is-syncing" : ""}`}>
+                  <i />
+                  {syncing ? "Đang cập nhật..." : lastSyncedAt ? `Tự cập nhật ${lastSyncedAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}` : "Tự cập nhật"}
+                </div>
               </div>
               <div className="conversation-timeline">
                 {(ticket.messages || []).length === 0 ? (
@@ -197,7 +324,8 @@ export function TicketDetailPage() {
                             <strong>{message.sender?.fullName || message.sender?.email || "Hệ thống"}</strong>
                             <span>{isStaff ? "Phản hồi hỗ trợ" : "Khách hàng"}</span>
                           </div>
-                          <p>{message.message}</p>
+                          {stripAttachmentMarker(message.message) ? <p>{stripAttachmentMarker(message.message)}</p> : null}
+                          <TicketAttachmentList attachments={extractAttachmentMentions(message.message)} />
                           <time>{formatDate(message.createdAt)}</time>
                         </div>
                       </article>
@@ -360,6 +488,42 @@ const ticketDetailStyles = `
   text-transform: uppercase;
 }
 
+.ticket-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ticket-live-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ticket-live-sync i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.13);
+}
+
+.ticket-live-sync.is-syncing i {
+  background: #2563eb;
+  animation: ticket-pulse 900ms ease-in-out infinite;
+}
+
 .ticket-detail__hero h1 {
   margin: 8px 0 10px;
   color: #0f172a;
@@ -495,6 +659,114 @@ const ticketDetailStyles = `
   white-space: pre-wrap;
 }
 
+.ticket-attachment-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ticket-attachment-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: inherit;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.conversation-bubble .ticket-attachment-card {
+  background: #fff;
+}
+
+.ticket-attachment-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.ticket-attachment-card[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.76;
+}
+
+.ticket-attachment-card__preview {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 78px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #eff6ff, #f8fafc);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.ticket-attachment-card__preview img,
+.ticket-attachment-card__preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ticket-attachment-card strong {
+  display: block;
+  overflow: hidden;
+  color: #0f172a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-attachment-card small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ticket-attachment-card__body {
+  min-width: 0;
+}
+
+.ticket-attachment-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ticket-attachment-card__actions a,
+.ticket-attachment-card__actions button,
+.ticket-attachment-card__actions span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 7px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ticket-attachment-card__actions a:hover,
+.ticket-attachment-card__actions button:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
 .ticket-support-panel ul {
   display: grid;
   gap: 10px;
@@ -577,6 +849,17 @@ const ticketDetailStyles = `
 @keyframes ticket-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes ticket-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.55;
   }
 }
 

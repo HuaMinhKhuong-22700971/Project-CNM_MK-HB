@@ -10,6 +10,7 @@ const {
 const ROLE_IDENTIFIER_COLUMNS = ["name", "code", "slug"];
 
 let roleIdentifierColumnCache = null;
+let compatibilityRuleNameColumnReady = null;
 
 function slugify(input) {
   return String(input || "")
@@ -48,6 +49,30 @@ function normalizeRuleType(value) {
   }
 
   return normalized;
+}
+
+async function ensureCompatibilityRuleNameColumn() {
+  if (compatibilityRuleNameColumnReady) {
+    return;
+  }
+
+  const rows = await query(
+    `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'compatibility_rules'
+        AND COLUMN_NAME = 'name'
+      LIMIT 1
+    `,
+    [env.dbName]
+  );
+
+  if (!rows[0]) {
+    await query("ALTER TABLE compatibility_rules ADD COLUMN name VARCHAR(255) NULL AFTER id");
+  }
+
+  compatibilityRuleNameColumnReady = true;
 }
 
 function ruleTypeToOperator(ruleType) {
@@ -424,6 +449,32 @@ async function changeProductStatus(productId, status) {
   return getProductDetail(parsedProductId);
 }
 
+async function deleteProduct(productId) {
+  const parsedProductId = toPositiveInteger(productId, "productId");
+  const existingProduct = await findProductById(parsedProductId);
+
+  if (!existingProduct) {
+    throw createError("Product not found", 404);
+  }
+
+  const variantRows = await query(
+    `SELECT COUNT(*) AS total FROM product_skus WHERE product_id = ?`,
+    [parsedProductId]
+  );
+  const variantCount = Number(variantRows[0]?.total || 0);
+
+  if (variantCount > 0) {
+    throw createError("Cannot delete product that already has SKUs. Please hide the product instead.", 409);
+  }
+
+  await query(`DELETE FROM products WHERE id = ?`, [parsedProductId]);
+
+  return {
+    id: parsedProductId,
+    deleted: true
+  };
+}
+
 async function createVariant(productId, payload) {
   const parsedProductId = toPositiveInteger(productId, "productId");
   const existingProduct = await findProductById(parsedProductId);
@@ -587,10 +638,13 @@ async function findCategoryByComponentType(componentType) {
 }
 
 async function findCompatibilityRuleRowById(ruleId) {
+  await ensureCompatibilityRuleNameColumn();
+
   const rows = await query(
     `
       SELECT
         cr.id,
+        cr.name,
         cr.source_category_id AS sourceCategoryId,
         cr.target_category_id AS targetCategoryId,
         cr.source_attribute_key AS sourceAttributeKey,
@@ -622,10 +676,11 @@ function formatCompatibilityRule(row) {
   const targetComponentType = normalizeComponentType(row.targetCategoryName);
   const ruleType = operatorToRuleType(row.operator);
   const description = row.description || "";
+  const name = row.name || description || `${sourceComponentType} ${sourceAttributeKey} ${ruleType} ${targetComponentType} ${targetAttributeKey}`;
 
   return {
     id: row.id,
-    name: description || `${sourceComponentType} ${sourceAttributeKey} ${ruleType} ${targetComponentType} ${targetAttributeKey}`,
+    name,
     sourceComponentType,
     targetComponentType,
     ruleType,
@@ -639,10 +694,13 @@ function formatCompatibilityRule(row) {
 }
 
 async function getCompatibilityRules() {
+  await ensureCompatibilityRuleNameColumn();
+
   const rows = await query(
     `
       SELECT
         cr.id,
+        cr.name,
         cr.source_category_id AS sourceCategoryId,
         cr.target_category_id AS targetCategoryId,
         cr.source_attribute_key AS sourceAttributeKey,
@@ -666,6 +724,8 @@ async function getCompatibilityRules() {
 }
 
 async function createCompatibilityRule(payload) {
+  await ensureCompatibilityRuleNameColumn();
+
   const sourceCategory = await findCategoryByComponentType(payload.sourceComponentType);
   const targetCategory = await findCategoryByComponentType(payload.targetComponentType);
 
@@ -677,12 +737,14 @@ async function createCompatibilityRule(payload) {
     throw createError("Target component type category not found", 404);
   }
 
-  const description = String(payload.description || payload.name || "").trim() || null;
+  const name = String(payload.name || "").trim();
+  const description = String(payload.description || "").trim() || null;
   const operator = ruleTypeToOperator(normalizeRuleType(payload.ruleType));
 
   const [result] = await getDbPool().execute(
     `
       INSERT INTO compatibility_rules (
+        name,
         source_category_id,
         target_category_id,
         source_attribute_key,
@@ -694,9 +756,10 @@ async function createCompatibilityRule(payload) {
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 1, NOW(), NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, NOW(), NOW())
     `,
     [
+      name,
       sourceCategory.id,
       targetCategory.id,
       normalizeKey(payload.sourceAttributeKey),
@@ -710,6 +773,8 @@ async function createCompatibilityRule(payload) {
 }
 
 async function updateCompatibilityRule(ruleId, payload) {
+  await ensureCompatibilityRuleNameColumn();
+
   const parsedRuleId = toPositiveInteger(ruleId, "ruleId");
   const existingRule = await findCompatibilityRuleRowById(parsedRuleId);
 
@@ -719,6 +784,11 @@ async function updateCompatibilityRule(ruleId, payload) {
 
   const updates = [];
   const params = [];
+
+  if (Object.prototype.hasOwnProperty.call(payload, "name")) {
+    updates.push(`name = ?`);
+    params.push(String(payload.name || "").trim());
+  }
 
   if (Object.prototype.hasOwnProperty.call(payload, "sourceComponentType")) {
     const sourceCategory = await findCategoryByComponentType(payload.sourceComponentType);
@@ -757,9 +827,9 @@ async function updateCompatibilityRule(ruleId, payload) {
     params.push(ruleTypeToOperator(normalizeRuleType(payload.ruleType)));
   }
 
-  if (Object.prototype.hasOwnProperty.call(payload, "description") || Object.prototype.hasOwnProperty.call(payload, "name")) {
+  if (Object.prototype.hasOwnProperty.call(payload, "description")) {
     updates.push(`description = ?`);
-    params.push(String(payload.description || payload.name || "").trim() || null);
+    params.push(String(payload.description || "").trim() || null);
   }
 
   if (updates.length === 0) {
@@ -815,6 +885,7 @@ module.exports = {
   createProduct,
   updateProduct,
   changeProductStatus,
+  deleteProduct,
   createVariant,
   getUsers,
   changeUserStatus,

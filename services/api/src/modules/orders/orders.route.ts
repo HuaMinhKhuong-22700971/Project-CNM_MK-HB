@@ -20,7 +20,9 @@ import {
   confirmMockPayment,
   cancelMockPayment,
   uploadPaymentProof,
-  approvePaymentProof
+  approvePaymentProof,
+  confirmOrderReceived,
+  streamOrderEvents
 } from "./orders.controller";
 
 export const ordersRouter = Router();
@@ -56,6 +58,7 @@ const uploadPaymentProofMiddleware = uploadPaymentProofFile.single("paymentProof
 
 ordersRouter.get("/vnpay/return", vnpayReturn);
 ordersRouter.get("/vnpay/ipn", vnpayIpn);
+ordersRouter.get("/events", streamOrderEvents);
 
 ordersRouter.use(authenticate);
 
@@ -78,6 +81,7 @@ ordersRouter.post("/:id/payment-proof", (req: Request, res: Response, next: Next
     next(error);
   });
 }, uploadPaymentProof);
+ordersRouter.post("/:id/confirm-received", confirmOrderReceived);
 ordersRouter.post("/:id/cancel", cancelMyOrder);
 
 ordersRouter.get("/", authorize([ROLES.ADMIN, ROLES.SALES]), getAllOrders);

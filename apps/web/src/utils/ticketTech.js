@@ -1,4 +1,4 @@
-export const TICKET_STATUS_META = {
+﻿export const TICKET_STATUS_META = {
   OPEN: { label: "Mới", tone: "info" },
   IN_PROGRESS: { label: "Đang xử lý", tone: "warning" },
   RESOLVED: { label: "Đã giải quyết", tone: "success" },
@@ -19,7 +19,8 @@ export const TICKET_REPLY_TEMPLATES = [
   "Vấn đề đã được xử lý. Bạn kiểm tra lại giúp mình, nếu còn lỗi hãy phản hồi trong ticket này."
 ];
 
-const ATTACHMENT_MARKER_REGEX = /\[(?:Tệp đính kèm khách đã chọn|Khách hàng đã chọn tệp đính kèm):\s*([^\]]+)\]/gi;
+const LEGACY_ATTACHMENT_MARKER_REGEX = /\[(?:Tệp đính kèm khách đã chọn|Khách hàng đã chọn tệp đính kèm|Tá»‡p Ä‘Ã­nh kÃ¨m khÃ¡ch Ä‘Ã£ chá»n|KhÃ¡ch hÃ ng Ä‘Ã£ chá»n tá»‡p Ä‘Ã­nh kÃ¨m):\s*([^\]]+)\]/gi;
+const UPLOADED_ATTACHMENT_MARKER_REGEX = /\[(?:ATTACHMENTS_JSON|Tệp đính kèm|Tá»‡p Ä‘Ã­nh kÃ¨m):\s*(\[[\s\S]*?\])\]/gi;
 
 const MESSAGE_TRANSLATIONS = {
   "Checking logs. Done. Issue resolved.": "Đã kiểm tra log hệ thống và xử lý xong vấn đề.",
@@ -35,18 +36,49 @@ const MESSAGE_TRANSLATIONS = {
 function dedupeAttachments(list) {
   const seen = new Set();
   return list.filter((item) => {
-    const key = `${item.name}-${item.sizeLabel || ""}`.toLowerCase();
+    const key = `${item.name}-${item.sizeLabel || ""}-${item.fileUrl || item.url || ""}`.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
 
-export function extractAttachmentMentions(text) {
-  if (!text) return [];
+function normalizeAttachment(rawAttachment, index) {
+  const attachment = rawAttachment && typeof rawAttachment === "object" ? rawAttachment : {};
+  const name = String(attachment.name || attachment.originalName || `Tệp đính kèm ${index + 1}`).trim();
+  const sizeLabel = String(attachment.sizeLabel || "").trim();
+  const mimeType = String(attachment.mimeType || attachment.type || "").trim();
+  const fileUrl = String(attachment.fileUrl || attachment.url || "").trim();
 
+  return {
+    id: `${name}-${sizeLabel || index}-${fileUrl || "legacy"}`.replace(/\s+/g, "-").toLowerCase(),
+    name,
+    size: attachment.size,
+    sizeLabel,
+    mimeType,
+    url: attachment.url || "",
+    fileUrl
+  };
+}
+
+function parseUploadedAttachmentMarkers(text) {
   const matches = [];
-  for (const match of String(text).matchAll(ATTACHMENT_MARKER_REGEX)) {
+  for (const match of String(text).matchAll(UPLOADED_ATTACHMENT_MARKER_REGEX)) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((attachment, index) => matches.push(normalizeAttachment(attachment, index)));
+      }
+    } catch (_error) {
+      // Keep the ticket readable if a legacy/manual marker has invalid JSON.
+    }
+  }
+  return matches;
+}
+
+function parseLegacyAttachmentMarkers(text) {
+  const matches = [];
+  for (const match of String(text).matchAll(LEGACY_ATTACHMENT_MARKER_REGEX)) {
     const rawItems = String(match[1] || "")
       .split(/,\s*/)
       .map((item) => item.trim())
@@ -59,19 +91,66 @@ export function extractAttachmentMentions(text) {
       matches.push({
         id: `${name}-${sizeLabel || index}`.replace(/\s+/g, "-").toLowerCase(),
         name,
-        sizeLabel
+        sizeLabel,
+        mimeType: "",
+        fileUrl: "",
+        url: ""
       });
     });
   }
+  return matches;
+}
 
-  return dedupeAttachments(matches);
+export function extractAttachmentMentions(text) {
+  if (!text) return [];
+  return dedupeAttachments([
+    ...parseUploadedAttachmentMarkers(text),
+    ...parseLegacyAttachmentMarkers(text)
+  ]);
 }
 
 export function stripAttachmentMarker(text) {
   return String(text || "")
-    .replace(ATTACHMENT_MARKER_REGEX, "")
+    .replace(UPLOADED_ATTACHMENT_MARKER_REGEX, "")
+    .replace(LEGACY_ATTACHMENT_MARKER_REGEX, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+export function getAttachmentUrl(attachment) {
+  return attachment?.fileUrl || attachment?.url || "";
+}
+
+export async function downloadAttachment(attachment) {
+  const attachmentUrl = getAttachmentUrl(attachment);
+  if (!attachmentUrl) return;
+
+  const response = await fetch(attachmentUrl);
+  if (!response.ok) {
+    throw new Error("Không thể tải tệp đính kèm.");
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = attachment?.name || "ticket-attachment";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+}
+
+export function isImageAttachment(attachment) {
+  const mimeType = String(attachment?.mimeType || "").toLowerCase();
+  const name = String(attachment?.name || "").toLowerCase();
+  return mimeType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
+}
+
+export function isVideoAttachment(attachment) {
+  const mimeType = String(attachment?.mimeType || "").toLowerCase();
+  const name = String(attachment?.name || "").toLowerCase();
+  return mimeType.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(name);
 }
 
 export function translateTicketText(text) {

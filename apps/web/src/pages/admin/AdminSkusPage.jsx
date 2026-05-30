@@ -45,6 +45,10 @@ function replaceAttributeSelection(currentIds, attribute, nextValueId) {
   return [...cleaned, Number(nextValueId)];
 }
 
+function getSkuStatusLabel(status) {
+  return String(status || "").toUpperCase() === "ACTIVE" ? "Đang bán" : "Ngừng bán";
+}
+
 export function AdminSkusPage() {
   const [skus, setSkus] = useState([]);
   const [products, setProducts] = useState([]);
@@ -115,25 +119,45 @@ export function AdminSkusPage() {
     }));
   }
 
+  function scrollToSkuForm() {
+    document.getElementById("admin-sku-form-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function fillSkuForm(sku) {
+    setEditingSkuId(sku.id);
+    setFormValues({
+      productId: String(sku.productId || sku.product?.id || ""),
+      sku: sku.sku || "",
+      price: String(sku.price ?? ""),
+      stock: String(sku.stock ?? ""),
+      imageUrl: sku.imageUrl || "",
+      status: sku.status || "ACTIVE",
+      attributeValueIds: Array.isArray(sku.attributes) ? sku.attributes.map((item) => Number(item.attributeValueId)) : []
+    });
+  }
+
   async function handleEditSku(skuId) {
+    const selectedSku = skus.find((item) => Number(item.id) === Number(skuId));
+
+    if (selectedSku) {
+      fillSkuForm(selectedSku);
+      setErrorMessage("");
+      setSuccessMessage(`Đang chỉnh sửa SKU ${selectedSku.sku}.`);
+      scrollToSkuForm();
+    }
+
     try {
       setSubmitting(true);
       const response = await getAdminSkuDetail(skuId);
       const sku = response?.data || response;
-      setEditingSkuId(sku.id);
-      setFormValues({
-        productId: String(sku.productId || sku.product?.id || ""),
-        sku: sku.sku || "",
-        price: String(sku.price ?? ""),
-        stock: String(sku.stock ?? ""),
-        imageUrl: sku.imageUrl || "",
-        status: sku.status || "ACTIVE",
-        attributeValueIds: Array.isArray(sku.attributes) ? sku.attributes.map((item) => Number(item.attributeValueId)) : []
-      });
+      fillSkuForm(sku);
       setErrorMessage("");
-      setSuccessMessage("");
+      setSuccessMessage(`Đang chỉnh sửa SKU ${sku.sku}.`);
+      scrollToSkuForm();
     } catch (error) {
-      setErrorMessage(getAdminErrorMessage(error, "Không thể tải chi tiết SKU."));
+      if (!selectedSku) {
+        setErrorMessage(getAdminErrorMessage(error, "Không thể tải chi tiết SKU."));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -175,6 +199,15 @@ export function AdminSkusPage() {
   }
 
   async function handleDeleteSku(skuId) {
+    const targetSku = skus.find((item) => item.id === skuId);
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa SKU "${targetSku?.sku || skuId}"?\n\nThao tác này sẽ xóa biến thể SKU khỏi danh sách quản trị.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
       setErrorMessage("");
       setSuccessMessage("");
@@ -198,7 +231,14 @@ export function AdminSkusPage() {
       />
       <AdminAlerts errorMessage={errorMessage} successMessage={successMessage} />
       <AdminWorkspace columns="form-list">
-        <AdminCard>
+        <AdminCard className={editingSkuId ? "admin-sku-editing-card" : ""}>
+          <div id="admin-sku-form-card" />
+          <style>{`
+            .admin-sku-editing-card {
+              border-color: #93c5fd;
+              box-shadow: 0 18px 42px rgba(37, 99, 235, 0.12);
+            }
+          `}</style>
           <div className="admin-section-title">
             <h3>{editingSkuId ? "Sửa SKU" : "Thêm SKU"}</h3>
             <p>Chọn sản phẩm và gán thuộc tính (socket, RAM…).</p>
@@ -219,8 +259,8 @@ export function AdminSkusPage() {
             </div>
             <input name="imageUrl" className="admin-input" value={formValues.imageUrl} onChange={handleChange} placeholder="URL ảnh" />
             <select name="status" className="admin-input" value={formValues.status} onChange={handleChange}>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
+              <option value="ACTIVE">Đang bán</option>
+              <option value="INACTIVE">Ngừng bán</option>
             </select>
             {attributes.map((attribute) => {
               const selectedValueId =
@@ -274,7 +314,7 @@ export function AdminSkusPage() {
                     <th>Sản phẩm</th>
                     <th>Giá / tồn</th>
                     <th>Thuộc tính</th>
-                    <th>TT</th>
+                    <th>Trạng thái</th>
                     <th>Tác vụ</th>
                   </tr>
                 </thead>
@@ -304,7 +344,9 @@ export function AdminSkusPage() {
                         </div>
                       </td>
                       <td>
-                        <AdminBadge tone={sku.status === "ACTIVE" ? "success" : "neutral"}>{sku.status}</AdminBadge>
+                        <AdminBadge tone={sku.status === "ACTIVE" ? "success" : "neutral"}>
+                          {getSkuStatusLabel(sku.status)}
+                        </AdminBadge>
                       </td>
                       <td>
                         <div className="admin-action-row">

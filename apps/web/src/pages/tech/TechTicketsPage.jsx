@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -12,10 +12,14 @@ import {
 } from "../../services/ticket.service";
 import {
   TICKET_REPLY_TEMPLATES,
+  downloadAttachment,
   extractAttachmentMentions,
+  getAttachmentUrl,
   getTicketPriorityMeta,
   getTicketStatusMeta,
+  isImageAttachment,
   isTechSender,
+  isVideoAttachment,
   normalizeTicketText
 } from "../../utils/ticketTech";
 
@@ -43,10 +47,17 @@ function getErrorMessage(error, fallback) {
 }
 
 function getEnvelopeData(response, fallback) {
-  if (response && typeof response === "object" && "data" in response) {
-    return response.data ?? fallback;
+  if (!response || typeof response !== "object") {
+    return response ?? fallback;
   }
-  return response ?? fallback;
+  if ("data" in response) {
+    const data = response.data;
+    if (data && typeof data === "object" && "data" in data) {
+      return data.data ?? fallback;
+    }
+    return data ?? fallback;
+  }
+  return response;
 }
 
 function formatDateTime(value) {
@@ -63,6 +74,32 @@ function formatDateTime(value) {
 function formatTime(value) {
   if (!value) return "—";
   return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function TicketAttachmentPreview({ attachment, compact = false }) {
+  const fileUrl = getAttachmentUrl(attachment);
+
+  if (!fileUrl) {
+    return <div className="tech-ticket-attachment__icon">FILE</div>;
+  }
+
+  if (isImageAttachment(attachment)) {
+    return (
+      <a className={`tech-ticket-attachment__preview${compact ? " tech-ticket-attachment__preview--compact" : ""}`} href={fileUrl} target="_blank" rel="noreferrer">
+        <img src={fileUrl} alt={attachment.name} loading="lazy" />
+      </a>
+    );
+  }
+
+  if (isVideoAttachment(attachment)) {
+    return (
+      <a className={`tech-ticket-attachment__preview${compact ? " tech-ticket-attachment__preview--compact" : ""}`} href={fileUrl} target="_blank" rel="noreferrer">
+        <video src={fileUrl} muted preload="metadata" />
+      </a>
+    );
+  }
+
+  return <a className="tech-ticket-attachment__icon" href={fileUrl} target="_blank" rel="noreferrer">FILE</a>;
 }
 
 function isToday(value) {
@@ -238,7 +275,7 @@ export function TechTicketsPage() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
-  const [scope, setScope] = useState("UNASSIGNED");
+  const [scope, setScope] = useState("ALL");
   const [sortBy, setSortBy] = useState("newest");
   const [keyword, setKeyword] = useState("");
   const [replyMessage, setReplyMessage] = useState("");
@@ -252,6 +289,7 @@ export function TechTicketsPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -273,6 +311,7 @@ export function TechTicketsPage() {
       setErrorMessage("");
       const response = await getManageTickets({
         scope,
+        keyword: keyword.trim() || undefined,
         status: statusFilter || undefined,
         priority: priorityFilter || undefined
       });
@@ -284,12 +323,14 @@ export function TechTicketsPage() {
         setSelectedTicketId(null);
         setSelectedTicket(null);
       }
+      return normalized;
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Không thể tải danh sách ticket."));
+      return [];
     } finally {
       setLoading(false);
     }
-  }, [scope, statusFilter, priorityFilter]);
+  }, [keyword, scope, statusFilter, priorityFilter]);
 
   useEffect(() => {
     loadTickets();
@@ -318,9 +359,13 @@ export function TechTicketsPage() {
 
   const visibleTickets = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
+    const ticketIdKeyword = normalizedKeyword.match(/^(?:#|ticket\s*)?(\d+)$/i)?.[1] || "";
     let list = normalizedTickets.filter((ticket) => {
       if (!normalizedKeyword) return true;
+      if (ticketIdKeyword) return String(ticket.id) === ticketIdKeyword;
       const haystack = [
+        `#${ticket.id}`,
+        `ticket ${ticket.id}`,
         ticket.id,
         ticket.title,
         ticket.description,
@@ -348,10 +393,16 @@ export function TechTicketsPage() {
   }, [keyword, normalizedTickets, sortBy]);
 
   useEffect(() => {
-    if (!visibleTickets.length) return;
+    if (!visibleTickets.length) {
+      if (keyword.trim()) {
+        setSelectedTicketId(null);
+        setSelectedTicket(null);
+      }
+      return;
+    }
     if (selectedTicketId && visibleTickets.some((ticket) => ticket.id === selectedTicketId)) return;
     setSelectedTicketId(visibleTickets[0].id);
-  }, [selectedTicketId, visibleTickets]);
+  }, [keyword, selectedTicketId, visibleTickets]);
 
   useEffect(() => {
     if (selectedTicketId) {
@@ -400,11 +451,30 @@ export function TechTicketsPage() {
 
   const selectedTicketResolved = useMemo(() => {
     if (!selectedTicket) return null;
-    return normalizedTickets.find((ticket) => ticket.id === selectedTicket.id) || {
-      ...selectedTicket,
+    const listTicket = normalizedTickets.find((ticket) => ticket.id === selectedTicket.id);
+    const mergedTicket = listTicket
+      ? {
+          ...listTicket,
+          ...selectedTicket,
+          messages: selectedTicket.messages || [],
+          attachmentMentions: [
+            ...(listTicket.attachmentMentions || []),
+            ...extractAttachmentMentions(selectedTicket.description),
+            ...(selectedTicket.messages || []).flatMap((message) => extractAttachmentMentions(message.message))
+          ]
+        }
+      : {
+          ...selectedTicket,
+          attachmentMentions: [
+            ...extractAttachmentMentions(selectedTicket.description),
+            ...(selectedTicket.messages || []).flatMap((message) => extractAttachmentMentions(message.message))
+          ]
+        };
+
+    return {
+      ...mergedTicket,
       attachmentMentions: [
-        ...extractAttachmentMentions(selectedTicket.description),
-        ...(selectedTicket.messages || []).flatMap((message) => extractAttachmentMentions(message.message))
+        ...new Map((mergedTicket.attachmentMentions || []).map((attachment) => [attachment.id, attachment])).values()
       ]
     };
   }, [normalizedTickets, selectedTicket]);
@@ -456,10 +526,47 @@ export function TechTicketsPage() {
   }, [normalizedTickets, stats]);
 
   async function refreshAll() {
-    await Promise.all([loadTickets(), loadStats()]);
-    if (selectedTicketId) {
-      const response = await getTicketDetail(selectedTicketId);
-      setSelectedTicket(getEnvelopeData(response, null));
+    if (refreshing) return;
+
+    try {
+      setRefreshing(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const previousIds = new Set(normalizedTickets.map((ticket) => Number(ticket.id)));
+      const [freshTickets] = await Promise.all([loadTickets(), loadStats()]);
+      const freshList = Array.isArray(freshTickets) ? freshTickets : [];
+      const newTickets = freshList.filter((ticket) => !previousIds.has(Number(ticket.id)));
+
+      if (newTickets.length > 0) {
+        const newestTicket = [...newTickets].sort((a, b) => {
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        })[0];
+        setSelectedTicketId(newestTicket.id);
+        setSuccessMessage(`Đã cập nhật. Có ${newTickets.length} ticket mới, đã mở ticket #${newestTicket.id}.`);
+        return;
+      }
+
+      const newestOpenTicket = [...freshList]
+        .filter((ticket) => String(ticket.status || "").toUpperCase() === "OPEN")
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+
+      if (newestOpenTicket && Number(selectedTicketId) !== Number(newestOpenTicket.id)) {
+        setSelectedTicketId(newestOpenTicket.id);
+        setSuccessMessage(`Đã cập nhật. Đã mở ticket mới #${newestOpenTicket.id} đang chờ tiếp nhận.`);
+        return;
+      }
+
+      if (selectedTicketId) {
+        const response = await getTicketDetail(selectedTicketId);
+        setSelectedTicket(getEnvelopeData(response, null));
+      }
+
+      setSuccessMessage(`Đã làm mới danh sách. Hiện có ${freshList.length} ticket phù hợp bộ lọc.`);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Không thể làm mới danh sách ticket."));
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -579,15 +686,30 @@ export function TechTicketsPage() {
         .tech-ticket-btn { min-height: 42px; padding: 0 14px; border-radius: 12px; border: 1px solid transparent; cursor: pointer; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
         .tech-ticket-btn:hover:not(:disabled) { transform: translateY(-1px); }
         .tech-ticket-btn:disabled { opacity: .55; cursor: not-allowed; }
+        .tech-ticket-btn__spinner { width: 15px; height: 15px; border-radius: 999px; border: 2px solid currentColor; border-right-color: transparent; animation: techTicketSpin .75s linear infinite; }
         .tech-ticket-btn--primary { color: #fff; background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18); }
         .tech-ticket-btn--secondary { color: #1a1625; background: #ffffff; border-color: #ddd6fe; }
         .tech-ticket-btn--ghost { color: #fff; background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); }
         .tech-ticket-btn--danger { color: #fff; background: linear-gradient(135deg, #dc2626, #b91c1c); box-shadow: 0 10px 22px rgba(220, 38, 38, 0.18); }
         .tech-ticket-progress { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
-        .tech-ticket-progress-step { position: relative; padding: 14px 12px; border-radius: 16px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); display: grid; gap: 6px; min-height: 108px; }
-        .tech-ticket-progress-step strong { font-size: 13px; }
-        .tech-ticket-progress-step span, .tech-ticket-progress-step small { color: rgba(255,255,255,0.75); line-height: 1.4; }
-        .tech-ticket-progress-step--active { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.28); }
+        .tech-ticket-progress-step { position: relative; overflow: hidden; padding: 14px 12px; border-radius: 16px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16); display: grid; gap: 8px; min-height: 118px; color: rgba(255,255,255,0.88); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+        .tech-ticket-progress-step::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: rgba(255,255,255,0.18); transition: background .18s ease; }
+        .tech-ticket-progress-step > * { position: relative; z-index: 1; }
+        .tech-ticket-progress-step__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .tech-ticket-progress-step__icon { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; font-weight: 950; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); color: rgba(255,255,255,0.86); }
+        .tech-ticket-progress-step__state { padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.76); white-space: nowrap; }
+        .tech-ticket-progress-step strong { font-size: 14px; line-height: 1.25; }
+        .tech-ticket-progress-step span, .tech-ticket-progress-step small { color: rgba(255,255,255,0.78); line-height: 1.4; }
+        .tech-ticket-progress-step--completed { background: rgba(255,255,255,0.14); border-color: rgba(167,243,208,0.5); }
+        .tech-ticket-progress-step--completed::before { background: #34d399; }
+        .tech-ticket-progress-step--completed .tech-ticket-progress-step__icon { background: #dcfce7; color: #047857; border-color: rgba(255,255,255,0.76); }
+        .tech-ticket-progress-step--completed .tech-ticket-progress-step__state { background: rgba(220,252,231,0.95); color: #047857; }
+        .tech-ticket-progress-step--current { transform: translateY(-1px); background: rgba(37,99,235,0.2); border-color: rgba(147,197,253,0.9); box-shadow: 0 12px 28px rgba(37,99,235,0.18); }
+        .tech-ticket-progress-step--current::before { background: #60a5fa; }
+        .tech-ticket-progress-step--current .tech-ticket-progress-step__icon { background: #ffffff; color: #2563eb; border-color: rgba(255,255,255,0.88); }
+        .tech-ticket-progress-step--current .tech-ticket-progress-step__state { background: #eff6ff; color: #1d4ed8; }
+        .tech-ticket-progress-step--pending { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.12); opacity: .72; }
+        .tech-ticket-progress-step--pending .tech-ticket-progress-step__icon { color: rgba(255,255,255,0.66); }
         .tech-ticket-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) 340px; gap: 18px; align-items: start; }
         .tech-ticket-stack { display: grid; gap: 18px; }
         .tech-ticket-card { padding: 20px; }
@@ -600,7 +722,13 @@ export function TechTicketsPage() {
         .tech-ticket-data-card strong { color: #1a1625; line-height: 1.5; }
         .tech-ticket-attachments { display: grid; gap: 12px; }
         .tech-ticket-attachment { padding: 14px 16px; border-radius: 16px; background: #faf8ff; border: 1px solid #eee6fb; display: flex; gap: 12px; align-items: center; }
-        .tech-ticket-attachment__icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: #ede9fe; color: #6d28d9; font-weight: 900; }
+        .tech-ticket-attachment__icon { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 14px; display: grid; place-items: center; background: #ede9fe; color: #6d28d9; font-weight: 900; text-decoration: none; }
+        .tech-ticket-attachment__preview { width: 72px; height: 72px; flex: 0 0 72px; border-radius: 16px; overflow: hidden; border: 1px solid #e4dcfb; background: #fff; display: block; box-shadow: 0 10px 24px rgba(109,40,217,0.12); }
+        .tech-ticket-attachment__preview--compact { width: 44px; height: 44px; flex-basis: 44px; border-radius: 12px; box-shadow: none; }
+        .tech-ticket-attachment__preview img,
+        .tech-ticket-attachment__preview video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .tech-ticket-attachment__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .tech-ticket-attachment__actions a, .tech-ticket-attachment__actions button { padding: 7px 10px; border-radius: 999px; background: #fff; border: 1px solid #ddd6fe; color: #5b21b6; font-size: 12px; font-family: inherit; font-weight: 900; text-decoration: none; cursor: pointer; }
         .tech-ticket-thread { display: grid; gap: 14px; }
         .tech-ticket-thread__meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .tech-ticket-messages { max-height: 440px; overflow-y: auto; display: grid; gap: 12px; padding-right: 4px; }
@@ -637,6 +765,7 @@ export function TechTicketsPage() {
         .tech-ticket-workspace-skeleton__grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; }
         .tech-ticket-workspace-skeleton__panel { min-height: 320px; }
         @keyframes techTicketShimmer { 0% { background-position: -240px 0; } 100% { background-position: calc(100% + 240px) 0; } }
+        @keyframes techTicketSpin { to { transform: rotate(360deg); } }
         @media (max-width: 1280px) {
           .tech-ticket-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .tech-ticket-workspace { grid-template-columns: 320px minmax(0, 1fr); }
@@ -665,8 +794,20 @@ export function TechTicketsPage() {
           <p>Theo dõi inbox kỹ thuật, tiếp nhận ticket, phản hồi khách hàng và cập nhật tiến độ xử lý trên cùng một workspace.</p>
         </div>
         <div className="tech-head-actions">
-          <button type="button" className="tech-ticket-btn tech-ticket-btn--secondary" onClick={refreshAll} disabled={Boolean(actionLoading)}>
-            Làm mới
+          <button
+            type="button"
+            className="tech-ticket-btn tech-ticket-btn--secondary"
+            onClick={refreshAll}
+            disabled={Boolean(actionLoading) || refreshing}
+          >
+            {refreshing ? (
+              <>
+                <span className="tech-ticket-btn__spinner" />
+                Đang cập nhật...
+              </>
+            ) : (
+              "Làm mới"
+            )}
           </button>
           <Link to="/tech/compatibility" className="tech-ticket-btn tech-ticket-btn--secondary">
             Luật tương thích
@@ -889,16 +1030,26 @@ export function TechTicketsPage() {
                 </div>
 
                 <div className="tech-ticket-progress" aria-label="Trạng thái xử lý ticket">
-                  {stageSteps.map((step) => (
+                  {stageSteps.map((step, index) => {
+                    const visualState = step.current ? "current" : step.active ? "completed" : "pending";
+                    const stateLabel = step.current ? "Đang xử lý" : step.active ? "Hoàn tất" : "Chưa tới";
+                    const stateIcon = step.current ? index + 1 : step.active ? "✓" : index + 1;
+
+                    return (
                     <article
                       key={step.key}
-                      className={`tech-ticket-progress-step${step.active ? " tech-ticket-progress-step--active" : ""}`}
+                      className={`tech-ticket-progress-step tech-ticket-progress-step--${visualState}`}
                     >
+                      <div className="tech-ticket-progress-step__top">
+                        <span className="tech-ticket-progress-step__icon">{stateIcon}</span>
+                        <span className="tech-ticket-progress-step__state">{stateLabel}</span>
+                      </div>
                       <strong>{step.label}</strong>
                       <span>{step.helper}</span>
                       <small>{step.timestamp ? formatDateTime(step.timestamp) : "Chưa có mốc thời gian"}</small>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
@@ -975,11 +1126,26 @@ export function TechTicketsPage() {
                                   {normalizeTicketText(message.message) || "Khách hàng đã gửi metadata tệp đính kèm."}
                                   {attachmentMentions.length ? (
                                     <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                                      {attachmentMentions.map((attachment) => (
-                                        <span key={attachment.id} className="tech-ticket-badge">
-                                          {attachment.name}{attachment.sizeLabel ? ` · ${attachment.sizeLabel}` : ""}
-                                        </span>
-                                      ))}
+                                      {attachmentMentions.map((attachment) => {
+                                        const fileUrl = getAttachmentUrl(attachment);
+                                        return (
+                                          <div key={attachment.id} className="tech-ticket-attachment">
+                                            <TicketAttachmentPreview attachment={attachment} compact />
+                                            <div style={{ minWidth: 0 }}>
+                                              <strong style={{ display: "block", color: "#1a1625" }}>{attachment.name}</strong>
+                                              <div className="tech-ticket-rich-text--soft">
+                                                {attachment.sizeLabel || "Không có dung lượng"}
+                                              </div>
+                                              {fileUrl ? (
+                                                  <div className="tech-ticket-attachment__actions">
+                                                    <a href={fileUrl} target="_blank" rel="noreferrer">Xem</a>
+                                                    <button type="button" onClick={() => downloadAttachment(attachment)}>Tải xuống</button>
+                                                  </div>
+                                              ) : null}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   ) : null}
                                 </div>
@@ -1081,17 +1247,27 @@ export function TechTicketsPage() {
                     </div>
                     {selectedTicketResolved.attachmentMentions.length ? (
                       <div className="tech-ticket-attachments">
-                        {selectedTicketResolved.attachmentMentions.map((attachment) => (
-                          <article key={attachment.id} className="tech-ticket-attachment">
-                            <div className="tech-ticket-attachment__icon">FILE</div>
-                            <div style={{ minWidth: 0 }}>
-                              <strong style={{ display: "block", color: "#1a1625" }}>{attachment.name}</strong>
-                              <div className="tech-ticket-rich-text--soft">
-                                {attachment.sizeLabel || "Không có dung lượng"} · chưa có file nhị phân để xem/tải xuống
+                        {selectedTicketResolved.attachmentMentions.map((attachment) => {
+                          const fileUrl = getAttachmentUrl(attachment);
+                          return (
+                            <article key={attachment.id} className="tech-ticket-attachment">
+                              <TicketAttachmentPreview attachment={attachment} />
+                              <div style={{ minWidth: 0 }}>
+                                <strong style={{ display: "block", color: "#1a1625" }}>{attachment.name}</strong>
+                                <div className="tech-ticket-rich-text--soft">
+                                  {attachment.sizeLabel || "Không có dung lượng"}
+                                  {fileUrl ? " · Có thể xem/tải xuống" : " · chỉ có metadata, chưa có file thật"}
+                                </div>
+                                {fileUrl ? (
+                                  <div className="tech-ticket-attachment__actions">
+                                    <a href={fileUrl} target="_blank" rel="noreferrer">Xem tệp</a>
+                                    <button type="button" onClick={() => downloadAttachment(attachment)}>Tải xuống</button>
+                                  </div>
+                                ) : null}
                               </div>
-                            </div>
-                          </article>
-                        ))}
+                            </article>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="tech-ticket-empty">Chưa có tệp đính kèm được đồng bộ trong ticket này.</div>

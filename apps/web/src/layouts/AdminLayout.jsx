@@ -11,8 +11,7 @@ const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Người dùng", icon: "👥" },
   { to: "/admin/payment-approval", label: "Duyệt thanh toán", icon: "💳" },
   { to: "/admin/compatibility-rules", label: "Tương thích", icon: "🔗" },
-  { to: "/staff/orders", label: "Đơn hàng", icon: "🛒", external: true },
-  { to: "/tech/tickets", label: "Ticket KT", icon: "🎫", external: true }
+  { to: "/staff/orders", label: "Đơn hàng", icon: "🛒", external: true }
 ];
 
 export function AdminLayout() {

@@ -4,6 +4,7 @@ const adminService = require("./admin.service");
 const attributeService = require("./admin-attributes.service");
 const skuService = require("./admin-skus.service");
 const adminSystemService = require("./admin-system.service");
+const adminReportsService = require("./admin-reports.service");
 const { recordAuditLog } = require("../../services/audit-log.service");
 
 function getDashboardSummary(_req, res) {
@@ -53,6 +54,19 @@ const changeProductStatus = asyncHandler(async (req, res) => {
     description: `Changed product #${req.params.productId} status to ${req.body.status}`
   });
   return sendSuccess(res, "Product status updated successfully", result);
+});
+
+const deleteProduct = asyncHandler(async (req, res) => {
+  const result = await adminService.deleteProduct(req.params.productId);
+  await recordAuditLog({
+    actorUserId: req.user?.id,
+    actorRole: req.user?.role,
+    action: "PRODUCT_DELETED",
+    entityType: "PRODUCT",
+    entityId: req.params.productId,
+    description: `Deleted product #${req.params.productId}`
+  });
+  return sendSuccess(res, "Product deleted successfully", result);
 });
 
 const createVariant = asyncHandler(async (req, res) => {
@@ -286,6 +300,11 @@ const getSystemOverview = asyncHandler(async (_req, res) => {
   return sendSuccess(res, "System overview fetched successfully", result);
 });
 
+const getSalesReport = asyncHandler(async (req, res) => {
+  const result = await adminReportsService.getSalesReport(req.query || {});
+  return sendSuccess(res, "Sales report fetched successfully", result);
+});
+
 const getSystemSettings = asyncHandler(async (_req, res) => {
   const result = await adminSystemService.getSettings();
   return sendSuccess(res, "System settings fetched successfully", result);
@@ -311,6 +330,7 @@ module.exports = {
   createProduct,
   updateProduct,
   changeProductStatus,
+  deleteProduct,
   createVariant,
   getUsers,
   changeUserStatus,
@@ -333,6 +353,7 @@ module.exports = {
   deleteSku,
   assignSkuAttributes,
   getSystemOverview,
+  getSalesReport,
   getSystemSettings,
   updateSystemSettings
 };

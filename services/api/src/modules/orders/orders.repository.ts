@@ -190,6 +190,19 @@ export function updateOrderStatus(orderId: string | number, status: string) {
   });
 }
 
+export function completeDeliveredOrder(orderId: string | number, userId: string | number) {
+  return prisma.order.updateMany({
+    where: {
+      id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId,
+      user_id: typeof userId === "string" ? parseInt(userId, 10) : userId,
+      status: "DELIVERED"
+    },
+    data: {
+      status: "COMPLETED"
+    }
+  });
+}
+
 export function markOrderPaid(orderId: string | number) {
   return prisma.order.update({
     where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },

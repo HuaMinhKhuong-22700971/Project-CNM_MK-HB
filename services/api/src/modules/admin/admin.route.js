@@ -44,6 +44,14 @@ router.get(
 );
 
 router.get(
+  "/reports/sales",
+  verifyToken,
+  requireRole(ROLES.ADMIN),
+  requirePermission(PERMISSIONS.ADMIN_DASHBOARD),
+  controller.getSalesReport
+);
+
+router.get(
   "/system/settings",
   verifyToken,
   requireRole(ROLES.ADMIN),
@@ -93,6 +101,14 @@ router.patch(
   requirePermission(PERMISSIONS.MANAGE_PRODUCTS),
   validateChangeProductStatus,
   controller.changeProductStatus
+);
+
+router.delete(
+  "/products/:productId",
+  verifyToken,
+  requireRole(ROLES.ADMIN),
+  requirePermission(PERMISSIONS.MANAGE_PRODUCTS),
+  controller.deleteProduct
 );
 
 router.post(

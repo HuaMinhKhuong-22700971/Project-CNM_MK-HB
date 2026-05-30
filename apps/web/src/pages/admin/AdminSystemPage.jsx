@@ -31,6 +31,15 @@ const SELECT_OPTIONS = {
   maintenance_mode: ["off", "on"]
 };
 
+function SettingLabel({ label, settingKey }) {
+  return (
+    <span style={{ display: "grid", gap: 4 }}>
+      <span>{label}</span>
+      <code style={{ color: "#2563eb", fontSize: 12, fontWeight: 800 }}>{settingKey}</code>
+    </span>
+  );
+}
+
 function normalizeSettings(items = []) {
   return items.reduce((acc, item) => {
     acc[item.key] = item.value ?? "";
@@ -105,7 +114,7 @@ export function AdminSystemPage() {
       <AdminPageHead
         eyebrow="Vận hành"
         title="Cấu hình & tình trạng hệ thống"
-        description="Health check API/DB, chỉ số tổng quan, audit log và cài đặt sandbox cho demo đồ án."
+        description="Kiểm tra API/cơ sở dữ liệu, chỉ số tổng quan, nhật ký thao tác và cài đặt sandbox cho demo đồ án."
       />
 
       <AdminAlerts errorMessage={errorMessage} successMessage={successMessage} />
@@ -121,14 +130,14 @@ export function AdminSystemPage() {
               tone={health?.api?.status === "UP" ? "success" : "danger"}
             />
             <AdminMetric
-              label="Database"
+              label="Cơ sở dữ liệu"
               value={health?.database?.status || "—"}
               tone={health?.database?.status === "UP" ? "success" : "danger"}
             />
-            <AdminMetric label="Users" value={formatAdminNumber(metrics.users)} />
-            <AdminMetric label="Products" value={formatAdminNumber(metrics.products)} />
-            <AdminMetric label="Orders" value={formatAdminNumber(metrics.orders)} />
-            <AdminMetric label="Tickets" value={formatAdminNumber(metrics.tickets)} />
+            <AdminMetric label="Người dùng" value={formatAdminNumber(metrics.users)} />
+            <AdminMetric label="Sản phẩm" value={formatAdminNumber(metrics.products)} />
+            <AdminMetric label="Đơn hàng" value={formatAdminNumber(metrics.orders)} />
+            <AdminMetric label="Ticket" value={formatAdminNumber(metrics.tickets)} />
           </AdminMetrics>
 
           <AdminWorkspace columns="split">
@@ -136,7 +145,7 @@ export function AdminSystemPage() {
               <AdminForm onSubmit={handleSave}>
                 <div className="admin-form admin-form--grid">
                   {Object.entries(FIELD_LABELS).map(([key, label]) => (
-                    <AdminField key={key} label={label} htmlFor={key}>
+                    <AdminField key={key} label={<SettingLabel label={label} settingKey={key} />} htmlFor={key}>
                       {SELECT_OPTIONS[key] ? (
                         <select id={key} name={key} value={formState[key] || ""} onChange={handleChange} className="admin-input">
                           {SELECT_OPTIONS[key].map((option) => (
@@ -159,11 +168,12 @@ export function AdminSystemPage() {
               </AdminForm>
             </AdminCard>
 
-            <AdminCard title="Snapshot settings" description="Giá trị hiện tại trong system_settings.">
+            <AdminCard title="Bản ghi cấu hình hiện tại" description="Giá trị hiện tại trong system_settings.">
               <div className="admin-setting-list">
                 {settingsList.map((item) => (
                   <div key={item.key} className="admin-setting-item">
                     <strong>{FIELD_LABELS[item.key] || item.key}</strong>
+                    <code style={{ color: "#2563eb", fontSize: 13, fontWeight: 800 }}>{item.key}</code>
                     <div>{String(item.value ?? "")}</div>
                     <small style={{ color: "#64748b" }}>{item.description || "—"}</small>
                   </div>
@@ -172,7 +182,7 @@ export function AdminSystemPage() {
             </AdminCard>
           </AdminWorkspace>
 
-          <AdminCard title="Nhật ký thao tác" description="Audit log cho admin, sales và tech.">
+          <AdminCard title="Nhật ký thao tác" description="Lịch sử thao tác của admin, nhân viên bán hàng và nhân viên kỹ thuật.">
             {auditLogs.length === 0 ? (
               <div className="admin-empty admin-empty--compact">Chưa có audit log.</div>
             ) : (
@@ -186,7 +196,7 @@ export function AdminSystemPage() {
                     <div>{log.description || "—"}</div>
                     <span>
                       {log.entityType}
-                      {log.entityId ? ` #${log.entityId}` : ""} · {log.actorRole || "SYSTEM"}
+                      {log.entityId ? ` #${log.entityId}` : ""} · {log.actorRole || "HỆ THỐNG"}
                     </span>
                   </div>
                 ))}

@@ -11,7 +11,17 @@ import { apiRouter } from "./routes";
 export function createApp() {
   const app = express();
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      contentSecurityPolicy: {
+        directives: {
+          "img-src": ["'self'", "data:", "blob:", "http://localhost:4000", "http://localhost:5173"],
+          "media-src": ["'self'", "blob:", "http://localhost:4000", "http://localhost:5173"]
+        }
+      }
+    })
+  );
   app.use(cors({ origin: env.frontendUrl, credentials: true }));
   app.use(requestLogger);
   app.use(express.json());

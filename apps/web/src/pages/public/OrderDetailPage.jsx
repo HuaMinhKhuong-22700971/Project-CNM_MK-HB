@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
 import { OrderStatusBadge } from "../../components/marketplace/OrderStatusBadge";
 import { useAuth } from "../../hooks/useAuth";
-import { cancelMyOrder, createVnpayUrl, getOrderDetail, uploadPaymentProof } from "../../services/order.service";
+import { cancelMyOrder, confirmOrderReceived, createVnpayUrl, getOrderDetail, uploadPaymentProof } from "../../services/order.service";
+import { subscribeToOrderEvents } from "../../services/order-events.service";
 import { routeConfig } from "../../routes/routeConfig";
-import { PAYMENT_STATUS_META, canCustomerCancelOrder, canCustomerPayOrder } from "../../utils/orderStatus";
+import { PAYMENT_STATUS_META, canCustomerCancelOrder, canCustomerConfirmReceived, canCustomerPayOrder } from "../../utils/orderStatus";
 import { resolveProductImage } from "../../utils/productImage";
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api").replace(/\/api\/?$/, "");
@@ -132,34 +133,57 @@ export function OrderDetailPage() {
   const [paymentProof, setPaymentProof] = useState(null);
   const [uploadingProof, setUploadingProof] = useState(false);
 
+  const reloadOrder = useCallback(async ({ silent = true } = {}) => {
+    if (!orderId) return;
+    if (!silent) {
+      setLoading(true);
+    }
+    const response = await getOrderDetail(orderId);
+    const rawData = normalizeResponse(response);
+    setOrder(mapDbOrderToUi(rawData));
+    if (!silent) {
+      setLoading(false);
+    }
+  }, [orderId]);
+
   useEffect(() => {
     if (!isAuthenticated || !orderId) {
       setLoading(false);
-      return;
+      return undefined;
     }
 
     async function loadOrder() {
       try {
-        setLoading(true);
         setErrorMessage("");
-        const response = await getOrderDetail(orderId);
-        const rawData = normalizeResponse(response);
-        setOrder(mapDbOrderToUi(rawData));
+        await reloadOrder({ silent: false });
       } catch (error) {
         setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết đơn hàng"));
-      } finally {
         setLoading(false);
       }
     }
 
     loadOrder();
-  }, [isAuthenticated, orderId]);
+    return undefined;
+  }, [isAuthenticated, orderId, reloadOrder]);
 
-  async function reloadOrder() {
-    const response = await getOrderDetail(orderId);
-    const rawData = normalizeResponse(response);
-    setOrder(mapDbOrderToUi(rawData));
-  }
+  useEffect(() => {
+    if (!isAuthenticated || !orderId) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      reloadOrder({ silent: true }).catch(() => {});
+    }, 8000);
+
+    const unsubscribe = subscribeToOrderEvents((event) => {
+      if (!event?.orderId || String(event.orderId) === String(orderId)) {
+        reloadOrder({ silent: true }).catch(() => {});
+      }
+    });
+
+    return () => {
+      window.clearInterval(intervalId);
+      unsubscribe();
+    };
+  }, [isAuthenticated, orderId, reloadOrder]);
 
   async function handleCancelOrder() {
     if (!confirm(`Hủy đơn hàng #${orderId}?`)) return;
@@ -226,6 +250,21 @@ export function OrderDetailPage() {
     }
   }
 
+  async function handleConfirmReceived() {
+    if (!confirm(`Xác nhận bạn đã nhận đủ hàng cho đơn #${orderId}?`)) return;
+    try {
+      setActionLoading(true);
+      setErrorMessage("");
+      await confirmOrderReceived(orderId);
+      setSuccessMessage("Đã xác nhận nhận hàng. Đơn hàng đã hoàn tất.");
+      await reloadOrder({ silent: true });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Không thể xác nhận nhận hàng"));
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   const itemCount = useMemo(() => (order?.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0), [order]);
   const recipient = useMemo(() => parseRecipientFromShippingAddress(order?.shippingAddress, order?.customer || user), [order, user]);
   const paymentStatusMeta = getPaymentStatusMeta(order?.paymentStatus, order?.paymentMethod);
@@ -234,6 +273,7 @@ export function OrderDetailPage() {
   const canUploadPaymentProof =
     order?.paymentMethod === "BANK_TRANSFER" &&
     !["PAID", "AWAITING_ADMIN_CONFIRMATION", "PENDING_VERIFICATION"].includes(normalizedPaymentStatus);
+  const canConfirmReceived = canCustomerConfirmReceived(order);
 
   if (!isAuthenticated) {
     return (
@@ -292,7 +332,7 @@ export function OrderDetailPage() {
         <div style={{ padding: 16, borderRadius: 16, background: "#ecfdf5", border: "1px solid #86efac", color: "#047857" }}>{successMessage}</div>
       ) : null}
 
-      {(canCustomerCancelOrder(order) || canCustomerPayOrder(order)) ? (
+      {(canCustomerCancelOrder(order) || canCustomerPayOrder(order) || canConfirmReceived) ? (
         <section style={{ display: "flex", gap: 12, flexWrap: "wrap", padding: 20, borderRadius: 20, background: "#fff", border: "1px solid var(--border)" }}>
           {canCustomerPayOrder(order) ? (
             <button type="button" disabled={actionLoading} onClick={handlePayOrder} style={{ padding: "12px 24px", borderRadius: 12, border: "none", background: "#2563eb", color: "#fff", fontWeight: 800, cursor: "pointer" }}>
@@ -302,6 +342,11 @@ export function OrderDetailPage() {
           {canCustomerCancelOrder(order) ? (
             <button type="button" disabled={actionLoading} onClick={handleCancelOrder} style={{ padding: "12px 24px", borderRadius: 12, border: "1px solid #fecaca", background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" }}>
               Hủy đơn hàng
+            </button>
+          ) : null}
+          {canConfirmReceived ? (
+            <button type="button" disabled={actionLoading} onClick={handleConfirmReceived} style={{ padding: "12px 24px", borderRadius: 12, border: "none", background: "#059669", color: "#fff", fontWeight: 800, cursor: "pointer" }}>
+              {actionLoading ? "Đang xác nhận..." : "Xác nhận đã nhận hàng"}
             </button>
           ) : null}
         </section>

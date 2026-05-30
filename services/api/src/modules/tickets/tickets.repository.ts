@@ -107,10 +107,36 @@ function buildTicketWhere(filters: TicketListFilters = {}) {
   }
 
   if (keyword) {
-    where.OR = [
-      { title: { contains: keyword } },
-      { description: { contains: keyword } }
-    ];
+    const ticketIdKeyword = keyword.match(/^(?:#|ticket\s*)?(\d+)$/i)?.[1];
+
+    if (ticketIdKeyword) {
+      where.id = Number(ticketIdKeyword);
+    } else {
+      where.OR = [
+        { title: { contains: keyword } },
+        { description: { contains: keyword } },
+        {
+          users_tickets_user_idTousers: {
+            is: {
+              OR: [
+                { full_name: { contains: keyword } },
+                { email: { contains: keyword } }
+              ]
+            }
+          }
+        },
+        {
+          users_tickets_assigned_to_idTousers: {
+            is: {
+              OR: [
+                { full_name: { contains: keyword } },
+                { email: { contains: keyword } }
+              ]
+            }
+          }
+        }
+      ];
+    }
   }
 
   if (scope === "ASSIGNED" && filters.assignedToId) {

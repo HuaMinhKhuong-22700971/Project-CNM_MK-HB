@@ -19,3 +19,8 @@ export async function changeAdminProductStatus(productId, status) {
   const response = await httpClient.patch(`/admin/products/${productId}/status`, { status });
   return response.data;
 }
+
+export async function deleteAdminProduct(productId) {
+  const response = await httpClient.delete(`/admin/products/${productId}`);
+  return response.data;
+}
