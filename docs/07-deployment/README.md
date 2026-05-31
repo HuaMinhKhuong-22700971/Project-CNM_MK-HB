@@ -60,6 +60,12 @@ SHIPPING_PROVIDER=manual
 
 Do not commit `.env`.
 
+Validate the file before starting production:
+
+```bash
+sh scripts/production/check-env.sh
+```
+
 ## 4. DNS
 
 Point your domain to the VPS public IP:
