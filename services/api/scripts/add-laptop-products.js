@@ -317,7 +317,7 @@ async function main() {
     const slug = slugify(laptop.name);
     const productId = await createProduct(laptop.name, laptop.description, laptop.price, laptopCategoryId, brandId, slug);
     const sku = slug.toUpperCase();
-    const skuId = await createSku(productId, sku, laptop.price, null);
+    const skuId = await createSku(productId, sku, laptop.price, laptop.image_url);
     
     // Add specs
     for (const [attrName, value] of Object.entries(laptop.specs)) {
@@ -340,7 +340,7 @@ async function main() {
     const slug = slugify(pc.name);
     const productId = await createProduct(pc.name, pc.description, pc.price, completePcCategoryId, brandId, slug);
     const sku = slug.toUpperCase();
-    const skuId = await createSku(productId, sku, pc.price, null);
+    const skuId = await createSku(productId, sku, pc.price, pc.image_url);
     
     // Add specs
     for (const [attrName, value] of Object.entries(pc.specs)) {
