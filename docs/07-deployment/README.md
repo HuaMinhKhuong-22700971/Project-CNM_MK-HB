@@ -86,6 +86,19 @@ nginx/ssl/privkey.pem
 You can create those with Let's Encrypt/Certbot on the VPS, then copy or mount
 the certificates into `nginx/ssl`.
 
+If you want to boot the stack before SSL is ready, use the temporary HTTP-only
+nginx config:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.http.yml up -d --build
+```
+
+After SSL files exist, switch back to the HTTPS config:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
 ## 6. Start Production
 
 ```bash
@@ -134,10 +147,28 @@ git pull origin main
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+Or use the helper script:
+
+```bash
+COMPOSE_FILES="-f docker-compose.prod.yml" sh scripts/production/deploy.sh
+```
+
+For the HTTP-only first boot:
+
+```bash
+COMPOSE_FILES="-f docker-compose.prod.yml -f docker-compose.prod.http.yml" sh scripts/production/deploy.sh
+```
+
 ## 10. Backup
 
 Create a database backup:
 
 ```bash
-docker exec cnm_mysql_prod mysqldump -ucnm_user -p cnm_mk_hb > backup-$(date +%F).sql
+sh scripts/production/backup-db.sh
+```
+
+Restore a backup:
+
+```bash
+sh scripts/production/restore-db.sh backups/cnm_mk_hb-YYYYMMDD-HHMMSS.sql
 ```
