@@ -186,6 +186,18 @@ COMPOSE_FILES="-f docker-compose.prod.yml -f docker-compose.prod.http.yml" SKIP_
 Use `SKIP_SMOKE=1` only when the public URL is not ready yet, for example while
 booting the temporary HTTP stack before SSL is configured.
 
+For local Docker production testing on a machine that already uses ports `80`,
+`8080`, or `3307`, add the local override:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.http.yml -f docker-compose.prod.local.yml up -d --build
+```
+
+Local URLs:
+
+- Web: `http://localhost:8081`
+- API health: `http://localhost:8081/api/health`
+
 ## 10. Backup
 
 Create a database backup:

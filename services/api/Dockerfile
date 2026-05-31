@@ -13,6 +13,8 @@ RUN npm ci --workspace services/api --include-workspace-root=false
 
 COPY services/api ./services/api
 
+RUN npm run prisma:generate -w services/api
+
 EXPOSE 4000
 
 CMD ["npm", "run", "start", "-w", "services/api"]
