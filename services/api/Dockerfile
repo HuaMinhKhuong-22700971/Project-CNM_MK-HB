@@ -7,7 +7,9 @@ COPY services/api/package.json services/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN npm ci --omit=dev --workspace services/api --include-workspace-root=false
+# The API start script uses tsx to run the TypeScript entrypoint, so keep
+# workspace dev dependencies inside the runtime image for this project.
+RUN npm ci --workspace services/api --include-workspace-root=false
 
 COPY services/api ./services/api
 
