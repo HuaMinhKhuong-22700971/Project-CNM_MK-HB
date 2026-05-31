@@ -63,7 +63,7 @@ Do not commit `.env`.
 Validate the file before starting production:
 
 ```bash
-sh scripts/production/check-env.sh
+npm run prod:check-env
 ```
 
 ## 4. DNS
