@@ -19,7 +19,7 @@ function getRedirectPathByRole(role) {
     return "/tech/tickets";
   }
 
-  return "/";
+  return "/profile";
 }
 
 export function useAuth() {
@@ -95,7 +95,7 @@ export function useAuth() {
     return {
       accessToken: "demo-access-token",
       user: demoUser,
-      redirectPath: "/"
+      redirectPath: "/profile"
     };
   }, []);
 
