@@ -11,6 +11,8 @@ import { apiRouter } from "./routes";
 export function createApp() {
   const app = express();
 
+  app.set("etag", false);
+
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -25,6 +27,13 @@ export function createApp() {
   app.use(cors({ origin: env.frontendUrl, credentials: true }));
   app.use(requestLogger);
   app.use(express.json());
+
+  app.use("/api", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    next();
+  });
   
   // Serve static files from uploads directory
   app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
