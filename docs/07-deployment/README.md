@@ -39,6 +39,18 @@ cp env.production.example .env
 nano .env
 ```
 
+Or generate a secure starter `.env` automatically:
+
+```bash
+npm run prod:create-env -- --domain=yourdomain.com
+```
+
+For first boot without SSL, generate HTTP URLs:
+
+```bash
+npm run prod:create-env -- --domain=yourdomain.com --http
+```
+
 Required values:
 
 ```env

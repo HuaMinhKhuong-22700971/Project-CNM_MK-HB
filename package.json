@@ -21,6 +21,7 @@
     "seed:production": "npm run seed:production -w services/api",
     "smoke:sales": "node test-sales-flow.js",
     "seed:guest-demo": "npm run seed:guest-demo -w services/api",
+    "prod:create-env": "node scripts/production/create-env.js",
     "prod:check-env": "node scripts/production/check-env.js",
     "prod:smoke": "node scripts/production/smoke-test.js",
     "db:up": "docker compose -f infra/docker/docker-compose.yml up -d || docker-compose -f infra/docker/docker-compose.yml up -d",
