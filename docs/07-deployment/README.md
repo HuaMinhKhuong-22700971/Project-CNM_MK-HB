@@ -133,7 +133,13 @@ maintenance access.
 
 ## 8. Smoke Test
 
-After deployment, test these flows:
+After deployment, run:
+
+```bash
+npm run prod:smoke
+```
+
+Then test these flows manually:
 
 1. Open `https://yourdomain.com`.
 2. Login admin.
@@ -162,8 +168,11 @@ COMPOSE_FILES="-f docker-compose.prod.yml" sh scripts/production/deploy.sh
 For the HTTP-only first boot:
 
 ```bash
-COMPOSE_FILES="-f docker-compose.prod.yml -f docker-compose.prod.http.yml" sh scripts/production/deploy.sh
+COMPOSE_FILES="-f docker-compose.prod.yml -f docker-compose.prod.http.yml" SKIP_SMOKE=1 sh scripts/production/deploy.sh
 ```
+
+Use `SKIP_SMOKE=1` only when the public URL is not ready yet, for example while
+booting the temporary HTTP stack before SSL is configured.
 
 ## 10. Backup
 

@@ -22,6 +22,7 @@
     "smoke:sales": "node test-sales-flow.js",
     "seed:guest-demo": "npm run seed:guest-demo -w services/api",
     "prod:check-env": "node scripts/production/check-env.js",
+    "prod:smoke": "node scripts/production/smoke-test.js",
     "db:up": "docker compose -f infra/docker/docker-compose.yml up -d || docker-compose -f infra/docker/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/docker/docker-compose.yml down || docker-compose -f infra/docker/docker-compose.yml down",
     "start:api": "node services/api/src/server.js",
