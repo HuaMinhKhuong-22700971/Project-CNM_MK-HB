@@ -98,7 +98,8 @@ const STORAGE_KEYS = {
   addressId: "checkout_address_id",
   paymentMethod: "checkout_payment_method",
   note: "checkout_note",
-  addressDraft: "checkout_address_draft_v2"
+  addressDraft: "checkout_address_draft_v2",
+  directDraft: "checkout_direct_draft_v1"
 };
 
 const PAYMENT_METHOD_OPTIONS = [
@@ -180,6 +181,20 @@ function loadStoredAddressDraft() {
   }
 }
 
+function loadDirectCheckoutDraft() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEYS.directDraft);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.items) || parsed.items.length === 0) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { isAuthenticated, authState, refreshProfile } = useAuth();
@@ -188,6 +203,7 @@ export function CheckoutPage() {
   // States
   const [cart, setCart] = useState(null);
   const [addresses, setAddresses] = useState([]);
+  const [directCheckoutDraft, setDirectCheckoutDraft] = useState(() => loadDirectCheckoutDraft());
   const [activeStep, setActiveStep] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.step);
     return saved ? Math.min(Math.max(Number(saved), 1), 4) : 1;
@@ -321,15 +337,23 @@ export function CheckoutPage() {
     async function initCheckout() {
       try {
         setLoading(true);
-        const [cartRes, addrRes] = await Promise.all([
-          getCart(),
-          getMyAddresses()
-        ]);
-        
-        const cartData = cartRes?.data || cartRes;
+        const addrRes = await getMyAddresses();
         const addrData = addrRes?.data || addrRes;
-        
-        setCart(cartData);
+
+        if (directCheckoutDraft?.items?.length) {
+          setCart({
+            items: directCheckoutDraft.items,
+            subtotal: Number(directCheckoutDraft.totalAmount || 0),
+            itemCount: Number(directCheckoutDraft.totalItems || directCheckoutDraft.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)),
+            totalAmount: Number(directCheckoutDraft.totalAmount || 0),
+            totalItems: Number(directCheckoutDraft.totalItems || directCheckoutDraft.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0))
+          });
+        } else {
+          const cartRes = await getCart();
+          const cartData = cartRes?.data || cartRes;
+          setCart(cartData);
+        }
+
         setAddresses(addrData || []);
         
         // Auto-select address if not set or invalid
@@ -350,7 +374,7 @@ export function CheckoutPage() {
     }
 
     initCheckout();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, directCheckoutDraft]);
 
   // Phone validation
   function validatePhone(phone) {
@@ -579,12 +603,21 @@ export function CheckoutPage() {
          ? `${getAddressFullName(selectedAddress, currentUser)} - ${selectedAddress.phone || effectivePhone} - ${formatAddressDisplay(selectedAddress)}`
          : "";
 
+      const orderItemsPayload = directCheckoutDraft?.items?.length
+        ? directCheckoutDraft.items.map((item) => ({
+            productId: Number(item.productId || item.product?.id || 0),
+            productVariantId: Number(item.productVariantId || item.variant?.id || 0),
+            quantity: Number(item.quantity || 1)
+          }))
+        : undefined;
+
       const response = await createOrder({
         shippingAddress: shippingAddressStr,
         addressId: Number(formValues.addressId),
         paymentMethod: formValues.paymentMethod,
         shippingFee: Number(formValues.shippingFee || 0),
-        note: String(formValues.note || "").trim() || undefined
+        note: String(formValues.note || "").trim() || undefined,
+        ...(orderItemsPayload ? { items: orderItemsPayload } : {})
       });
 
       const order = response?.data?.data || response?.data || response;
@@ -594,6 +627,8 @@ export function CheckoutPage() {
       localStorage.removeItem(STORAGE_KEYS.addressId);
       localStorage.removeItem(STORAGE_KEYS.note);
       localStorage.removeItem(STORAGE_KEYS.addressDraft);
+      sessionStorage.removeItem(STORAGE_KEYS.directDraft);
+      setDirectCheckoutDraft(null);
 
       if (formValues.paymentMethod === "VNPAY") {
         const urlRes = await createVnpayUrl(order.id, { amount: finalAmount });

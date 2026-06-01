@@ -35,6 +35,81 @@ const PRESET_BUILDS = [
   { id: "ai", title: "AI Workstation", icon: "AI", theme: "sky", budget: "50000000", useCase: "ai", desc: "GPU VRAM cao, RAM lớn, nguồn dư tải." }
 ];
 
+const AUTO_RECOMMEND_PROFILES = {
+  gaming: {
+    allocations: {
+      cpu: 0.16,
+      mainboard: 0.11,
+      ram: 0.11,
+      gpu: 0.38,
+      storage: 0.08,
+      psu: 0.08,
+      case: 0.04,
+      cooling: 0.04
+    }
+  },
+  office: {
+    allocations: {
+      cpu: 0.22,
+      mainboard: 0.14,
+      ram: 0.16,
+      gpu: 0.04,
+      storage: 0.18,
+      psu: 0.09,
+      case: 0.09,
+      cooling: 0.08
+    }
+  },
+  editing: {
+    allocations: {
+      cpu: 0.19,
+      mainboard: 0.12,
+      ram: 0.18,
+      gpu: 0.20,
+      storage: 0.14,
+      psu: 0.09,
+      case: 0.04,
+      cooling: 0.04
+    }
+  },
+  streaming: {
+    allocations: {
+      cpu: 0.20,
+      mainboard: 0.12,
+      ram: 0.14,
+      gpu: 0.24,
+      storage: 0.12,
+      psu: 0.10,
+      case: 0.04,
+      cooling: 0.04
+    }
+  },
+  ai: {
+    allocations: {
+      cpu: 0.15,
+      mainboard: 0.12,
+      ram: 0.18,
+      gpu: 0.38,
+      storage: 0.10,
+      psu: 0.11,
+      case: 0.03,
+      cooling: 0.07
+    }
+  },
+  default: {
+    allocations: {
+      cpu: 0.18,
+      mainboard: 0.12,
+      ram: 0.10,
+      gpu: 0.34,
+      storage: 0.09,
+      psu: 0.08,
+      case: 0.06,
+      cooling: 0.03
+    }
+  }
+};
+
 const HERO_FEATURES = [
   "Kiểm tra tương thích theo socket, RAM, PSU, case và cooling",
   "Tự đề xuất cấu hình theo ngân sách và nhu cầu sử dụng",
@@ -61,7 +136,44 @@ const SPEC_ALIASES = {
 const formatCurrency = (value) => Number(value || 0).toLocaleString("vi-VN");
 
 function getEnvelopeData(response, fallback = []) {
-  return response?.data?.items || response?.data?.data || response?.data || response || fallback;
+  const payload = response?.data;
+  return (
+    payload?.items ||
+    payload?.data?.items ||
+    payload?.data ||
+    payload ||
+    response?.items ||
+    response?.data ||
+    response ||
+    fallback
+  );
+}
+
+function getEnvelopeItems(response, fallback = []) {
+  const payload = response?.data ?? response;
+  let current = payload;
+
+  for (let i = 0; i < 4; i += 1) {
+    if (Array.isArray(current)) {
+      return current;
+    }
+
+    if (!current || typeof current !== "object") {
+      break;
+    }
+
+    if (Array.isArray(current.items)) {
+      return current.items;
+    }
+
+    if (Array.isArray(current.data)) {
+      return current.data;
+    }
+
+    current = current.data ?? current.items ?? current.result ?? current.payload;
+  }
+
+  return fallback;
 }
 
 function getProductId(product) {
@@ -530,33 +642,49 @@ export function PcBuilderPage() {
   const [selectedPresetId, setSelectedPresetId] = useState("gaming");
 
   useEffect(() => {
+    actions.setError("");
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
 
     async function loadCatalog() {
+      const nextOptions = COMPONENT_SECTIONS.reduce((accumulator, section) => {
+        accumulator[section.componentType] = [];
+        return accumulator;
+      }, {});
+
+      let categoryList = [];
       try {
         const categoryResponse = await getCategories();
-        const categoryList = getEnvelopeData(categoryResponse, []);
-        const results = await Promise.all(
-          COMPONENT_SECTIONS.map(async (section) => {
+        categoryList = getEnvelopeItems(categoryResponse, []);
+      } catch (error) {
+        console.warn("PcBuilderPage: failed to load categories", error);
+      }
+
+      await Promise.all(
+        COMPONENT_SECTIONS.map(async (section) => {
+          try {
             const matchedCategory = categoryList.find((category) => {
-              const name = String(category.name || category.category_name || "").toUpperCase();
+              const name = String(category?.name || category?.category_name || "").toUpperCase();
               return name === section.categoryName || name.includes(section.categoryName);
             });
 
-            if (!matchedCategory) {
-              return [section.componentType, []];
+            if (!matchedCategory?.id) {
+              return;
             }
 
             const productsResponse = await getProducts({ category_id: matchedCategory.id, limit: 60 });
-            return [section.componentType, getEnvelopeData(productsResponse, [])];
-          })
-        );
+            nextOptions[section.componentType] = getEnvelopeItems(productsResponse, []);
+          } catch (error) {
+            console.warn(`PcBuilderPage: failed to load ${section.componentType}`, error);
+          }
+        })
+      );
 
-        if (mounted) {
-          setOptionsByComponent(Object.fromEntries(results));
-        }
-      } catch (_err) {
-        actions.setError("Không thể tải danh mục sản phẩm cho PC Builder.");
+      if (mounted) {
+        setOptionsByComponent(nextOptions);
+        actions.setError("");
       }
     }
 
@@ -564,7 +692,7 @@ export function PcBuilderPage() {
     return () => {
       mounted = false;
     };
-  }, [actions]);
+  }, []);
 
   const activeSection = COMPONENT_SECTIONS.find((section) => section.componentType === activeComponent) || COMPONENT_SECTIONS[0];
   const insights = useMemo(() => calculateBuilderInsights(selectedItems, selectedCount), [selectedItems, selectedCount]);
@@ -635,18 +763,64 @@ export function PcBuilderPage() {
     setLocalMessage("Đang chọn linh kiện phù hợp ngân sách...");
 
     try {
-      const allocation = { cpu: 0.18, mainboard: 0.12, ram: 0.1, gpu: 0.34, storage: 0.09, psu: 0.08, case: 0.06, cooling: 0.03 };
+      const presetKey = AUTO_RECOMMEND_PROFILES[selectedPresetId] ? selectedPresetId : normalizeText(suggestionForm.purpose) || "default";
+      const allocation = AUTO_RECOMMEND_PROFILES[presetKey]?.allocations || AUTO_RECOMMEND_PROFILES.default.allocations;
+      const draftSelectedItems = { ...selectedItems };
+
+      const scoreProductForPreset = (sectionType, product, target) => {
+        const price = getProductPrice(product);
+        const priceGap = Math.abs(price - target) / Math.max(target, 1);
+        const name = normalizeText(getProductName(product));
+        let score = priceGap;
+
+        if (sectionType === "gpu") {
+          const performance = estimateProductPerformance(product, "gpu");
+          if (presetKey === "gaming" || presetKey === "ai") {
+            score -= performance / 220;
+          } else if (presetKey === "office") {
+            score += performance / 500;
+          } else {
+            score -= performance / 320;
+          }
+          if (presetKey === "office" && /(integrated|apu|igpu|gt 1030|rx 6400|gtx 1650|arc a310|arc a380)/.test(name)) {
+            score -= 0.35;
+          }
+        }
+
+        if (sectionType === "cpu") {
+          const performance = estimateProductPerformance(product, "cpu");
+          if (presetKey === "gaming") score -= performance / 260;
+          if (presetKey === "editing" || presetKey === "streaming" || presetKey === "ai") score -= performance / 300;
+          if (presetKey === "office") score += performance / 700;
+        }
+
+        if (sectionType === "ram") {
+          if (presetKey === "office" || presetKey === "editing" || presetKey === "ai") score -= 0.12;
+        }
+
+        if (sectionType === "storage") {
+          if (presetKey === "office" || presetKey === "editing") score -= 0.08;
+        }
+
+        if (sectionType === "psu" || sectionType === "cooling") {
+          score -= Math.min(0.18, price / Math.max(budget, 1) * 0.12);
+        }
+
+        return score;
+      };
+
       for (const section of COMPONENT_SECTIONS) {
         const products = optionsByComponent[section.componentType] || [];
         if (products.length === 0) continue;
 
         const target = budget * (allocation[section.componentType] || 0.1);
         const product = section.componentType === "cooling"
-          ? pickRecommendedCoolingProduct(products, selectedItems, target)
-          : [...products].sort((a, b) => Math.abs(getProductPrice(a) - target) - Math.abs(getProductPrice(b) - target))[0];
+          ? pickRecommendedCoolingProduct(products, draftSelectedItems, target)
+          : [...products].sort((a, b) => scoreProductForPreset(section.componentType, a, target) - scoreProductForPreset(section.componentType, b, target))[0];
 
         if (product) {
           await handleSelectProduct(section.componentType, product);
+          draftSelectedItems[section.componentType] = { product };
         }
       }
 
@@ -684,6 +858,29 @@ export function PcBuilderPage() {
       setLocalMessage("Đã thêm toàn bộ linh kiện vào giỏ hàng.");
     } catch (_err) {
       actions.setError("Không thể thêm toàn bộ linh kiện vào giỏ hàng.");
+    } finally {
+      setProcessingComponent("");
+    }
+  }
+
+  async function handleBuyWholeBuild() {
+    const variantIds = Object.values(selectedItems).map(getVariantId).filter(Boolean);
+    if (variantIds.length === 0) {
+      actions.setError("Chưa có linh kiện để mua.");
+      return;
+    }
+    if (!isAuthenticated) {
+      navigate(routeConfig.public.login);
+      return;
+    }
+
+    setProcessingComponent("cart");
+    try {
+      await Promise.all(variantIds.map((productVariantId) => addItemToCart({ productVariantId, quantity: 1 })));
+      setLocalMessage("Đã thêm toàn bộ linh kiện vào giỏ hàng. Đang chuyển sang thanh toán...");
+      navigate(routeConfig.public.checkout);
+    } catch (_err) {
+      actions.setError("Không thể mua nguyên bộ cấu hình.");
     } finally {
       setProcessingComponent("");
     }
@@ -947,6 +1144,9 @@ export function PcBuilderPage() {
               <button type="button" onClick={() => window.print()}>Export PDF</button>
               <button type="button" onClick={handleAddAllToCart} disabled={processingComponent === "cart"}>
                 {processingComponent === "cart" ? "Đang thêm..." : "Add all to cart"}
+              </button>
+              <button type="button" onClick={handleBuyWholeBuild} disabled={processingComponent === "cart"}>
+                {processingComponent === "cart" ? "Đang mua..." : "Mua nguyên bộ"}
               </button>
             </div>
           </section>

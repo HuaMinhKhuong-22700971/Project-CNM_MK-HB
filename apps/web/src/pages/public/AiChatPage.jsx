@@ -52,6 +52,20 @@ function formatCurrency(value) {
   return Number(value || 0).toLocaleString("vi-VN");
 }
 
+function getAvatarLabel(user, fallback = "KH") {
+  const fullName = String(user?.fullName || "").trim();
+  const email = String(user?.email || "").trim();
+  const source = fullName || email;
+
+  if (!source) return fallback;
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+  }
+
+  return source.charAt(0).toUpperCase();
+}
+
 function normalizeApiData(response) {
   return response?.data?.data || response?.data || response || {};
 }
@@ -123,7 +137,9 @@ export function AiChatPage() {
   const isHumanMode = mode === "human";
   const visibleMessages = isHumanMode ? humanMessages : aiMessages;
   const chatStatus = isHumanMode ? getSessionStatus(liveSession) : STATUS_META.ai;
-  const customerName = authState?.user?.fullName || authState?.user?.email || "Khách hàng PC Mall";
+  const isGuestUser = !isAuthenticated;
+  const customerName = authState?.user?.fullName || authState?.user?.email || "Khách vãng lai";
+  const customerAvatarLabel = isGuestUser ? "KH" : getAvatarLabel(authState?.user, "KH");
 
   useEffect(() => {
     setGuestAiChatMessages(aiMessages);
@@ -500,7 +516,7 @@ export function AiChatPage() {
                       </div>
                     ) : null}
                   </div>
-                  {isUser ? <div className="ai-avatar ai-avatar--user">{String(customerName || "B").charAt(0).toUpperCase()}</div> : null}
+                  {isUser ? <div className="ai-avatar ai-avatar--user">{customerAvatarLabel}</div> : null}
                 </article>
               );
             })}

@@ -17,5 +17,6 @@ export const updateTicketSchema = z
   });
 
 export const addTicketMessageSchema = z.object({
-  message: z.string().trim().min(1).max(5000)
+  message: z.string().trim().min(1).max(5000),
+  visibility: z.enum(["PUBLIC", "INTERNAL"]).default("PUBLIC").optional()
 });

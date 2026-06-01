@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -12,6 +12,21 @@ import {
 const COMPONENT_OPTIONS = ["CPU", "MAINBOARD", "RAM", "GPU", "STORAGE", "PSU", "CASE"];
 const RULE_TYPE_OPTIONS = ["ATTRIBUTE_MATCH", "ATTRIBUTE_NOT_MATCH"];
 
+const COMPONENT_LABELS = {
+  CPU: "CPU",
+  MAINBOARD: "Mainboard",
+  RAM: "RAM",
+  GPU: "GPU",
+  STORAGE: "Storage",
+  PSU: "PSU",
+  CASE: "Case"
+};
+
+const RULE_TYPE_LABELS = {
+  ATTRIBUTE_MATCH: "Khớp thuộc tính",
+  ATTRIBUTE_NOT_MATCH: "Không khớp thuộc tính"
+};
+
 function createInitialFormState() {
   return {
     name: "",
@@ -22,6 +37,59 @@ function createInitialFormState() {
     targetAttributeKey: "socket",
     description: ""
   };
+}
+
+function prettyVietnameseText(value) {
+  return String(value || "")
+    .replace(/\btuong thich\b/gi, "tương thích")
+    .replace(/\bkhong\b/gi, "không")
+    .replace(/\bvoi\b/gi, "với")
+    .replace(/\bmainboard\b/gi, "mainboard")
+    .replace(/\bram\b/gi, "RAM")
+    .replace(/\bcpu\b/gi, "CPU")
+    .replace(/\bgpu\b/gi, "GPU")
+    .replace(/\bpsu\b/gi, "PSU")
+    .replace(/\bstorage\b/gi, "Storage")
+    .replace(/\bcase\b/gi, "Case")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getComponentLabel(componentType) {
+  return COMPONENT_LABELS[String(componentType || "").toUpperCase()] || String(componentType || "").toUpperCase();
+}
+
+function getRuleTypeLabel(ruleType) {
+  return RULE_TYPE_LABELS[String(ruleType || "").toUpperCase()] || String(ruleType || "").toUpperCase();
+}
+
+function buildRuleTitle(rule) {
+  const sourceComponent = getComponentLabel(rule.sourceComponentType);
+  const targetComponent = getComponentLabel(rule.targetComponentType);
+  const sourceAttribute = String(rule.sourceAttributeKey || "").trim() || "thuộc tính nguồn";
+  const targetAttribute = String(rule.targetAttributeKey || "").trim() || "thuộc tính đích";
+
+  if (String(rule.ruleType || "").toUpperCase() === "ATTRIBUTE_NOT_MATCH") {
+    return `${sourceComponent} không được khớp ${sourceAttribute} với ${targetComponent} (${targetAttribute})`;
+  }
+
+  return `${sourceComponent} khớp ${sourceAttribute} với ${targetComponent} (${targetAttribute})`;
+}
+
+function buildRuleDescription(rule) {
+  const rawDescription = prettyVietnameseText(rule.description || "");
+  if (rawDescription) {
+    return rawDescription;
+  }
+
+  const sourceAttribute = String(rule.sourceAttributeKey || "").trim() || "thuộc tính nguồn";
+  const targetAttribute = String(rule.targetAttributeKey || "").trim() || "thuộc tính đích";
+
+  if (String(rule.ruleType || "").toUpperCase() === "ATTRIBUTE_NOT_MATCH") {
+    return `${getComponentLabel(rule.sourceComponentType)} không được trùng ${sourceAttribute} với ${getComponentLabel(rule.targetComponentType)} (${targetAttribute}).`;
+  }
+
+  return `${getComponentLabel(rule.sourceComponentType)} phải khớp ${sourceAttribute} với ${getComponentLabel(rule.targetComponentType)} (${targetAttribute}).`;
 }
 
 function getErrorMessage(error, fallback) {
@@ -38,16 +106,21 @@ function normalizeRulesResponse(response) {
 }
 
 function normalizeRule(rule) {
-  return {
+  const normalized = {
     id: rule?.id,
-    name: rule?.name || rule?.description || "Rule",
     sourceComponentType: String(rule?.sourceComponentType || rule?.source_component_type || "").toUpperCase(),
     targetComponentType: String(rule?.targetComponentType || rule?.target_component_type || "").toUpperCase(),
     ruleType: String(rule?.ruleType || rule?.rule_type || "ATTRIBUTE_MATCH").toUpperCase(),
     sourceAttributeKey: rule?.sourceAttributeKey || rule?.source_attribute_key || "",
     targetAttributeKey: rule?.targetAttributeKey || rule?.target_attribute_key || "",
-    description: rule?.description || "",
+    description: prettyVietnameseText(rule?.description || ""),
     status: String(rule?.status || "ACTIVE").toUpperCase()
+  };
+
+  return {
+    ...normalized,
+    name: prettyVietnameseText(rule?.name || "") || buildRuleTitle(normalized),
+    description: normalized.description || buildRuleDescription(normalized)
   };
 }
 
@@ -77,6 +150,7 @@ export function TechCompatibilityPage() {
         setLoading(false);
       }
     }
+
     loadRules();
   }, []);
 
@@ -94,7 +168,7 @@ export function TechCompatibilityPage() {
   async function handleSubmit(event) {
     event.preventDefault();
     if (!formValues.name.trim()) {
-      setErrorMessage("Nhập tên rule.");
+      setErrorMessage("Nhập tên quy tắc.");
       return;
     }
 
@@ -119,10 +193,10 @@ export function TechCompatibilityPage() {
       setRules((prev) =>
         editingRuleId ? prev.map((rule) => (rule.id === savedRule.id ? savedRule : rule)) : [savedRule, ...prev]
       );
-      setSuccessMessage(editingRuleId ? "Đã cập nhật rule." : "Đã tạo rule mới.");
+      setSuccessMessage(editingRuleId ? "Đã cập nhật quy tắc." : "Đã tạo quy tắc mới.");
       resetForm();
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Không thể lưu rule."));
+      setErrorMessage(getErrorMessage(error, "Không thể lưu quy tắc."));
     } finally {
       setSubmitting(false);
     }
@@ -134,7 +208,7 @@ export function TechCompatibilityPage() {
       const response = await changeAdminCompatibilityRuleStatus(rule.id, nextStatus);
       const updated = normalizeRule(response?.data || response);
       setRules((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setSuccessMessage(`Rule #${rule.id} → ${nextStatus}`);
+      setSuccessMessage(`Quy tắc #${rule.id} → ${nextStatus}`);
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Không thể đổi trạng thái."));
     }
@@ -146,7 +220,7 @@ export function TechCompatibilityPage() {
         <div>
           <p className="tech-eyebrow">Nhân viên kỹ thuật</p>
           <h1>Luật tương thích PC Builder</h1>
-          <p>Cấu hình các rule kiểm tra socket, RAM, PSU và những ràng buộc giữa các nhóm linh kiện trong PC Builder.</p>
+          <p>Cấu hình các quy tắc kiểm tra socket, RAM, PSU và những ràng buộc giữa các nhóm linh kiện trong PC Builder.</p>
         </div>
         <div className="tech-head-actions">
           <Link to="/tech/tickets" className="tech-btn tech-btn--secondary">
@@ -164,13 +238,13 @@ export function TechCompatibilityPage() {
       <div className="tech-compat-workspace">
         <section className="tech-card tech-compat-form">
           <div className="tech-section-title">
-            <h3>{editingRuleId ? `Sửa rule #${editingRuleId}` : "Thêm rule mới"}</h3>
+            <h3>{editingRuleId ? `Sửa quy tắc #${editingRuleId}` : "Thêm quy tắc mới"}</h3>
             <p>Định nghĩa cặp linh kiện và thuộc tính cần khớp để trình dựng cấu hình đánh giá tương thích.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="tech-form-grid">
             <label>
-              Tên rule
+              Tên quy tắc
               <input name="name" value={formValues.name} onChange={(event) => setFormValues({ ...formValues, name: event.target.value })} />
             </label>
 
@@ -205,7 +279,7 @@ export function TechCompatibilityPage() {
             </label>
 
             <label>
-              Loại rule
+              Loại quy tắc
               <select name="ruleType" value={formValues.ruleType} onChange={(event) => setFormValues({ ...formValues, ruleType: event.target.value })}>
                 {RULE_TYPE_OPTIONS.map((ruleType) => (
                   <option key={ruleType} value={ruleType}>
@@ -216,7 +290,7 @@ export function TechCompatibilityPage() {
             </label>
 
             <label>
-              Source attribute
+              Thuộc tính nguồn
               <input
                 name="sourceAttributeKey"
                 value={formValues.sourceAttributeKey}
@@ -225,7 +299,7 @@ export function TechCompatibilityPage() {
             </label>
 
             <label>
-              Target attribute
+              Thuộc tính đích
               <input
                 name="targetAttributeKey"
                 value={formValues.targetAttributeKey}
@@ -245,7 +319,7 @@ export function TechCompatibilityPage() {
 
             <div className="tech-action-row">
               <button type="submit" className="tech-btn tech-btn--primary" disabled={submitting}>
-                {submitting ? "Đang lưu..." : editingRuleId ? "Cập nhật" : "Tạo rule"}
+                {submitting ? "Đang lưu..." : editingRuleId ? "Cập nhật" : "Tạo quy tắc"}
               </button>
               {editingRuleId ? (
                 <button type="button" className="tech-btn tech-btn--secondary" onClick={resetForm}>
@@ -258,14 +332,14 @@ export function TechCompatibilityPage() {
 
         <section className="tech-card">
           <div className="tech-section-title">
-            <h3>Danh sách rule ({sortedRules.length})</h3>
-            <p>Bật hoặc tắt rule để kiểm soát PC Builder ngay lập tức.</p>
+            <h3>Danh sách quy tắc ({sortedRules.length})</h3>
+            <p>Bật hoặc tắt quy tắc để kiểm soát PC Builder ngay lập tức.</p>
           </div>
 
           {loading ? (
             <div className="tech-empty">Đang tải...</div>
           ) : sortedRules.length === 0 ? (
-            <div className="tech-empty">Chưa có rule nào.</div>
+            <div className="tech-empty">Chưa có quy tắc nào.</div>
           ) : (
             <div className="tech-rule-list">
               {sortedRules.map((rule) => (
@@ -275,10 +349,10 @@ export function TechCompatibilityPage() {
                       #{rule.id} {rule.name}
                     </strong>
                     <span>
-                      {rule.sourceComponentType} → {rule.targetComponentType} · {rule.ruleType}
+                      {getComponentLabel(rule.sourceComponentType)} → {getComponentLabel(rule.targetComponentType)} · {getRuleTypeLabel(rule.ruleType)}
                     </span>
                     <span>
-                      {rule.sourceAttributeKey} ↔ {rule.targetAttributeKey}
+                      Thuộc tính: {rule.sourceAttributeKey} ↔ {rule.targetAttributeKey}
                     </span>
                     {rule.description ? <span>{rule.description}</span> : null}
                   </div>

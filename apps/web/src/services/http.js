@@ -3,7 +3,7 @@ import { clearAuthState, getAuthState, setAuthState } from "../store/authStore";
 import { getStoredAuth } from "../utils/storage";
 
 export const httpClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   headers: {
     "Content-Type": "application/json"
   }
@@ -29,7 +29,7 @@ async function tryRefreshToken() {
   if (!refreshPromise) {
     refreshPromise = axios
       .post(
-        `${import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api"}/auth/refresh`,
+        `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/refresh`,
         { refreshToken },
         { headers: { "Content-Type": "application/json" } }
       )

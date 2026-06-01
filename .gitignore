@@ -27,6 +27,10 @@ Thumbs.db
 
 # Prisma / DB
 services/api/prisma/dev.db
+backup_current_prod_local.sql
+backup_current_users.sql
+backup_recovered_old_data.sql
+backups/
 
 # Demo chat persistence (staff)
 services/api/src/data/chat-sessions.json

@@ -37,31 +37,99 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
 
   const currentUser = req.user;
   const payload = checkoutSchema.parse(req.body);
+  const directItems = Array.isArray(payload.items) && payload.items.length > 0 ? payload.items : null;
 
   const result = await prisma.$transaction(async (tx: any) => {
-    let cart = await tx.cart.findFirst({ where: { user_id: Number(currentUser.userId) } });
+    let cartId: number | null = null;
+    let orderSourceItems: Array<{
+      product_variant_id: number;
+      product_id: number | null;
+      sku_snapshot: string | null;
+      name_snapshot: string | null;
+      unitPrice: number;
+      quantity: number;
+    }> = [];
 
-    if (!cart) {
-      cart = await tx.cart.create({ data: { user_id: Number(currentUser.userId) } });
-    }
+    if (directItems) {
+      const variantIds = [...new Set(directItems.map((item) => Number(item.productVariantId || 0)).filter((value) => value > 0))];
+      if (variantIds.length !== directItems.length) {
+        throw new AppError("Invalid product variant in direct checkout", 400);
+      }
 
-    const cartWithItems = await tx.cart.findUnique({
-      where: { id: cart.id },
-      include: {
-        CartItem: {
-          include: {
-            ProductSku: {
-              include: {
-                Product: true
+      const variants = await tx.productSku.findMany({
+        where: { id: { in: variantIds } },
+        include: {
+          Product: true
+        }
+      });
+
+      if (variants.length !== variantIds.length) {
+        throw new AppError("One or more product variants were not found", 404);
+      }
+
+      const variantMap = new Map(variants.map((variant: any) => [variant.id, variant]));
+
+      orderSourceItems = directItems.map((item) => {
+        const variantId = Number(item.productVariantId);
+        const variant = variantMap.get(variantId);
+        if (!variant || !variant.is_active) {
+          throw new AppError(`Product variant ${variantId} is unavailable`, 400);
+        }
+
+        if (item.productId && Number(item.productId) !== Number(variant.product_id)) {
+          throw new AppError("Product and variant do not match", 400);
+        }
+
+        const quantity = Number(item.quantity || 1);
+        if (Number(variant.stock || 0) < quantity) {
+          throw new AppError(`Vượt quá tồn kho cho sản phẩm ${variant.Product?.name || variant.sku || variantId}`, 400);
+        }
+
+        return {
+          product_variant_id: variant.id,
+          product_id: variant.product_id,
+          sku_snapshot: variant.sku,
+          name_snapshot: variant.Product?.name || variant.sku,
+          unitPrice: Number(variant.price),
+          quantity
+        };
+      });
+    } else {
+      let cart = await tx.cart.findFirst({ where: { user_id: Number(currentUser.userId) } });
+
+      if (!cart) {
+        cart = await tx.cart.create({ data: { user_id: Number(currentUser.userId) } });
+      }
+
+      cartId = cart.id;
+
+      const cartWithItems = await tx.cart.findUnique({
+        where: { id: cart.id },
+        include: {
+          CartItem: {
+            include: {
+              ProductSku: {
+                include: {
+                  Product: true
+                }
               }
             }
           }
         }
-      }
-    });
+      });
 
-    if (!cartWithItems || cartWithItems.CartItem.length === 0) {
-      throw new AppError("Cart is empty", 400);
+      if (!cartWithItems || cartWithItems.CartItem.length === 0) {
+        throw new AppError("Cart is empty", 400);
+      }
+
+      orderSourceItems = cartWithItems.CartItem.map((item: any) => ({
+        product_variant_id: item.product_variant_id,
+        product_id: item.ProductSku.product_id,
+        sku_snapshot: item.ProductSku.sku,
+        name_snapshot: item.ProductSku.Product?.name || item.ProductSku.sku,
+        unitPrice: Number(item.ProductSku.price),
+        quantity: item.quantity
+      }));
     }
 
     if (payload.addressId) {
@@ -78,16 +146,8 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
     }
 
     let total = 0;
-    for (const item of cartWithItems.CartItem) {
-      if (!item.ProductSku || !item.ProductSku.is_active) {
-        throw new AppError(`Product SKU ${item.ProductSku?.sku || 'Unknown'} is completely inactive`, 400);
-      }
-
-      if (Number(item.ProductSku.stock) < item.quantity) {
-        throw new AppError(`Vượt quá tồn kho cho sản phẩm ${item.ProductSku.Product?.name || 'Unknown'}`, 400);
-      }
-
-      total += Number(item.ProductSku.price) * item.quantity;
+    for (const item of orderSourceItems) {
+      total += Number(item.unitPrice) * Number(item.quantity);
     }
 
     const shippingFee = Number(payload.shippingFee || 0);
@@ -111,17 +171,17 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
       }
     });
 
-    for (const item of cartWithItems.CartItem) {
-      const unitPrice = Number(item.ProductSku.price);
+    for (const item of orderSourceItems) {
+      const unitPrice = Number(item.unitPrice);
       const lineTotal = unitPrice * item.quantity;
 
       await tx.orderItem.create({
         data: {
           order_id: order.id,
           product_variant_id: item.product_variant_id,
-          product_id: item.ProductSku.product_id,
-          sku_snapshot: item.ProductSku.sku,
-          name_snapshot: item.ProductSku.Product?.name || item.ProductSku.sku,
+          product_id: item.product_id,
+          sku_snapshot: item.sku_snapshot,
+          name_snapshot: item.name_snapshot,
           unit_price: unitPrice,
           quantity: item.quantity,
           line_total: lineTotal,
@@ -140,9 +200,11 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    await tx.cartItem.deleteMany({
-      where: { cart_id: cart.id }
-    });
+    if (!directItems && cartId) {
+      await tx.cartItem.deleteMany({
+        where: { cart_id: cartId }
+      });
+    }
 
     const createdOrder = await tx.order.findUnique({
       where: { id: order.id },
@@ -240,7 +302,7 @@ export const patchOrderStatus = asyncHandler(async (req: Request, res: Response)
 
     return await tx.order.update({
       where: { id: Number(req.params.id) },
-      data: { status: payload.status }
+        data: { status: payload.status, updated_at: new Date() }
     });
   });
 
@@ -322,7 +384,7 @@ export const createVnpayUrl = asyncHandler(async (req: Request, res: Response) =
   const tmnCode = env.vnpayTmnCode || process.env.VNPAY_TMN_CODE;
   const secretKey = env.vnpayHashSecret || process.env.VNPAY_HASH_SECRET;
   const frontendUrl = env.frontendUrl || process.env.FRONTEND_URL || "http://localhost:5173";
-  const shouldUseMockPayment = env.paymentMockMode || ((!tmnCode || !secretKey) && env.nodeEnv !== "production");
+  const shouldUseMockPayment = env.paymentMockMode || !tmnCode || !secretKey;
 
   if (shouldUseMockPayment) {
     const payAmount = Number(order.final_amount || order.total_amount || 0);

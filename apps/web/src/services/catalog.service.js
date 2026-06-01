@@ -1,5 +1,23 @@
 import { httpClient } from "./http";
 
+const requestCache = new Map();
+
+async function cachedRequest(cacheKey, fetcher) {
+  if (requestCache.has(cacheKey)) {
+    return requestCache.get(cacheKey);
+  }
+
+  const requestPromise = Promise.resolve()
+    .then(fetcher)
+    .catch((error) => {
+      requestCache.delete(cacheKey);
+      throw error;
+    });
+
+  requestCache.set(cacheKey, requestPromise);
+  return requestPromise;
+}
+
 export async function getProducts(params = {}) {
   const normalizedParams = {
     ...params,
@@ -7,13 +25,18 @@ export async function getProducts(params = {}) {
     max_price: params.max_price ?? params.maxPrice,
     keyword: params.keyword ?? params.search
   };
-  const response = await httpClient.get("/products", { params: normalizedParams });
-  return response.data;
+  const cacheKey = `products:${JSON.stringify(normalizedParams)}`;
+  return cachedRequest(cacheKey, async () => {
+    const response = await httpClient.get("/products", { params: normalizedParams });
+    return response.data;
+  });
 }
 
 export async function getProductFilterOptions() {
-  const response = await httpClient.get("/products/filter-options");
-  return response.data;
+  return cachedRequest("product-filter-options", async () => {
+    const response = await httpClient.get("/products/filter-options");
+    return response.data;
+  });
 }
 
 export async function getCompareProducts(ids) {
@@ -31,11 +54,15 @@ export async function getProductDetail(idOrSlug) {
 }
 
 export async function getCategories() {
-  const response = await httpClient.get("/categories");
-  return response.data;
+  return cachedRequest("categories", async () => {
+    const response = await httpClient.get("/categories");
+    return response.data;
+  });
 }
 
 export async function getBrands() {
-  const response = await httpClient.get("/brands");
-  return response.data;
+  return cachedRequest("brands", async () => {
+    const response = await httpClient.get("/brands");
+    return response.data;
+  });
 }

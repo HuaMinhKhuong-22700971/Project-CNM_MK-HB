@@ -118,7 +118,25 @@ export function stripAttachmentMarker(text) {
 }
 
 export function getAttachmentUrl(attachment) {
-  return attachment?.fileUrl || attachment?.url || "";
+  const rawUrl = String(attachment?.fileUrl || attachment?.url || "").trim();
+  if (!rawUrl) return "";
+
+  if (rawUrl.startsWith("/uploads/")) {
+    return typeof window !== "undefined" ? `${window.location.origin}${rawUrl}` : rawUrl;
+  }
+
+  if (typeof window !== "undefined" && /^https?:\/\/localhost(?::\d+)?\/uploads\//i.test(rawUrl)) {
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.pathname.startsWith("/uploads/")) {
+        return `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+    } catch (_error) {
+      return rawUrl.replace(/^https?:\/\/localhost(?::\d+)?/i, window.location.origin);
+    }
+  }
+
+  return rawUrl;
 }
 
 export async function downloadAttachment(attachment) {

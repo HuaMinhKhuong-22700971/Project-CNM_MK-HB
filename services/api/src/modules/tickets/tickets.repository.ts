@@ -29,6 +29,7 @@ function normalizeTicket(ticket: any) {
     messages: (ticket.TicketMessage || []).map((message: any) => ({
       id: message.id,
       message: message.message,
+      visibility: message.visibility,
       createdAt: message.created_at,
       updatedAt: message.updated_at,
       sender: normalizeUser(message.User)
@@ -203,13 +204,15 @@ export async function createTicketMessage(data: {
   ticketId: string | number;
   userId: string;
   message: string;
+  visibility?: "PUBLIC" | "INTERNAL";
 }) {
   const ticketId = typeof data.ticketId === "string" ? parseInt(data.ticketId, 10) : data.ticketId;
   await prisma.ticketMessage.create({
     data: {
       ticket_id: ticketId,
       user_id: parseInt(data.userId, 10),
-      message: data.message
+      message: data.message,
+      visibility: data.visibility || "PUBLIC"
     }
   });
 

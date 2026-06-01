@@ -81,6 +81,10 @@ function isStaffSender(message) {
   return ["ADMIN", "TECH_STAFF", "TECHNICIAN", "SALES_STAFF", "SALES"].includes(role);
 }
 
+function canManageTicketReply(role) {
+  return ["ADMIN", "TECH_STAFF", "TECHNICIAN", "SALES_STAFF", "SALES"].includes(String(role || "").toUpperCase());
+}
+
 function TicketAttachmentCard({ attachment }) {
   const [previewFailed, setPreviewFailed] = useState(false);
   const attachmentUrl = getAttachmentUrl(attachment);
@@ -142,6 +146,7 @@ export function TicketDetailPage() {
   const [ticket, setTicket] = useState(null);
   const [replyMessage, setReplyMessage] = useState("");
   const [attachments, setAttachments] = useState([]);
+  const [replyVisibility, setReplyVisibility] = useState("PUBLIC");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -232,11 +237,16 @@ export function TicketDetailPage() {
       setSubmitting(true);
       setErrorMessage("");
       setSuccessMessage("");
-      let payload = { message: replyMessage.trim() || "Khách hàng đã gửi tệp đính kèm." };
+      const message = replyMessage.trim() || (isStaffUser && replyVisibility === "INTERNAL" ? "Ghi chú nội bộ." : "Khách hàng đã gửi tệp đính kèm.");
+      let payload = {
+        message,
+        visibility: isStaffUser && replyVisibility === "INTERNAL" ? "INTERNAL" : "PUBLIC"
+      };
 
       if (attachments.length) {
         const formData = new FormData();
-        formData.append("message", payload.message);
+        formData.append("message", message);
+        formData.append("visibility", payload.visibility);
         attachments.forEach((file) => formData.append("attachments", file));
         payload = formData;
       }
@@ -248,6 +258,7 @@ export function TicketDetailPage() {
       setLastSyncedAt(new Date());
       setReplyMessage("");
       setAttachments([]);
+      setReplyVisibility("PUBLIC");
       setSuccessMessage("Đã gửi phản hồi vào ticket");
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Không thể gửi phản hồi"));
@@ -261,6 +272,8 @@ export function TicketDetailPage() {
   const isClosed = ["CLOSED"].includes(String(ticket?.status || "").toUpperCase());
   const ticketDescription = stripAttachmentMarker(ticket?.description);
   const ticketAttachments = extractAttachmentMentions(ticket?.description);
+  const isStaffUser = canManageTicketReply(authState?.user?.role);
+  const visibleMessages = ticket?.messages || [];
 
   return (
     <div className="ticket-detail">
@@ -282,18 +295,27 @@ export function TicketDetailPage() {
       ) : (
         <>
           <section className="ticket-detail__hero">
-            <div>
-              <span>Ticket #{ticket.id} · {formatDate(ticket.createdAt)}</span>
+            <div className="ticket-hero__content">
+              <div className="ticket-hero__eyebrow">Support Center · Ticket #{ticket.id}</div>
               <h1>{ticket.title}</h1>
-              {ticketDescription ? <p>{ticketDescription}</p> : null}
+              <p>{ticketDescription || "Thông tin ticket, trao đổi và phản hồi được sắp xếp theo timeline."}</p>
               <TicketAttachmentList attachments={ticketAttachments} />
             </div>
-            <aside>
-              <strong style={{ color: statusMeta.color, background: statusMeta.bg }}>{statusMeta.label}</strong>
-              <strong style={{ color: priorityMeta.color, background: priorityMeta.bg }}>Ưu tiên {priorityMeta.label}</strong>
-              <small>Người gửi: {authState?.user?.fullName || authState?.user?.email}</small>
-              <small>Kỹ thuật: {ticket.assignee?.fullName || "Chưa phân công"}</small>
-              <small>Cập nhật: {formatDate(ticket.updatedAt || ticket.createdAt)}</small>
+            <aside className="ticket-hero__summary">
+              <div className="ticket-chip" style={{ color: statusMeta.color, background: statusMeta.bg }}>{statusMeta.label}</div>
+              <div className="ticket-chip" style={{ color: priorityMeta.color, background: priorityMeta.bg }}>Ưu tiên {priorityMeta.label}</div>
+              <div className="ticket-hero__meta">
+                <span>Người gửi</span>
+                <strong>{ticket.reporter?.fullName || ticket.reporter?.email || authState?.user?.fullName || authState?.user?.email}</strong>
+              </div>
+              <div className="ticket-hero__meta">
+                <span>Kỹ thuật phụ trách</span>
+                <strong>{ticket.assignee?.fullName || "Chưa phân công"}</strong>
+              </div>
+              <div className="ticket-hero__meta">
+                <span>Cập nhật gần nhất</span>
+                <strong>{formatDate(ticket.updatedAt || ticket.createdAt)}</strong>
+              </div>
             </aside>
           </section>
 
@@ -310,12 +332,13 @@ export function TicketDetailPage() {
                 </div>
               </div>
               <div className="conversation-timeline">
-                {(ticket.messages || []).length === 0 ? (
+                {visibleMessages.length === 0 ? (
                   <div className="conversation-empty">Chưa có tin nhắn trao đổi. Bạn có thể bổ sung thông tin ở khung bên dưới.</div>
                 ) : (
-                  ticket.messages.map((message) => {
+                  visibleMessages.map((message) => {
                     const isMine = Number(message.sender?.id) === Number(authState?.user?.id);
                     const isStaff = isStaffSender(message);
+                    const isInternal = String(message.visibility || "PUBLIC").toUpperCase() === "INTERNAL";
                     return (
                       <article key={message.id} className={`conversation-message ${isMine ? "is-customer" : ""} ${isStaff ? "is-staff" : ""}`}>
                         <div className="conversation-avatar">{isStaff ? "PC" : "KH"}</div>
@@ -324,6 +347,7 @@ export function TicketDetailPage() {
                             <strong>{message.sender?.fullName || message.sender?.email || "Hệ thống"}</strong>
                             <span>{isStaff ? "Phản hồi hỗ trợ" : "Khách hàng"}</span>
                           </div>
+                          {isInternal ? <div className="conversation-badge conversation-badge--internal">Ghi chú nội bộ</div> : null}
                           {stripAttachmentMarker(message.message) ? <p>{stripAttachmentMarker(message.message)}</p> : null}
                           <TicketAttachmentList attachments={extractAttachmentMentions(message.message)} />
                           <time>{formatDate(message.createdAt)}</time>
@@ -355,7 +379,20 @@ export function TicketDetailPage() {
               <p className="ticket-muted">Ticket đã đóng, bạn không thể gửi thêm phản hồi.</p>
             ) : (
               <>
-                <textarea value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)} rows={5} placeholder="Bổ sung thông tin, cập nhật tình trạng sự cố hoặc trao đổi thêm với nhân viên kỹ thuật..." />
+                {isStaffUser ? (
+                  <div className="reply-visibility-toggle" role="tablist" aria-label="Chế độ phản hồi">
+                    <button type="button" className={replyVisibility === "PUBLIC" ? "is-active" : ""} onClick={() => setReplyVisibility("PUBLIC")}>
+                      Phản hồi công khai
+                    </button>
+                    <button type="button" className={replyVisibility === "INTERNAL" ? "is-active" : ""} onClick={() => setReplyVisibility("INTERNAL")}>
+                      Ghi chú nội bộ
+                    </button>
+                  </div>
+                ) : (
+                  <div className="reply-visibility-note">Phản hồi của bạn sẽ hiển thị trong lịch sử trao đổi và được nhân viên phụ trách theo dõi.</div>
+                )}
+
+                <textarea value={replyMessage} onChange={(event) => setReplyMessage(event.target.value)} rows={5} placeholder={isStaffUser && replyVisibility === "INTERNAL" ? "Ghi chú nội bộ dành cho đội hỗ trợ..." : "Bổ sung thông tin, cập nhật tình trạng sự cố hoặc trao đổi thêm với nhân viên kỹ thuật..."} />
                 <div className="reply-upload">
                   <div>
                     <strong>Tệp đính kèm</strong>
@@ -378,7 +415,7 @@ export function TicketDetailPage() {
                   </div>
                 ) : null}
                 <button type="button" onClick={handleReply} disabled={submitting}>
-                  {submitting ? "Đang gửi..." : "Gửi phản hồi"}
+                  {submitting ? "Đang gửi..." : isStaffUser && replyVisibility === "INTERNAL" ? "Gửi ghi chú" : "Gửi phản hồi"}
                 </button>
               </>
             )}
@@ -479,6 +516,47 @@ const ticketDetailStyles = `
     linear-gradient(135deg, #fff, #f8fbff);
 }
 
+.ticket-hero__content {
+  display: grid;
+  gap: 12px;
+}
+
+.ticket-hero__summary {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.ticket-chip {
+  justify-self: start;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ticket-hero__meta {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ticket-hero__meta span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ticket-hero__meta strong {
+  color: #0f172a;
+}
+
+.ticket-hero__eyebrow,
 .ticket-detail__hero span,
 .ticket-section-head span {
   color: #2563eb;
@@ -652,6 +730,25 @@ const ticketDetailStyles = `
   font-weight: 800;
 }
 
+.conversation-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.conversation-badge--internal {
+  background: #fff7ed;
+  color: #b45309;
+}
+
 .conversation-bubble p {
   margin: 0;
   color: #334155;
@@ -781,14 +878,55 @@ const ticketDetailStyles = `
   gap: 14px;
 }
 
+.reply-visibility-toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #eff6ff;
+}
+
+.reply-visibility-toggle button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.reply-visibility-toggle button.is-active {
+  background: linear-gradient(135deg, #0f172a, #2563eb);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.16);
+}
+
+.reply-visibility-note {
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 .ticket-reply textarea {
   width: 100%;
-  padding: 14px;
+  min-height: 160px;
+  padding: 16px;
   border: 1px solid #dbe4f0;
-  border-radius: 16px;
-  background: #f8fafc;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fbff, #f8fafc);
   font: inherit;
   resize: vertical;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .reply-upload {

@@ -74,9 +74,9 @@ function normalizeApiDate(value) {
   const raw = String(value).trim();
   if (!raw) return null;
 
-  const hasExplicitTimezone = /[zZ]$|[+\-]\d{2}:\d{2}$/.test(raw);
   const isoLike = raw.includes("T") ? raw : raw.replace(" ", "T");
-  return new Date(hasExplicitTimezone ? isoLike : `${isoLike}Z`);
+  const wallTime = isoLike.replace(/([zZ]|[+\-]\d{2}:\d{2})$/, "");
+  return new Date(wallTime);
 }
 
 function formatDate(value) {

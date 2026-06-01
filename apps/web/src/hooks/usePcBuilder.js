@@ -107,9 +107,17 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
         setBuild(resp?.data?.data || resp?.data || resp);
       } else {
         const variant = variants.find((v) => String(v.variant_id) === String(variantId));
-        const newComponents = { ...guestBuild.components, [componentType]: { product, variant } };
-        const newTotal = Object.values(newComponents).reduce((sum, item) => sum + Number(item.variant?.price || 0), 0);
-        persistGuestBuild(newComponents, newTotal);
+        setGuestBuild((current) => {
+          const currentComponents = current?.components || {};
+          const newComponents = { ...currentComponents, [componentType]: { product, variant } };
+          const newTotal = Object.values(newComponents).reduce((sum, item) => sum + Number(item.variant?.price || 0), 0);
+          const saved = saveGuestBuild(
+            { components: newComponents, totalPrice: newTotal },
+            buildName
+          );
+          setGuestBuildList(listGuestBuilds());
+          return saved;
+        });
       }
       setCompatibility(null);
       showSuccess(`Đã thêm ${componentType.toUpperCase()} thành công.`);
@@ -128,10 +136,17 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
         const resp = await removeBuildItem(build.id, componentType);
         setBuild(resp?.data?.data || resp?.data || resp);
       } else {
-        const newComponents = { ...guestBuild.components };
-        delete newComponents[componentType];
-        const newTotal = Object.values(newComponents).reduce((sum, item) => sum + Number(item.variant?.price || 0), 0);
-        persistGuestBuild(newComponents, newTotal);
+        setGuestBuild((current) => {
+          const currentComponents = { ...(current?.components || {}) };
+          delete currentComponents[componentType];
+          const newTotal = Object.values(currentComponents).reduce((sum, item) => sum + Number(item.variant?.price || 0), 0);
+          const saved = saveGuestBuild(
+            { components: currentComponents, totalPrice: newTotal },
+            buildName
+          );
+          setGuestBuildList(listGuestBuilds());
+          return saved;
+        });
       }
       setCompatibility(null);
       showSuccess(`Đã xóa ${componentType.toUpperCase()}.`);

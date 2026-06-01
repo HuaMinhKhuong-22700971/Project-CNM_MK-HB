@@ -203,6 +203,154 @@ function normalizeProductImageUrl(rawUrl, categoryName, productName) {
   return `/media/${url}`;
 }
 
+function normalizeSpecLabel(rawKey) {
+  const normalized = String(rawKey || "").trim().toLowerCase().replace(/_/g, " ");
+
+  switch (normalized) {
+    case "socket":
+      return "Socket";
+    case "stock cooler":
+    case "stockcooler":
+      return "Stock Cooler";
+    case "tdp":
+      return "TDP";
+    case "cores":
+      return "Cores";
+    case "threads":
+      return "Threads";
+    case "base clock":
+    case "baseclock":
+      return "Base Clock";
+    case "boost clock":
+    case "boostclock":
+      return "Boost Clock";
+    case "cache":
+      return "Cache";
+    case "ram":
+    case "memory support":
+    case "memory type":
+      return "RAM";
+    case "pcie":
+    case "pci express":
+      return "PCIe";
+    case "benchmark":
+      return "Benchmark";
+    case "fps":
+      return "FPS";
+    case "render":
+    case "rendering":
+      return "Render";
+    case "efficiency":
+      return "Efficiency";
+    default:
+      return String(rawKey || "").replace(/_/g, " ").trim();
+  }
+}
+
+function createSpecAccumulator() {
+  return new Map();
+}
+
+function addSpecValue(accumulator, rawKey, rawValue, options = {}) {
+  const value = String(rawValue || "").trim();
+  if (!rawKey || !value) {
+    return;
+  }
+
+  const normalizedKey = String(rawKey).trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!normalizedKey) {
+    return;
+  }
+
+  if (!accumulator.has(normalizedKey) || options.override) {
+    accumulator.set(normalizedKey, {
+      key: options.label || normalizeSpecLabel(rawKey),
+      value
+    });
+  }
+}
+
+function buildDerivedCpuSpecs(product) {
+  const combinedText = `${product?.product_name || ""} ${product?.description || ""}`.toLowerCase();
+  const derived = [];
+
+  const coresThreads = combinedText.match(/(\d+)\s*nhan\s*(\d+)\s*luong/);
+  if (coresThreads) {
+    derived.push(["Cores", coresThreads[1]]);
+    derived.push(["Threads", coresThreads[2]]);
+  }
+
+  const modelMap = [
+    {
+      match: "5700x",
+      specs: {
+        "Socket": "AM4",
+        "Cores": "8",
+        "Threads": "16",
+        "Base Clock": "3.4 GHz",
+        "Boost Clock": "4.6 GHz",
+        "Cache": "32MB L3",
+        "TDP": "65W"
+      }
+    },
+    {
+      match: "13600kf",
+      specs: {
+        "Socket": "LGA1700",
+        "Cores": "14",
+        "Threads": "20",
+        "Base Clock": "3.5 GHz",
+        "Boost Clock": "5.1 GHz",
+        "Cache": "24MB L3",
+        "TDP": "125W"
+      }
+    },
+    {
+      match: "8600g",
+      specs: {
+        "Socket": "AM5",
+        "Cores": "6",
+        "Threads": "12",
+        "Base Clock": "4.3 GHz",
+        "Boost Clock": "5.0 GHz",
+        "Cache": "16MB L3",
+        "TDP": "65W"
+      }
+    }
+  ];
+
+  for (const model of modelMap) {
+    if (combinedText.includes(model.match)) {
+      Object.entries(model.specs).forEach(([key, value]) => {
+        derived.push([key, value]);
+      });
+      break;
+    }
+  }
+
+  return derived;
+}
+
+function buildMergedSpecsFromItem(item) {
+  const accumulator = createSpecAccumulator();
+
+  for (const variant of Array.isArray(item?.variants) ? item.variants : []) {
+    for (const spec of Array.isArray(variant?.specs) ? variant.specs : []) {
+      addSpecValue(accumulator, spec.attribute_name, spec.attribute_value);
+    }
+  }
+
+  const categoryName = String(item?.category?.name || item?.category_name || "").toLowerCase();
+  const searchableText = `${item?.product_name || item?.name || ""} ${item?.description || ""}`;
+  if (categoryName === "cpu" || /cpu|processor|bo xu ly|bộ xử lý/i.test(searchableText)) {
+    for (const [key, value] of buildDerivedCpuSpecs(item)) {
+      addSpecValue(accumulator, key, value, { label: key, override: true });
+    }
+  }
+
+  return accumulator;
+}
+
 function mapVariantRow(row) {
   return {
     variant_id: row.variant_id,
@@ -468,16 +616,17 @@ async function getProductDetail(idOrSlug) {
     variants
   };
 
-  // Build top-level attributes array from the first variant's specs for frontend compatibility
-  const primaryVariant = variants[0];
-  if (primaryVariant && Array.isArray(primaryVariant.specs)) {
-    result.attributes = primaryVariant.specs.map(s => ({
-      key: s.attribute_name,
-      value: s.attribute_value
-    }));
-  } else {
-    result.attributes = [];
-  }
+  const mergedSpecs = buildMergedSpecsFromItem({ ...result, variants });
+  const specEntries = Array.from(mergedSpecs.values());
+  result.compareSpecs = specEntries.reduce((accumulator, spec) => {
+    accumulator[spec.key] = spec.value;
+    return accumulator;
+  }, {});
+  result.technicalSpecs = { ...result.compareSpecs };
+  result.attributes = specEntries.map((spec) => ({
+    key: spec.key,
+    value: spec.value
+  }));
 
   return result;
 }
@@ -494,23 +643,17 @@ async function compareProducts(rawIds) {
 
   const normalizedItems = items.map((item) => {
     const primaryVariant = Array.isArray(item.variants) && item.variants.length > 0 ? item.variants[0] : null;
-    const specs = Array.isArray(primaryVariant?.specs) ? primaryVariant.specs : [];
+    const mergedSpecs = item.compareSpecs || item.technicalSpecs || {};
 
-    specs.forEach((spec) => {
-      if (spec.attribute_name) {
-        attributeNames.add(spec.attribute_name);
-      }
+    Object.keys(mergedSpecs).forEach((specKey) => {
+      attributeNames.add(specKey);
     });
 
     return {
       ...item,
       primaryVariant,
-      compareSpecs: specs.reduce((accumulator, spec) => {
-        if (spec.attribute_name) {
-          accumulator[spec.attribute_name] = spec.attribute_value;
-        }
-        return accumulator;
-      }, {})
+      compareSpecs: mergedSpecs,
+      technicalSpecs: item.technicalSpecs || mergedSpecs
     };
   });
 

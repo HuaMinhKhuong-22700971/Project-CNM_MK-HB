@@ -186,7 +186,7 @@ export function listOrders() {
 export function updateOrderStatus(orderId: string | number, status: string) {
   return prisma.order.update({
     where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
-    data: { status }
+    data: { status, updated_at: new Date() }
   });
 }
 
@@ -198,7 +198,8 @@ export function completeDeliveredOrder(orderId: string | number, userId: string 
       status: "DELIVERED"
     },
     data: {
-      status: "COMPLETED"
+      status: "COMPLETED",
+      updated_at: new Date()
     }
   });
 }
@@ -208,7 +209,8 @@ export function markOrderPaid(orderId: string | number) {
     where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     data: {
       status: "PROCESSING",
-      payment_status: "PAID"
+      payment_status: "PAID",
+      updated_at: new Date()
     }
   });
 }
@@ -217,7 +219,8 @@ export function markOrderPaymentCancelled(orderId: string | number) {
   return prisma.order.update({
     where: { id: typeof orderId === "string" ? parseInt(orderId, 10) : orderId },
     data: {
-      payment_status: "PAYMENT_CANCELLED"
+      payment_status: "PAYMENT_CANCELLED",
+      updated_at: new Date()
     }
   });
 }

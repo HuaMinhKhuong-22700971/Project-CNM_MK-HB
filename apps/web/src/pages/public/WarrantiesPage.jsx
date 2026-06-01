@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import axios from "axios";
 
@@ -25,6 +25,15 @@ const WARRANTY_META = {
   COMPLETED: { label: "Hoàn tất", tone: "#047857", bg: "#ecfdf5", border: "#bbf7d0" }
 };
 
+const TIMELINE_STEP_LABELS = {
+  RECEIVED: "Đã tiếp nhận",
+  INSPECTING: "Đang kiểm tra",
+  REPAIRING: "Đang sửa",
+  WAITING_PARTS: "Chờ linh kiện",
+  REPLACEMENT: "Đổi mới",
+  COMPLETED: "Hoàn tất"
+};
+
 function getErrorMessage(error, fallbackMessage) {
   if (axios.isAxiosError(error)) {
     return error.response?.data?.message || fallbackMessage;
@@ -33,7 +42,7 @@ function getErrorMessage(error, fallbackMessage) {
 }
 
 function formatDate(value) {
-  return value ? new Date(value).toLocaleDateString("vi-VN") : "—";
+  return value ? new Date(value).toLocaleDateString("vi-VN") : "â€”";
 }
 
 function isWarrantyExpired(warranty) {
@@ -111,7 +120,7 @@ function Timeline({ timeline = [] }) {
         <article key={`${step.key}-${step.timestamp || "pending"}`} className={`warranty-step${step.done ? " warranty-step--done" : ""}`}>
           <div className="warranty-step__dot" />
           <div>
-            <strong>{step.label}</strong>
+            <strong>{TIMELINE_STEP_LABELS[String(step.key || "").toUpperCase()] || step.label || "Đang chờ xử lý"}</strong>
             <small>{step.timestamp ? new Date(step.timestamp).toLocaleString("vi-VN") : "Đang chờ xử lý"}</small>
             {step.note ? <p>{step.note}</p> : null}
           </div>
@@ -169,7 +178,7 @@ function ProductCard({ warranty, onRequest, onTrack, isSelected = false }) {
           <div>
             <h3>{warranty.item?.productName || "Sản phẩm"}</h3>
             <p>
-              Serial: <strong>{warranty.serialNumber || warranty.item?.sku || "—"}</strong>
+              Serial: <strong>{warranty.serialNumber || warranty.item?.sku || "â€”"}</strong>
             </p>
           </div>
           <StatusBadge status={currentStatus} />
@@ -181,15 +190,15 @@ function ProductCard({ warranty, onRequest, onTrack, isSelected = false }) {
             <strong>{warranty.remainingDays ?? 0} ngày</strong>
           </div>
           <div>
-            <span>Ngày hết hạn</span>
+              <span>Ngày hết hạn</span>
             <strong>{formatDate(warranty.endDate || warranty.expiresAt)}</strong>
           </div>
           <div>
-            <span>Đơn hàng</span>
-            <strong>{warranty.orderNumber || `#${warranty.orderId || "—"}`}</strong>
+              <span>Đơn hàng</span>
+            <strong>{warranty.orderNumber || `#${warranty.orderId || "â€”"}`}</strong>
           </div>
           <div>
-            <span>Mã bảo hành</span>
+              <span>Mã bảo hành</span>
             <strong>{warranty.warrantyCode}</strong>
           </div>
         </div>
@@ -616,11 +625,11 @@ export function WarrantiesPage() {
                         <div style={{ marginTop: 6, color: "#475569" }}>{selectedRequest.issueDescription}</div>
                       </div>
                       <AttachmentGroup
-                        title="Minh chứng khách hàng gửi"
+                      title="Minh chứng khách hàng gửi"
                         attachments={(selectedRequest.attachments || []).filter((attachment) => !isStaffAttachment(attachment))}
                       />
                       <AttachmentGroup
-                        title="Ảnh/video kỹ thuật xử lý"
+                      title="Ảnh/video kỹ thuật xử lý"
                         attachments={(selectedRequest.attachments || []).filter(isStaffAttachment)}
                       />
                     </div>
@@ -802,3 +811,4 @@ export function WarrantiesPage() {
     </div>
   );
 }
+

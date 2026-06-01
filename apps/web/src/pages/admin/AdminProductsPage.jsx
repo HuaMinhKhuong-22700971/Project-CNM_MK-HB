@@ -190,14 +190,17 @@ export function AdminProductsPage() {
 
       const response = await getProductDetail(productId);
       const detail = response?.data || response;
+      const detailName = detail.name || detail.product_name || "";
+      const detailCategoryId = detail.category?.id || detail.category_id || "";
+      const detailBrandId = detail.brand?.id || detail.brand_id || "";
 
       setEditingProductId(detail.id);
       setFormValues({
-        name: detail.name || "",
+        name: detailName,
         slug: detail.slug || "",
         description: detail.description || "",
-        categoryId: String(detail.category?.id || ""),
-        brandId: String(detail.brand?.id || "")
+        categoryId: String(detailCategoryId),
+        brandId: String(detailBrandId)
       });
       setFormErrors({});
     } catch (error) {

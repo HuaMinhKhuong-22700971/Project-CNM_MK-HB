@@ -4,13 +4,13 @@ const { getTableColumns } = require("../utils/schema-helpers");
 let auditLogTableAvailable = null;
 
 async function hasAuditLogTable() {
-  if (auditLogTableAvailable !== null) {
+  if (auditLogTableAvailable === true) {
     return auditLogTableAvailable;
   }
 
   const columns = await getTableColumns("audit_logs").catch(() => []);
-  auditLogTableAvailable = columns.length > 0;
-  return auditLogTableAvailable;
+  auditLogTableAvailable = columns.length > 0 ? true : null;
+  return auditLogTableAvailable === true;
 }
 
 async function recordAuditLog(entry = {}) {
@@ -71,14 +71,23 @@ async function getRecentAuditLogs(limit = 20) {
         created_at AS createdAt
       FROM audit_logs
       ORDER BY created_at DESC, id DESC
-      LIMIT ?
-    `,
-    [safeLimit]
+      LIMIT ${safeLimit}
+    `
   );
 
   return rows.map((row) => ({
     ...row,
-    metadata: row.metadataJson ? JSON.parse(row.metadataJson) : null
+    metadata: (() => {
+      if (!row.metadataJson) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(row.metadataJson);
+      } catch (_error) {
+        return null;
+      }
+    })()
   }));
 }
 

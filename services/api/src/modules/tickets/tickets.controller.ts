@@ -63,6 +63,23 @@ function canManageTicketRole(role?: string) {
   );
 }
 
+function isInternalMessage(message: { visibility?: string } | null | undefined) {
+  return String(message?.visibility || "PUBLIC").toUpperCase() === "INTERNAL";
+}
+
+function filterTicketForViewer(ticket: any, user: { userId: string | number; role?: string }) {
+  if (!ticket) return ticket;
+
+  if (canManageTicketRole(user.role)) {
+    return ticket;
+  }
+
+  return {
+    ...ticket,
+    messages: (ticket.messages || []).filter((message: any) => !isInternalMessage(message))
+  };
+}
+
 function canAccessTicket(ticket: { user_id?: number | null }, user: { userId: string | number; role?: string }) {
   return Number(ticket.user_id) === Number(user.userId) || canManageTicketRole(user.role);
 }
@@ -83,7 +100,7 @@ export const getTicketDetail = asyncHandler(async (req: Request, res: Response) 
 
   res.status(200).json({
     success: true,
-    data: ticket
+    data: filterTicketForViewer(ticket, req.user)
   });
 });
 
@@ -178,15 +195,17 @@ export const postTicketMessage = asyncHandler(async (req: Request, res: Response
   }
 
   const payload = addTicketMessageSchema.parse(req.body);
+  const visibility = canManageTicketRole(req.user.role) && payload.visibility === "INTERNAL" ? "INTERNAL" : "PUBLIC";
   const updated = await createTicketMessage({
     ticketId: req.params.id,
     userId: req.user.userId,
-    message: payload.message
+    message: payload.message,
+    visibility
   });
 
   res.status(201).json({
     success: true,
-    data: updated
+    data: filterTicketForViewer(updated, req.user)
   });
 });
 

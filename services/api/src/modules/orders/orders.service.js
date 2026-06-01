@@ -185,7 +185,8 @@ async function getSchemaConfig() {
       id: pickColumn(shipmentColumns, ["id"], null),
       orderId: pickColumn(shipmentColumns, ["order_id"], null),
       status: pickColumn(shipmentColumns, ["status"], null),
-      trackingCode: pickColumn(shipmentColumns, ["tracking_code"], null)
+      trackingCode: pickColumn(shipmentColumns, ["tracking_code"], null),
+      updatedAt: pickColumn(shipmentColumns, ["updated_at"], null)
     },
     users: {
       table: userColumns.length > 0 ? "users" : null,
@@ -492,7 +493,8 @@ async function getShipmentByOrderId(orderId) {
         s.${config.shipments.id} AS id,
         s.${config.shipments.orderId} AS orderId,
         ${config.shipments.status ? `s.${config.shipments.status}` : "NULL"} AS status,
-        ${config.shipments.trackingCode ? `s.${config.shipments.trackingCode}` : "NULL"} AS trackingCode
+        ${config.shipments.trackingCode ? `s.${config.shipments.trackingCode}` : "NULL"} AS trackingCode,
+        ${config.shipments.updatedAt ? `s.${config.shipments.updatedAt}` : "NULL"} AS updatedAt
       FROM ${config.shipments.table} s
       WHERE s.${config.shipments.orderId} = ?
       LIMIT 1
@@ -622,7 +624,8 @@ function formatShipment(row) {
     id: row.id,
     orderId: row.orderId,
     status: row.status || "CREATED",
-    trackingCode: row.trackingCode
+    trackingCode: row.trackingCode,
+    updatedAt: row.updatedAt
   };
 }
 
@@ -1048,6 +1051,10 @@ async function createMockShipment(actor, orderId, payload = {}) {
       updateParams.push(trackingCode);
     }
 
+    if (config.shipments.updatedAt) {
+      updateParts.push(`${config.shipments.updatedAt} = NOW()`);
+    }
+
     if (updateParts.length === 0) {
       throw createError("Shipments table does not support mock shipment updates", 500);
     }
@@ -1075,6 +1082,11 @@ async function createMockShipment(actor, orderId, payload = {}) {
       fields.push(config.shipments.trackingCode);
       values.push("?");
       params.push(trackingCode);
+    }
+
+    if (config.shipments.updatedAt) {
+      fields.push(config.shipments.updatedAt);
+      values.push("NOW()");
     }
 
     await query(

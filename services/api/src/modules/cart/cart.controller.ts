@@ -90,20 +90,53 @@ export const postCartItem = asyncHandler(async (req: Request, res: Response) => 
   }
 
   const payload = addCartItemSchema.parse(req.body);
+  const requestedProductId = payload.productId ? Number(payload.productId) : null;
+  const requestedVariantId = Number(payload.productVariantId || payload.variantId || 0);
 
-  // Find the product and its primary SKU
-  const product = await prisma.product.findUnique({
-    where: { id: Number(payload.productId) },
-    include: { ProductSku: { where: { status: "ACTIVE" }, take: 1 } }
-  });
+  let product: any = null;
+  let primarySku: any = null;
 
-  if (!product || !product.is_active) {
-    throw new AppError("Product not found or inactive", 404);
-  }
+  if (requestedVariantId > 0) {
+    primarySku = await prisma.productSku.findUnique({
+      where: { id: requestedVariantId },
+      include: {
+        Product: {
+          include: {
+            Category: {
+              select: { id: true, name: true }
+            }
+          }
+        }
+      }
+    });
 
-  const primarySku = product.ProductSku[0];
-  if (!primarySku) {
-    throw new AppError("Product has no active SKU", 400);
+    product = primarySku?.Product || null;
+
+    if (!primarySku || !product || !product.is_active) {
+      throw new AppError("Product variant not found or inactive", 404);
+    }
+
+    if (requestedProductId && Number(product.id) !== requestedProductId) {
+      throw new AppError("Product and variant do not match", 400);
+    }
+  } else {
+    if (!requestedProductId) {
+      throw new AppError("Product or variant is required", 400);
+    }
+
+    product = await prisma.product.findUnique({
+      where: { id: requestedProductId },
+      include: { ProductSku: { where: { status: "ACTIVE" }, take: 1 } }
+    });
+
+    if (!product || !product.is_active) {
+      throw new AppError("Product not found or inactive", 404);
+    }
+
+    primarySku = product.ProductSku[0];
+    if (!primarySku) {
+      throw new AppError("Product has no active SKU", 400);
+    }
   }
 
   const availableStock = Number(primarySku.stock || 0);

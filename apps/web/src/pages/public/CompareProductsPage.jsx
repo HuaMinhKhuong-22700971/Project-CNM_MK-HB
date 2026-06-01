@@ -152,7 +152,7 @@ function getSpecNumber(specs, aliases, index = 0) {
 function getCpuSpecValue(product, row) {
   const specs = normalizeSpecs(product);
   const direct = findSpecValue(specs, row.aliases);
-  if (direct) return direct;
+  if (direct && row.key !== "coresThreads" && row.key !== "baseBoost") return direct;
 
   if (row.key === "coresThreads") {
     const cores = getSpecNumber(specs, ["cores", "nhân", "so nhan", "cpu cores"]);

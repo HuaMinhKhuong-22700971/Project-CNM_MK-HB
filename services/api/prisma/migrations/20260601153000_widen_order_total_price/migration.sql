@@ -1,0 +1,2 @@
+ALTER TABLE orders
+  MODIFY COLUMN total_price DECIMAL(12, 2) NULL;
