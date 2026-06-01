@@ -19,8 +19,8 @@ export const TICKET_REPLY_TEMPLATES = [
   "Vấn đề đã được xử lý. Bạn kiểm tra lại giúp mình, nếu còn lỗi hãy phản hồi trong ticket này."
 ];
 
-const LEGACY_ATTACHMENT_MARKER_REGEX = /\[(?:Tệp đính kèm khách đã chọn|Khách hàng đã chọn tệp đính kèm|Tá»‡p Ä‘Ã­nh kÃ¨m khÃ¡ch Ä‘Ã£ chá»n|KhÃ¡ch hÃ ng Ä‘Ã£ chá»n tá»‡p Ä‘Ã­nh kÃ¨m):\s*([^\]]+)\]/gi;
-const UPLOADED_ATTACHMENT_MARKER_REGEX = /\[(?:ATTACHMENTS_JSON|Tệp đính kèm|Tá»‡p Ä‘Ã­nh kÃ¨m):\s*(\[[\s\S]*?\])\]/gi;
+const LEGACY_ATTACHMENT_MARKER_REGEX = /\[(?:Tệp đính kèm khách đã chọn|Khách hàng đã chọn tệp đính kèm|Tệp đính kèm khách|Khách hàng chọn tệp đính kèm):\s*([^\]]+)\]/gi;
+const UPLOADED_ATTACHMENT_MARKER_REGEX = /\[(?:ATTACHMENTS_JSON|Tệp đính kèm):\s*(\[[\s\S]*?\])\]/gi;
 
 const MESSAGE_TRANSLATIONS = {
   "Checking logs. Done. Issue resolved.": "Đã kiểm tra log hệ thống và xử lý xong vấn đề.",

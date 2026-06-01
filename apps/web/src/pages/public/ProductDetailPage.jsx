@@ -41,11 +41,11 @@ function getProductId(product) {
 }
 
 function getProductName(product) {
-  return product?.name || product?.product_name || product?.productName || "Sáº£n pháº©m PC Mall";
+  return product?.name || product?.product_name || product?.productName || "Sản phẩm PC Mall";
 }
 
 function getProductCategory(product) {
-  return product?.category?.name || product?.Category?.name || product?.category_name || "Linh kiá»‡n PC";
+  return product?.category?.name || product?.Category?.name || product?.category_name || "Linh kiện PC";
 }
 
 function getProductBrand(product) {
@@ -74,7 +74,7 @@ function getAttributeValue(attributes, keys) {
 }
 
 function parseDescription(description) {
-  if (!description) return "Sáº£n pháº©m chÃ­nh hÃ£ng táº¡i PC Mall, phÃ¹ há»£p nÃ¢ng cáº¥p hoáº·c build má»›i dÃ n PC hiá»‡u nÄƒng á»•n Ä‘á»‹nh.";
+  if (!description) return "Sản phẩm chính hãng tại PC Mall, phù hợp nâng cấp hoặc build mới dàn PC hiệu năng ổn định.";
   return String(description).replace(/<[^>]*>/g, "").trim();
 }
 
@@ -86,19 +86,19 @@ function isCompletePc(product) {
 
 function buildPcConfig(product, attributes) {
   const config = [
-    ["CPU", ["cpu", "processor", "vi xá»­ lÃ½"]],
-    ["GPU", ["gpu", "vga", "graphics", "card Ä‘á»“ há»a"]],
+    ["CPU", ["cpu", "processor", "vi xử lý"]],
+    ["GPU", ["gpu", "vga", "graphics", "card đồ họa"]],
     ["RAM", ["ram", "memory"]],
-    ["Mainboard", ["mainboard", "motherboard", "bo máº¡ch"]],
-    ["SSD", ["ssd", "storage", "á»• cá»©ng"]],
-    ["PSU", ["psu", "power", "nguá»“n"]],
-    ["Case", ["case", "vá»"]],
-    ["Cooling", ["cooling", "cooler", "táº£n nhiá»‡t"]]
+    ["Mainboard", ["mainboard", "motherboard", "bo mạch"]],
+    ["SSD", ["ssd", "storage", "ổ cứng"]],
+    ["PSU", ["psu", "power", "nguồn"]],
+    ["Case", ["case", "vỏ"]],
+    ["Cooling", ["cooling", "cooler", "tản nhiệt"]]
   ];
 
   return config.map(([label, keys]) => ({
     label,
-    value: getAttributeValue(attributes, keys) || (isCompletePc(product) ? "Äang cáº­p nháº­t theo cáº¥u hÃ¬nh láº¯p rÃ¡p" : "")
+    value: getAttributeValue(attributes, keys) || (isCompletePc(product) ? "Đang cập nhật theo cấu hình lắp ráp" : "")
   }));
 }
 
@@ -106,41 +106,41 @@ function getAudience(product, attributes) {
   const name = getProductName(product).toLowerCase();
   const category = getProductCategory(product).toLowerCase();
   if (category.includes("gpu") || name.includes("rtx") || name.includes("radeon")) {
-    return ["Gaming 1080p/1440p", "Streaming", "Render GPU", "AI cÆ¡ báº£n"];
+    return ["Gaming 1080p/1440p", "Streaming", "Render GPU", "AI cơ bản"];
   }
   if (category.includes("cpu") || name.includes("core") || name.includes("ryzen")) {
-    return ["Gaming", "Láº­p trÃ¬nh", "Äa nhiá»‡m", "Render video"];
+    return ["Gaming", "Lập trình", "Đa nhiệm", "Render video"];
   }
-  if (category.includes("ram")) return ["Äa nhiá»‡m", "Chrome nhiá»u tab", "Gaming", "Workstation"];
-  if (category.includes("ssd")) return ["TÄƒng tá»‘c Windows", "Game loading nhanh", "LÆ°u project", "NÃ¢ng cáº¥p laptop/PC"];
-  if (isCompletePc(product)) return ["NgÆ°á»i muá»‘n mua PC hoÃ n chá»‰nh", "Gaming", "LÃ m viá»‡c táº¡i nhÃ ", "SÃ¡ng táº¡o ná»™i dung"];
-  return ["Build PC má»›i", "NÃ¢ng cáº¥p linh kiá»‡n", "VÄƒn phÃ²ng", "Gaming phá»• thÃ´ng"];
+  if (category.includes("ram")) return ["Đa nhiệm", "Chrome nhiều tab", "Gaming", "Workstation"];
+  if (category.includes("ssd")) return ["Tăng tốc Windows", "Game loading nhanh", "Lưu project", "Nâng cấp laptop/PC"];
+  if (isCompletePc(product)) return ["Người muốn mua PC hoàn chỉnh", "Gaming", "Làm việc tại nhà", "Sáng tạo nội dung"];
+  return ["Build PC mới", "Nâng cấp linh kiện", "Văn phòng", "Gaming phổ thông"];
 }
 
 function getHighlights(product, attributes) {
   const brand = getProductBrand(product);
   const category = getProductCategory(product);
-  const warranty = getAttributeValue(attributes, ["warranty", "báº£o hÃ nh"]) || "Báº£o hÃ nh Ä‘iá»‡n tá»­ theo chÃ­nh sÃ¡ch PC Mall";
+  const warranty = getAttributeValue(attributes, ["warranty", "bảo hành"]) || "Bảo hành điện tử theo chính sách PC Mall";
   return [
-    `${brand} chÃ­nh hÃ£ng, nguá»“n gá»‘c rÃµ rÃ ng`,
-    `Tá»‘i Æ°u cho nhÃ³m ${category}`,
+    `${brand} chính hãng, nguồn gốc rõ ràng`,
+    `Tối ưu cho nhóm ${category}`,
     warranty,
-    "ÄÆ°á»£c PC Mall kiá»ƒm tra trÆ°á»›c khi giao",
-    "Há»— trá»£ tÆ° váº¥n tÆ°Æ¡ng thÃ­ch vá»›i cáº¥u hÃ¬nh hiá»‡n cÃ³"
+    "Được PC Mall kiểm tra trước khi giao",
+    "Hỗ trợ tư vấn tương thích với cấu hình hiện có"
   ];
 }
 
 function getSpecRows(product, attributes, skus) {
   const rows = (attributes || []).map((attr) => ({
-    key: attr.key || attr.name || attr.attribute_name || "ThÃ´ng sá»‘",
-    value: attr.value || attr.attribute_value || "Äang cáº­p nháº­t"
+    key: attr.key || attr.name || attr.attribute_name || "Thông số",
+    value: attr.value || attr.attribute_value || "Đang cập nhật"
   }));
 
   const baseRows = [
-    { key: "ThÆ°Æ¡ng hiá»‡u", value: getProductBrand(product) },
-    { key: "Danh má»¥c", value: getProductCategory(product) },
-    { key: "SKU chÃ­nh", value: skus[0]?.sku || product?.sku || "Äang cáº­p nháº­t" },
-    { key: "TÃ¬nh tráº¡ng", value: "CÃ²n hÃ ng" }
+    { key: "Thương hiệu", value: getProductBrand(product) },
+    { key: "Danh mục", value: getProductCategory(product) },
+    { key: "SKU chính", value: skus[0]?.sku || product?.sku || "Đang cập nhật" },
+    { key: "Tình trạng", value: "Còn hàng" }
   ];
 
   return [...baseRows, ...rows].filter((row, index, arr) => arr.findIndex((item) => item.key === row.key) === index);
@@ -259,7 +259,7 @@ export function ProductDetailPage() {
         const data = normalizeProductDetail(response);
         setProduct(data);
       } catch (error) {
-        setFetchError(getErrorMessage(error, "KhÃ´ng thá»ƒ táº£i chi tiáº¿t sáº£n pháº©m."));
+        setFetchError(getErrorMessage(error, "Không thể tải chi tiết sản phẩm."));
         setProduct(null);
       } finally {
         setLoading(false);
@@ -340,7 +340,7 @@ export function ProductDetailPage() {
     return (
       <div className="product-detail-page">
         <style>{productDetailStyles}</style>
-        <section className="product-loading">Äang táº£i chi tiáº¿t sáº£n pháº©m...</section>
+        <section className="product-loading">Đang tải chi tiết sản phẩm...</section>
       </div>
     );
   }
@@ -350,9 +350,9 @@ export function ProductDetailPage() {
       <div className="product-detail-page">
         <style>{productDetailStyles}</style>
         <section className="product-empty">
-          <h1>KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m</h1>
-          <p>{fetchError || "Sáº£n pháº©m nÃ y cÃ³ thá»ƒ Ä‘Ã£ ngá»«ng kinh doanh hoáº·c Ä‘Æ°á»ng dáº«n chÆ°a chÃ­nh xÃ¡c."}</p>
-          <Link to={routeConfig.public.catalog}>Quay láº¡i danh sÃ¡ch</Link>
+          <h1>Không tìm thấy sản phẩm</h1>
+          <p>{fetchError || "Sản phẩm này có thể đã ngừng kinh doanh hoặc đường dẫn chưa chính xác."}</p>
+          <Link to={routeConfig.public.catalog}>Quay lại danh sách</Link>
         </section>
       </div>
     );
@@ -366,14 +366,14 @@ export function ProductDetailPage() {
       {successMessage ? (
         <div className="product-alert product-alert--success">
           <span>{successMessage}</span>
-          <Link to={routeConfig.public.cart}>Xem giá» hÃ ng</Link>
+          <Link to={routeConfig.public.cart}>Xem giỏ hàng</Link>
         </div>
       ) : null}
 
       <nav className="product-breadcrumb">
-        <Link to={routeConfig.public.root}>Trang chá»§</Link>
+        <Link to={routeConfig.public.root}>Trang chủ</Link>
         <span>/</span>
-        <Link to={routeConfig.public.catalog}>Linh kiá»‡n PC</Link>
+        <Link to={routeConfig.public.catalog}>Linh kiện PC</Link>
         <span>/</span>
         <strong>{categoryName}</strong>
       </nav>
@@ -384,25 +384,25 @@ export function ProductDetailPage() {
             <img src={displayImage} alt={productName} onError={(event) => { event.currentTarget.src = resolveProductImage({}, { label: categoryName }); }} />
           </div>
           <div className="product-badges">
-            <span>CÃ²n hÃ ng</span>
-            <span>ChÃ­nh hÃ£ng 100%</span>
-            <span>Báº£o hÃ nh Ä‘iá»‡n tá»­</span>
+            <span>Còn hàng</span>
+            <span>Chính hãng 100%</span>
+            <span>Bảo hành điện tử</span>
             <span>Giao nhanh</span>
-            <span>Build tá»‘i Æ°u</span>
+            <span>Build tối ưu</span>
           </div>
         </div>
 
         <div className="product-info">
-          <span className="product-eyebrow">{brandName} Â· {categoryName}</span>
+          <span className="product-eyebrow">{brandName} · {categoryName}</span>
           <h1>{productName}</h1>
           <p>{parseDescription(product?.description)}</p>
           <div className="product-rating">
-            <strong>â˜…â˜…â˜…â˜…â˜…</strong>
-            <span>4.8/5 Â· 128 Ä‘Ã¡nh giÃ¡ Â· ÄÃ£ kiá»ƒm tra tÆ°Æ¡ng thÃ­ch PC Mall</span>
+            <strong>★★★★★</strong>
+            <span>4.8/5 · 128 đánh giá · Đã kiểm tra tương thích PC Mall</span>
           </div>
 
           <div className="product-overview">
-            <h2>Tá»•ng quan sáº£n pháº©m ná»•i báº­t</h2>
+            <h2>Tổng quan sản phẩm nổi bật</h2>
             <div>
               {highlights.slice(0, 4).map((item) => (
                 <span key={item}>{item}</span>
@@ -412,43 +412,43 @@ export function ProductDetailPage() {
         </div>
 
         <aside className="buy-sidebar">
-          <span className="buy-sidebar__label">GiÃ¡ bÃ¡n</span>
-          <strong className="buy-sidebar__price">{formatCurrency(heroPrice)}Ä‘</strong>
-          <div className="stock-pill">CÃ²n hÃ ng Â· {availableStock} sáº£n pháº©m</div>
+          <span className="buy-sidebar__label">Giá bán</span>
+          <strong className="buy-sidebar__price">{formatCurrency(heroPrice)}đ</strong>
+          <div className="stock-pill">Còn hàng · {availableStock} sản phẩm</div>
 
           <label className="sku-select">
-            <span>PhiÃªn báº£n / SKU</span>
+            <span>Phiên bản / SKU</span>
             <select value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)}>
               {skus.map((sku) => (
                 <option key={sku.id || sku.sku} value={sku.id || ""}>
-                  {sku.sku || "SKU máº·c Ä‘á»‹nh"} Â· {formatCurrency(sku.price)}Ä‘ Â· CÃ²n {sku.stock}
+                  {sku.sku || "SKU mặc định"} · {formatCurrency(sku.price)}đ · Còn {sku.stock}
                 </option>
               ))}
             </select>
           </label>
 
           <div className="quantity-row">
-            <span>Sá»‘ lÆ°á»£ng</span>
+            <span>Số lượng</span>
             <div>
-              <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))}>âˆ’</button>
+              <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))}>−</button>
               <input value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(availableStock, Number(event.target.value || 1))))} />
               <button type="button" onClick={() => setQuantity((current) => Math.min(availableStock, current + 1))}>+</button>
             </div>
           </div>
 
           <button className="buy-action buy-action--primary" type="button" disabled={submitting} onClick={() => addCurrentToCart()}>
-            {submitting ? "Äang thÃªm..." : "ThÃªm vÃ o giá»"}
+            {submitting ? "Đang thêm..." : "Thêm vào giỏ"}
           </button>
           <button className="buy-action buy-action--buy" type="button" disabled={submitting} onClick={() => addCurrentToCart({ goCheckout: true })}>
             Mua ngay
           </button>
-          <button className="buy-action" type="button" onClick={handlePcBuilder}>ÄÆ°a vÃ o PC Builder</button>
-          <button className="buy-action" type="button" onClick={handleCompareProduct}>So sÃ¡nh sáº£n pháº©m nÃ y</button>
+          <button className="buy-action" type="button" onClick={handlePcBuilder}>Đưa vào PC Builder</button>
+          <button className="buy-action" type="button" onClick={handleCompareProduct}>So sánh sản phẩm này</button>
 
           <div className="ai-support-box">
             <strong>AI Advisor</strong>
-            <p>KhÃ´ng cháº¯c sáº£n pháº©m cÃ³ há»£p cáº¥u hÃ¬nh cá»§a báº¡n? Há»i AI Ä‘á»ƒ kiá»ƒm tra tÆ°Æ¡ng thÃ­ch trÆ°á»›c khi mua.</p>
-            <Link to={routeConfig.public.aiChat}>Há»i AI ngay</Link>
+            <p>Không chắc sản phẩm có hợp cấu hình của bạn? Hỏi AI để kiểm tra tương thích trước khi mua.</p>
+            <Link to={routeConfig.public.aiChat}>Hỏi AI ngay</Link>
           </div>
         </aside>
       </section>
@@ -456,16 +456,16 @@ export function ProductDetailPage() {
       <section className="detail-layout">
         <div className="detail-main">
           <section className="detail-section">
-            <h2>MÃ´ táº£ chi tiáº¿t</h2>
+            <h2>Mô tả chi tiết</h2>
             <p>{parseDescription(product?.description)}</p>
             <p>
-              PC Mall khuyáº¿n nghá»‹ sáº£n pháº©m nÃ y cho khÃ¡ch hÃ ng cáº§n hiá»‡u nÄƒng á»•n Ä‘á»‹nh, linh kiá»‡n chÃ­nh hÃ£ng vÃ  chÃ­nh sÃ¡ch háº­u mÃ£i rÃµ rÃ ng.
-              Sáº£n pháº©m Ä‘Æ°á»£c kiá»ƒm tra tÃ¬nh tráº¡ng trÆ°á»›c khi giao vÃ  cÃ³ thá»ƒ káº¿t há»£p vá»›i AI Advisor hoáº·c PC Builder Ä‘á»ƒ tá»‘i Æ°u toÃ n bá»™ cáº¥u hÃ¬nh.
+              PC Mall khuyến nghị sản phẩm này cho khách hàng cần hiệu năng ổn định, linh kiện chính hãng và chính sách hậu mãi rõ ràng.
+              Sản phẩm được kiểm tra tình trạng trước khi giao và có thể kết hợp với AI Advisor hoặc PC Builder để tối ưu toàn bộ cấu hình.
             </p>
           </section>
 
           <section className="detail-section">
-            <h2>ThÃ´ng sá»‘ ká»¹ thuáº­t Ä‘áº§y Ä‘á»§</h2>
+            <h2>Thông số kỹ thuật đầy đủ</h2>
             <div className="spec-table">
               {specRows.map((row) => (
                 <div key={`${row.key}-${row.value}`}>
@@ -478,12 +478,12 @@ export function ProductDetailPage() {
 
           {completePc ? (
             <section className="detail-section">
-              <h2>Linh kiá»‡n bÃªn trong bá»™ PC</h2>
+              <h2>Linh kiện bên trong bộ PC</h2>
               <div className="pc-config-grid">
                 {pcConfig.map((item) => (
                   <div key={item.label}>
                     <span>{item.label}</span>
-                    <strong>{item.value || "Äang cáº­p nháº­t"}</strong>
+                    <strong>{item.value || "Đang cập nhật"}</strong>
                   </div>
                 ))}
               </div>
@@ -491,7 +491,7 @@ export function ProductDetailPage() {
           ) : null}
 
           <section className="detail-section">
-            <h2>PhÃ¹ há»£p cho ai</h2>
+            <h2>Phù hợp cho ai</h2>
             <div className="audience-grid">
               {audience.map((item) => (
                 <div key={item}>{item}</div>
@@ -500,34 +500,34 @@ export function ProductDetailPage() {
           </section>
 
           <section className="detail-section">
-            <h2>Æ¯u Ä‘iá»ƒm ná»•i báº­t</h2>
+            <h2>Ưu điểm nổi bật</h2>
             <div className="highlight-list">
               {highlights.map((item) => (
-                <div key={item}>âœ“ {item}</div>
+                <div key={item}>✓ {item}</div>
               ))}
             </div>
           </section>
 
           <section className="policy-grid">
             <div className="policy-card">
-              <h2>ChÃ­nh sÃ¡ch báº£o hÃ nh</h2>
-              <p>Báº£o hÃ nh Ä‘iá»‡n tá»­ theo serial/Ä‘Æ¡n hÃ ng, há»— trá»£ tra cá»©u online vÃ  tiáº¿p nháº­n yÃªu cáº§u báº£o hÃ nh ngay trÃªn PC Mall.</p>
-              <Link to={routeConfig.public.warranties}>Tra cá»©u báº£o hÃ nh</Link>
+              <h2>Chính sách bảo hành</h2>
+              <p>Bảo hành điện tử theo serial/đơn hàng, hỗ trợ tra cứu online và tiếp nhận yêu cầu bảo hành ngay trên PC Mall.</p>
+              <Link to={routeConfig.public.warranties}>Tra cứu bảo hành</Link>
             </div>
             <div className="policy-card">
-              <h2>ChÃ­nh sÃ¡ch giao hÃ ng</h2>
-              <p>Giao nhanh ná»™i thÃ nh, Ä‘Ã³ng gÃ³i chá»‘ng sá»‘c, cáº­p nháº­t tráº¡ng thÃ¡i Ä‘Æ¡n hÃ ng vÃ  mÃ£ váº­n Ä‘Æ¡n trong tÃ i khoáº£n khÃ¡ch hÃ ng.</p>
-              <Link to={routeConfig.public.orders}>Theo dÃµi Ä‘Æ¡n hÃ ng</Link>
+              <h2>Chính sách giao hàng</h2>
+              <p>Giao nhanh nội thành, đóng gói chống sốc, cập nhật trạng thái đơn hàng và mã vận đơn trong tài khoản khách hàng.</p>
+              <Link to={routeConfig.public.orders}>Theo dõi đơn hàng</Link>
             </div>
           </section>
 
           <section className="detail-section">
-            <h2>ÄÃ¡nh giÃ¡ khÃ¡ch hÃ ng</h2>
+            <h2>Đánh giá khách hàng</h2>
             <div className="review-grid">
-              {["Hiá»‡u nÄƒng Ä‘Ãºng mÃ´ táº£, Ä‘Ã³ng gÃ³i cháº¯c cháº¯n.", "TÆ° váº¥n cáº¥u hÃ¬nh ráº¥t nhanh, mua vá» láº¯p cháº¡y á»•n.", "Giao hÃ ng nhanh, báº£o hÃ nh Ä‘iá»‡n tá»­ dá»… tra cá»©u."].map((review, index) => (
+              {["Hiệu năng đúng mô tả, đóng gói chắc chắn.", "Tư vấn cấu hình rất nhanh, mua về lắp chạy ổn.", "Giao hàng nhanh, bảo hành điện tử dễ tra cứu."].map((review, index) => (
                 <div key={review}>
-                  <strong>{["Minh K.", "Anh T.", "HoÃ ng P."][index]}</strong>
-                  <span>â˜…â˜…â˜…â˜…â˜…</span>
+                  <strong>{["Minh K.", "Anh T.", "Hoàng P."][index]}</strong>
+                  <span>★★★★★</span>
                   <p>{review}</p>
                 </div>
               ))}
@@ -535,7 +535,7 @@ export function ProductDetailPage() {
           </section>
 
           <section className="detail-section">
-            <h2>Sáº£n pháº©m tÆ°Æ¡ng tá»±</h2>
+            <h2>Sản phẩm tương tự</h2>
             <div className="similar-grid">
               {similarProducts.length > 0 ? similarProducts.map((item) => (
                 <Link key={getProductId(item)} to={routeConfig.public.productDetail.replace(":idOrSlug", String(item.slug || getProductId(item)))}>
@@ -548,10 +548,10 @@ export function ProductDetailPage() {
                     }}
                   />
                   <strong>{getProductName(item)}</strong>
-                  <span>{formatCurrency(getSimilarPrice(item))}Ä‘</span>
+                  <span>{formatCurrency(getSimilarPrice(item))}đ</span>
                 </Link>
               )) : (
-                <p className="muted-text">ChÆ°a cÃ³ sáº£n pháº©m tÆ°Æ¡ng tá»± trong danh má»¥c nÃ y.</p>
+                <p className="muted-text">Chưa có sản phẩm tương tự trong danh mục này.</p>
               )}
             </div>
           </section>
