@@ -14,8 +14,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "seed": "node prisma/seed-production.js",
-    "seed:production": "node prisma/seed-production.js",
+    "seed": "node prisma/seed-production.js && node prisma/seed-full.js",
+    "seed:production": "node prisma/seed-production.js && node prisma/seed-full.js",
     "seed:legacy": "node prisma/seed.js",
     "seed:guest-demo": "node prisma/seed-guest-demo.js",
     "stock:ensure": "node scripts/ensure-product-stock.js"
@@ -31,10 +31,16 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.14.0",
+    "pg": "^8.13.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.11",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "@types/supertest": "^6.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",

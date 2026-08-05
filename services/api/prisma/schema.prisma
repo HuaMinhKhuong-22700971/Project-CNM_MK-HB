@@ -20,7 +20,7 @@ model Address {
   created_at   DateTime @default(now()) @db.Timestamp(0)
   User        User    @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_addresses_user")
 
-  @@index([user_id], map: "fk_addresses_user")
+  @@index([user_id], map: "user_id")
   @@map("addresses")
 }
 
@@ -28,7 +28,7 @@ model AiChat {
   id          Int           @id @default(autoincrement())
   user_id     Int?
   created_at  DateTime      @default(now()) @db.Timestamp(0)
-  User       User?        @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ai_chats_ibfk_1")
+  User       User?        @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_ai_chats_user")
   AiMessage AiMessage[]
 
   @@index([user_id], map: "user_id")
@@ -37,7 +37,7 @@ model AiChat {
 
 model ChatSession {
   id            Int          @id @default(autoincrement())
-  session_id    String       @unique @db.VarChar(255)
+  session_id    String       @unique(map: "session_id") @db.VarChar(255)
   status        String       @default("waiting") @db.VarChar(50)
   customer_name String       @default("Khách hàng") @db.VarChar(255)
   staff_name    String?      @db.VarChar(255)
@@ -71,7 +71,7 @@ model AiMessage {
   sender     String?   @db.VarChar(20)
   message    String?   @db.Text
   created_at DateTime  @default(now()) @db.Timestamp(0)
-  AiChat   AiChat? @relation(fields: [chat_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "ai_messages_ibfk_1")
+  AiChat   AiChat? @relation(fields: [chat_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_ai_messages_chat")
 
   @@index([chat_id], map: "chat_id")
   @@map("ai_messages")
@@ -81,7 +81,7 @@ model AttributeValue {
   id                                                                          Int                   @id @default(autoincrement())
   attribute_id                                                                Int?
   value                                                                       String?               @db.VarChar(100)
-  Attribute                                                                  Attribute?           @relation(fields: [attribute_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "attribute_values_ibfk_1")
+  Attribute                                                                  Attribute?           @relation(fields: [attribute_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_attribute_values_attribute")
   compatibility_rules_compatibility_rules_attribute_value_1Toattribute_values CompatibilityRule[] @relation("compatibility_rules_attribute_value_1Toattribute_values")
   compatibility_rules_compatibility_rules_attribute_value_2Toattribute_values CompatibilityRule[] @relation("compatibility_rules_attribute_value_2Toattribute_values")
   SkuAttribute                                                              SkuAttribute[]
@@ -120,8 +120,8 @@ model CartItem {
   Cart              Cart        @relation(fields: [cart_id], references: [id], onUpdate: Restrict, map: "fk_cart_items_cart")
   ProductSku       ProductSku @relation(fields: [product_variant_id], references: [id], onUpdate: Restrict, map: "fk_cart_items_sku")
 
-  @@index([cart_id], map: "fk_cart_items_cart")
-  @@index([product_variant_id], map: "fk_cart_items_sku")
+  @@index([cart_id], map: "cart_id")
+  @@index([product_variant_id], map: "product_variant_id")
   @@map("cart_items")
 }
 
@@ -133,7 +133,7 @@ model Cart {
   CartItem CartItem[]
   User      User        @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_carts_user")
 
-  @@index([user_id], map: "fk_carts_user")
+  @@index([user_id], map: "user_id")
   @@map("carts")
 }
 
@@ -159,8 +159,8 @@ model CompatibilityRule {
   is_active                                                                Boolean?          @default(true)
   created_at                                                               DateTime?         @default(now()) @db.Timestamp(0)
   updated_at                                                               DateTime?         @default(now()) @db.Timestamp(0)
-  attribute_values_compatibility_rules_attribute_value_1Toattribute_values AttributeValue? @relation("compatibility_rules_attribute_value_1Toattribute_values", fields: [attribute_value_1], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "compatibility_rules_ibfk_1")
-  attribute_values_compatibility_rules_attribute_value_2Toattribute_values AttributeValue? @relation("compatibility_rules_attribute_value_2Toattribute_values", fields: [attribute_value_2], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "compatibility_rules_ibfk_2")
+  attribute_values_compatibility_rules_attribute_value_1Toattribute_values AttributeValue? @relation("compatibility_rules_attribute_value_1Toattribute_values", fields: [attribute_value_1], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_compatibility_rules_attribute_value_1")
+  attribute_values_compatibility_rules_attribute_value_2Toattribute_values AttributeValue? @relation("compatibility_rules_attribute_value_2Toattribute_values", fields: [attribute_value_2], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_compatibility_rules_attribute_value_2")
 
   @@index([attribute_value_1], map: "attribute_value_1")
   @@index([attribute_value_2], map: "attribute_value_2")
@@ -183,8 +183,8 @@ model OrderItem {
   ProductSku       ProductSku @relation(fields: [product_variant_id], references: [id], onUpdate: Restrict, map: "fk_order_items_sku")
   WarrantyItem         WarrantyItem?
 
-  @@index([order_id], map: "fk_order_items_order")
-  @@index([product_variant_id], map: "fk_order_items_sku")
+  @@index([order_id], map: "order_id")
+  @@index([product_variant_id], map: "product_variant_id")
   @@map("order_items")
 }
 
@@ -201,6 +201,7 @@ model Order {
   shipping_address String?       @db.Text
   payment_method   String?       @default("COD") @db.VarChar(50)
   payment_status   String?       @default("UNPAID") @db.VarChar(50)
+  payment_proof    String?       @db.VarChar(255)
   note             String?       @db.Text
   updated_at       DateTime?     @default(now()) @db.Timestamp(0)
   OrderItem      OrderItem[]
@@ -214,8 +215,8 @@ model PcBuildItem {
   build_id       Int?
   sku_id         Int?
   component_type String?       @db.VarChar(50)
-  PcBuild      PcBuild?    @relation(fields: [build_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "pc_build_items_ibfk_1")
-  ProductSku   ProductSku? @relation(fields: [sku_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "pc_build_items_ibfk_2")
+  PcBuild      PcBuild?    @relation(fields: [build_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_pc_build_items_build")
+  ProductSku   ProductSku? @relation(fields: [sku_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_pc_build_items_sku")
 
   @@index([build_id], map: "build_id")
   @@index([sku_id], map: "sku_id")
@@ -232,7 +233,7 @@ model PcBuild {
   is_saved       Boolean?         @default(false)
   total_price    Decimal?         @default(0.00) @db.Decimal(12, 2)
   PcBuildItem PcBuildItem[]
-  User          User?           @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "pc_builds_ibfk_1")
+  User          User?           @relation(fields: [user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_pc_builds_user")
 
   @@index([user_id], map: "user_id")
   @@map("pc_builds")
@@ -252,7 +253,7 @@ model ProductSku {
   CartItem     CartItem[]
   OrderItem    OrderItem[]
   PcBuildItem PcBuildItem[]
-  Product       Product?        @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "product_skus_ibfk_1")
+  Product       Product?        @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_product_skus_product")
   SkuAttribute SkuAttribute[]
 
   @@index([product_id], map: "product_id")
@@ -272,7 +273,7 @@ model ProductVariant {
   updated_at     DateTime? @default(now()) @db.Timestamp(0)
   Product       Product  @relation(fields: [product_id], references: [id], onUpdate: Restrict, map: "fk_product_variants_product")
 
-  @@index([product_id], map: "fk_product_variants_product")
+  @@index([product_id], map: "product_id")
   @@map("product_variants")
 }
 
@@ -291,10 +292,10 @@ model Product {
   ProductSku     ProductSku[]
   ProductVariant ProductVariant[]
   Brand           Brand?            @relation(fields: [brand_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_products_brand")
-  Category       Category?        @relation(fields: [category_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "products_ibfk_1")
+  Category       Category?        @relation(fields: [category_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_products_category")
 
+  @@index([brand_id], map: "brand_id")
   @@index([category_id], map: "category_id")
-  @@index([brand_id], map: "fk_products_brand")
   @@map("products")
 }
 
@@ -310,7 +311,7 @@ model Shipment {
   order_id      Int?
   status        String? @db.VarChar(50)
   tracking_code String? @db.VarChar(100)
-  Order        Order? @relation(fields: [order_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "shipments_ibfk_1")
+  Order        Order? @relation(fields: [order_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_shipments_order")
 
   @@index([order_id], map: "order_id")
   @@map("shipments")
@@ -324,7 +325,7 @@ model AuditLog {
   entity_type String   @db.VarChar(100)
   entity_id   String?  @db.VarChar(100)
   description String?  @db.Text
-  metadata_json String? @db.LongText
+  metadata_json String? @db.Text
   created_at  DateTime @default(now()) @db.Timestamp(0)
 
   @@index([created_at], map: "idx_audit_logs_created_at")
@@ -337,8 +338,8 @@ model SkuAttribute {
   id                 Int               @id @default(autoincrement())
   sku_id             Int?
   attribute_value_id Int?
-  ProductSku       ProductSku?     @relation(fields: [sku_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "sku_attributes_ibfk_1")
-  AttributeValue   AttributeValue? @relation(fields: [attribute_value_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "sku_attributes_ibfk_2")
+  ProductSku       ProductSku?     @relation(fields: [sku_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sku_attributes_sku")
+  AttributeValue   AttributeValue? @relation(fields: [attribute_value_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sku_attributes_attribute_value")
 
   @@index([attribute_value_id], map: "attribute_value_id")
   @@index([sku_id], map: "sku_id")
@@ -356,8 +357,8 @@ model TicketMessage {
   Ticket    Ticket  @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_ticket_messages_ticket")
   User      User    @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_ticket_messages_user")
 
-  @@index([user_id], map: "fk_ticket_messages_user")
   @@index([ticket_id, created_at], map: "idx_ticket_messages_ticket_created")
+  @@index([user_id], map: "fk_ticket_messages_user")
   @@map("ticket_messages")
 }
 
@@ -372,7 +373,7 @@ model Ticket {
   created_at                          DateTime          @default(now()) @db.Timestamp(0)
   updated_at                          DateTime          @default(now()) @db.Timestamp(0)
   TicketMessage                     TicketMessage[]
-  users_tickets_assigned_to_idTousers User?            @relation("tickets_assigned_to_idTousers", fields: [assigned_to_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_tickets_assignee")
+  users_tickets_assigned_to_idTousers User?            @relation("tickets_assigned_to_idTousers", fields: [assigned_to_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_tickets_assigned_user")
   users_tickets_user_idTousers        User             @relation("tickets_user_idTousers", fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_tickets_user")
 
   @@index([assigned_to_id, status], map: "idx_tickets_assigned_status")
@@ -397,7 +398,7 @@ model User {
   TicketMessage                       TicketMessage[]
   tickets_tickets_assigned_to_idTousers Ticket[]         @relation("tickets_assigned_to_idTousers")
   tickets_tickets_user_idTousers        Ticket[]         @relation("tickets_user_idTousers")
-  Role                                 Role?            @relation(fields: [role_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
+  Role                                 Role?            @relation(fields: [role_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_users_role")
   WarrantyItem                            WarrantyItem[]
 
   @@index([role_id], map: "role_id")
@@ -410,7 +411,7 @@ model WarrantyItem {
   order_id      Int?
   order_item_id Int?         @unique(map: "uq_warranty_order_item")
   sku_id        Int?
-  warranty_code String       @unique(map: "uq_warranty_code") @db.VarChar(100)
+  warranty_code String       @unique(map: "warranty_code") @db.VarChar(100)
   status        String       @default("ACTIVE") @db.VarChar(50)
   note          String?      @db.VarChar(255)
   activated_at  DateTime?    @db.DateTime(0)
@@ -420,7 +421,7 @@ model WarrantyItem {
   OrderItem   OrderItem? @relation(fields: [order_item_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_warranties_order_item")
   User         User        @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_warranties_user")
 
-  @@index([order_id], map: "fk_warranties_order")
-  @@index([user_id], map: "fk_warranties_user")
+  @@index([order_id], map: "order_id")
+  @@index([user_id], map: "user_id")
   @@map("warranties")
 }

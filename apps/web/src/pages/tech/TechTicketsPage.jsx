@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -379,6 +379,7 @@ export function TechTicketsPage() {
       return haystack.includes(normalizedKeyword);
     });
 
+
     list = [...list].sort((a, b) => {
       if (sortBy === "priority") {
         return getPriorityWeight(b.priority) - getPriorityWeight(a.priority) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -394,10 +395,8 @@ export function TechTicketsPage() {
 
   useEffect(() => {
     if (!visibleTickets.length) {
-      if (keyword.trim()) {
-        setSelectedTicketId(null);
-        setSelectedTicket(null);
-      }
+      setSelectedTicketId(null);
+      setSelectedTicket(null);
       return;
     }
     if (selectedTicketId && visibleTickets.some((ticket) => ticket.id === selectedTicketId)) return;
@@ -407,6 +406,8 @@ export function TechTicketsPage() {
   useEffect(() => {
     if (selectedTicketId) {
       window.localStorage.setItem(STORAGE_SELECTED_TICKET, String(selectedTicketId));
+    } else {
+      window.localStorage.removeItem(STORAGE_SELECTED_TICKET);
     }
   }, [selectedTicketId]);
 
@@ -426,7 +427,13 @@ export function TechTicketsPage() {
         const response = await getTicketDetail(selectedTicketId);
         setSelectedTicket(getEnvelopeData(response, null));
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết ticket."));
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          window.localStorage.removeItem(STORAGE_SELECTED_TICKET);
+          setSelectedTicketId(null);
+          setSelectedTicket(null);
+        } else {
+          setErrorMessage(getErrorMessage(error, "Không thể tải chi tiết ticket."));
+        }
       } finally {
         setDetailLoading(false);
       }

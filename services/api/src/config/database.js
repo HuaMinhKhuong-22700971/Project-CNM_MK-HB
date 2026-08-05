@@ -1,16 +1,15 @@
-﻿const mysql = require("mysql2/promise");
-
+const mysql = require("mysql2/promise");
 const { env } = require("./env");
 
 let pool;
 
 function createPool() {
   const nextPool = mysql.createPool({
-    host: env.dbHost,
-    port: env.dbPort,
-    user: env.dbUser,
-    password: env.dbPassword,
-    database: env.dbName,
+    host: env.dbHost || "127.0.0.1",
+    port: Number(env.dbPort || 3306),
+    user: env.dbUser || "root",
+    password: env.dbPassword ?? "",
+    database: env.dbName || "cnm_ecommerce",
     charset: "utf8mb4",
     waitForConnections: true,
     connectionLimit: 10,

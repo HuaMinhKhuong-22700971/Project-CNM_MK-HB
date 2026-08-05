@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "CNM Ecommerce DB",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "cnm_mk_hb",
+      "Username": "postgres",
+      "SSLMode": "prefer"
+    }
+  }
+}

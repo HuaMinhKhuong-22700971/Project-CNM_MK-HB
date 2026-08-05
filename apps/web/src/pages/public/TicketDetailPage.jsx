@@ -803,13 +803,16 @@ const ticketDetailStyles = `
   font-size: 12px;
   font-weight: 900;
   text-decoration: none;
+  padding: 4px;
+  box-sizing: border-box;
 }
 
 .ticket-attachment-card__preview img,
 .ticket-attachment-card__preview video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  display: block;
 }
 
 .ticket-attachment-card strong {

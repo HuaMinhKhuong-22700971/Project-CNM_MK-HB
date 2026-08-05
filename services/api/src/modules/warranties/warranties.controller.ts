@@ -1,4 +1,4 @@
-﻿import { Request, Response } from "express";
+import { Request, Response } from "express";
 
 import { prisma } from "../../config/prisma";
 import { AppError } from "../../errors/app-error";
@@ -82,23 +82,54 @@ function isWarrantyRequestable(warranty: any) {
   return status === "ACTIVE" && (!expiresAt || expiresAt.getTime() >= Date.now());
 }
 
+function sanitizeBigInts(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === "bigint") return Number(obj);
+  if (Array.isArray(obj)) return obj.map(sanitizeBigInts);
+  if (typeof obj === "object" && !(obj instanceof Date)) {
+    const res: any = {};
+    for (const key of Object.keys(obj)) {
+      res[key] = sanitizeBigInts(obj[key]);
+    }
+    return res;
+  }
+  return obj;
+}
+
+function replacePlaceholders(sql: string) {
+  return sql;
+}
+
 async function queryRows<T = any>(sql: string, ...params: any[]) {
-  return prisma.$queryRawUnsafe<T[]>(sql, ...params);
+  const formattedSql = replacePlaceholders(sql);
+  const rows = await prisma.$queryRawUnsafe<T[]>(formattedSql, ...params);
+  return sanitizeBigInts(rows);
 }
 
 async function execute(sql: string, ...params: any[]) {
-  return prisma.$executeRawUnsafe(sql, ...params);
+  const formattedSql = replacePlaceholders(sql);
+  return prisma.$executeRawUnsafe(formattedSql, ...params);
 }
 
 async function getTableColumns(tableName: string) {
-  const rows = await queryRows<{ Field: string }>(`SHOW COLUMNS FROM ${tableName}`);
-  return rows.map((row) => row.Field);
+  const rows = await queryRows<any>(
+    `SELECT COLUMN_NAME AS column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    tableName
+  );
+  return rows.map((row) => String(row?.column_name || row?.COLUMN_NAME || "").toLowerCase());
 }
 
 async function ensureColumn(tableName: string, columnName: string, definition: string) {
   const columns = await getTableColumns(tableName).catch(() => [] as string[]);
-  if (columns.includes(columnName)) return;
-  await execute(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+  if (columns.includes(columnName.toLowerCase())) return;
+  try {
+    await execute(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+  } catch (e: any) {
+    if (e?.code === "ER_DUP_FIELDNAME" || String(e?.message || "").includes("Duplicate column name")) {
+      return;
+    }
+    throw e;
+  }
 }
 
 async function ensureWarrantyTables() {
@@ -121,11 +152,7 @@ async function ensureWarrantyTables() {
       last_staff_note TEXT NULL,
       last_email_mock TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_warranty_requests_warranty (warranty_id),
-      INDEX idx_warranty_requests_user (user_id),
-      INDEX idx_warranty_requests_lookup (lookup_value),
-      INDEX idx_warranty_requests_status (status)
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -146,9 +173,7 @@ async function ensureWarrantyTables() {
       note TEXT NULL,
       actor_role VARCHAR(50) NULL,
       actor_name VARCHAR(255) NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_warranty_request_events_request (request_id),
-      INDEX idx_warranty_request_events_created (created_at)
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -159,8 +184,7 @@ async function ensureWarrantyTables() {
       source VARCHAR(50) NOT NULL DEFAULT 'CUSTOMER',
       file_url VARCHAR(255) NOT NULL,
       mime_type VARCHAR(120) NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_warranty_request_attachments_request (request_id)
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -171,10 +195,8 @@ async function ensureWarrantyTables() {
       request_id INT NULL,
       title VARCHAR(255) NOT NULL,
       message TEXT NOT NULL,
-      is_read TINYINT(1) NOT NULL DEFAULT 0,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_warranty_notifications_user (user_id),
-      INDEX idx_warranty_notifications_read (user_id, is_read)
+      is_read SMALLINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 }
@@ -371,20 +393,19 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
             AND (
               (
                 wr.customer_email IS NOT NULL
-                AND wr.customer_email <> ''
-                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+                AND LOWER(mu.email) = LOWER(wr.customer_email)
               )
               OR (
                 wr.customer_phone IS NOT NULL
                 AND wr.customer_phone <> ''
-                AND mu.phone COLLATE utf8mb4_general_ci = wr.customer_phone COLLATE utf8mb4_general_ci
+                AND mu.phone = wr.customer_phone
               )
             )
           ORDER BY
             CASE
               WHEN wr.customer_email IS NOT NULL
                 AND wr.customer_email <> ''
-                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+                AND LOWER(mu.email) = LOWER(wr.customer_email)
               THEN 0
               ELSE 1
             END,
@@ -399,19 +420,19 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
               (
                 wr.customer_email IS NOT NULL
                 AND wr.customer_email <> ''
-                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+                AND LOWER(mu.email) = LOWER(wr.customer_email)
               )
               OR (
                 wr.customer_phone IS NOT NULL
                 AND wr.customer_phone <> ''
-                AND mu.phone COLLATE utf8mb4_general_ci = wr.customer_phone COLLATE utf8mb4_general_ci
+                AND mu.phone = wr.customer_phone
               )
             )
           ORDER BY
             CASE
               WHEN wr.customer_email IS NOT NULL
                 AND wr.customer_email <> ''
-                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+                AND LOWER(mu.email) = LOWER(wr.customer_email)
               THEN 0
               ELSE 1
             END,
@@ -426,19 +447,19 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
               (
                 wr.customer_email IS NOT NULL
                 AND wr.customer_email <> ''
-                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+                AND LOWER(mu.email) = LOWER(wr.customer_email)
               )
               OR (
                 wr.customer_phone IS NOT NULL
                 AND wr.customer_phone <> ''
-                AND mu.phone COLLATE utf8mb4_general_ci = wr.customer_phone COLLATE utf8mb4_general_ci
+                AND mu.phone = wr.customer_phone
               )
             )
           ORDER BY
             CASE
               WHEN wr.customer_email IS NOT NULL
                 AND wr.customer_email <> ''
-                AND mu.email COLLATE utf8mb4_general_ci = wr.customer_email COLLATE utf8mb4_general_ci
+                AND LOWER(mu.email) = LOWER(wr.customer_email)
               THEN 0
               ELSE 1
             END,

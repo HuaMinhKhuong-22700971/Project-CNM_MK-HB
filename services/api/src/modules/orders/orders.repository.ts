@@ -3,66 +3,32 @@ import { prisma } from "../../config/prisma";
 let paymentProofColumnReady: boolean | null = null;
 
 async function repairLegacyPaidOrders(orderId?: number | string | null) {
-  const params: Array<number> = [];
-  let whereClause = "payment_status = 'PAID' AND status = 'PAID'";
-
-  if (orderId !== undefined && orderId !== null) {
-    whereClause += " AND id = ?";
-    params.push(Number(orderId));
-  }
-
-  await prisma.$executeRawUnsafe(
-    `
-      UPDATE orders
-      SET status = 'PROCESSING',
-          updated_at = NOW()
-      WHERE ${whereClause}
-    `,
-    ...params
-  );
-}
-
-async function hasPaymentProofColumn() {
-  if (paymentProofColumnReady !== null) {
-    return paymentProofColumnReady;
-  }
-
-  const rows = await prisma.$queryRawUnsafe<Array<{ COLUMN_NAME: string }>>(
-    `
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'orders'
-        AND COLUMN_NAME = 'payment_proof'
-      LIMIT 1
-    `
-  );
-
-  paymentProofColumnReady = rows.length > 0;
-  return paymentProofColumnReady;
+  const numericId = orderId !== undefined && orderId !== null ? Number(orderId) : undefined;
+  await prisma.order.updateMany({
+    where: {
+      payment_status: "PAID",
+      status: "PAID",
+      ...(numericId !== undefined ? { id: numericId } : {})
+    },
+    data: {
+      status: "PROCESSING",
+      updated_at: new Date()
+    }
+  });
 }
 
 export async function ensurePaymentProofColumn() {
-  if (await hasPaymentProofColumn()) {
-    return true;
-  }
-
-  await prisma.$executeRawUnsafe("ALTER TABLE orders ADD COLUMN payment_proof VARCHAR(255) NULL");
-  paymentProofColumnReady = true;
   return true;
 }
 
 async function getPaymentProof(orderId: number | string | null | undefined) {
-  if (!orderId || !(await hasPaymentProofColumn())) {
-    return null;
-  }
-
-  const rows = await prisma.$queryRawUnsafe<Array<{ payment_proof: string | null }>>(
-    "SELECT payment_proof FROM orders WHERE id = ? LIMIT 1",
-    Number(orderId)
-  );
-
-  return rows[0]?.payment_proof || null;
+  if (!orderId) return null;
+  const numericId = typeof orderId === "string" ? parseInt(orderId, 10) : Number(orderId);
+  const order = await prisma.order.findUnique({
+    where: { id: numericId },
+    select: { payment_proof: true }
+  });
+  return order?.payment_proof || null;
 }
 
 function normalizeShipment(shipment: any) {
@@ -226,17 +192,13 @@ export function markOrderPaymentCancelled(orderId: string | number) {
 }
 
 export async function saveOrderPaymentProof(orderId: string | number, paymentProofUrl: string) {
-  await ensurePaymentProofColumn();
-
-  return prisma.$executeRawUnsafe(
-    `
-      UPDATE orders
-      SET payment_proof = ?,
-          payment_status = 'AWAITING_ADMIN_CONFIRMATION',
-          updated_at = NOW()
-      WHERE id = ?
-    `,
-    paymentProofUrl,
-    typeof orderId === "string" ? parseInt(orderId, 10) : orderId
-  );
+  const numericId = typeof orderId === "string" ? parseInt(orderId, 10) : orderId;
+  return prisma.order.update({
+    where: { id: numericId },
+    data: {
+      payment_proof: paymentProofUrl,
+      payment_status: "AWAITING_ADMIN_CONFIRMATION",
+      updated_at: new Date()
+    }
+  });
 }
