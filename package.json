@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "start": "node scripts/dev.js",
     "dev": "node scripts/dev.js",
     "dev:api": "npm run dev -w services/api",
     "dev:web": "npm run dev -w apps/web",

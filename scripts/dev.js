@@ -1,4 +1,19 @@
-const { spawn } = require("node:child_process");
+const { spawn, execSync } = require("node:child_process");
+const path = require("node:path");
+
+console.log("\n=======================================================");
+console.log("🚀 ĐANG KHỞI ĐỘNG DỰ ÁN PC MALL (BACKEND & FRONTEND)");
+console.log("   ➜ Backend API:  http://localhost:4000");
+console.log("   ➜ Frontend Web: http://localhost:5173");
+console.log("=======================================================\n");
+
+// Ensure Prisma Client is generated
+try {
+  const apiDir = path.resolve(__dirname, "../services/api");
+  execSync("npx prisma generate", { cwd: apiDir, stdio: "ignore" });
+} catch (e) {
+  // Ignore error if offline
+}
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const processes = [
