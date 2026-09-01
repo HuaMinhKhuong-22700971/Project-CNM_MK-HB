@@ -24,6 +24,7 @@ import { OrdersPage } from "../pages/public/OrdersPage";
 import { PaymentResultPage } from "../pages/public/PaymentResultPage";
 import { MockPaymentPage } from "../pages/public/MockPaymentPage";
 import { PcBuilderPage } from "../pages/public/PcBuilderPage";
+import { SharedBuildPage } from "../pages/public/SharedBuildPage";
 import { ProductDetailPage } from "../pages/public/ProductDetailPage";
 import { ProductListPage } from "../pages/public/ProductListPage";
 import { ProfilePage } from "../pages/public/ProfilePage";
@@ -64,6 +65,9 @@ export function AppRouter() {
         { path: routeConfig.public.aiChat.replace(/^\//, ""), element: <AiChatPage /> },
         { path: routeConfig.public.aiAdvisor.replace(/^\//, ""), element: <AiChatPage /> },
         { path: routeConfig.public.pcBuilder.replace(/^\//, ""), element: <PcBuilderPage /> },
+        { path: "pc builder", element: <Navigate to="/pc-builder" replace /> },
+        { path: "pcbuilder", element: <Navigate to="/pc-builder" replace /> },
+        { path: routeConfig.public.sharedPcBuilder.replace(/^\//, ""), element: <SharedBuildPage /> },
         { path: routeConfig.public.login.replace(/^\//, ""), element: <LoginPage /> },
         { path: routeConfig.public.register.replace(/^\//, ""), element: <RegisterPage /> },
         { path: routeConfig.public.help.replace(/^\//, ""), element: <InformationPage /> },

@@ -18,7 +18,19 @@ const envSchema = z.object({
   PAYMENT_MOCK_MODE: z.coerce.boolean().default(false),
   SHIPPING_MOCK_MODE: z.coerce.boolean().default(false),
   SHIPPING_PROVIDER: z.string().default("manual"),
-  CHAT_STORAGE_PATH: z.string().default("./data/chat-sessions.json")
+  CHAT_STORAGE_PATH: z.string().default("./data/chat-sessions.json"),
+  // Email (Nodemailer / Gmail SMTP) — optional, server works without it
+  MAIL_USER: z.string().optional(),
+  MAIL_PASS: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
+  // MoMo Payment API
+  MOMO_PARTNER_CODE: z.string().optional(),
+  MOMO_ACCESS_KEY: z.string().optional(),
+  MOMO_SECRET_KEY: z.string().optional(),
+  MOMO_API_URL: z.string().optional(),
+  // AI Advisor LLM Engine
+  GEMINI_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional()
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -42,5 +54,14 @@ export const env = {
   paymentMockMode: parsedEnv.data.PAYMENT_MOCK_MODE,
   shippingMockMode: parsedEnv.data.SHIPPING_MOCK_MODE,
   chatStoragePath: parsedEnv.data.CHAT_STORAGE_PATH,
-  shippingProvider: parsedEnv.data.SHIPPING_PROVIDER
+  shippingProvider: parsedEnv.data.SHIPPING_PROVIDER,
+  mailUser: parsedEnv.data.MAIL_USER,
+  mailPass: parsedEnv.data.MAIL_PASS,
+  mailFrom: parsedEnv.data.MAIL_FROM,
+  momoPartnerCode: parsedEnv.data.MOMO_PARTNER_CODE,
+  momoAccessKey: parsedEnv.data.MOMO_ACCESS_KEY,
+  momoSecretKey: parsedEnv.data.MOMO_SECRET_KEY,
+  momoApiUrl: parsedEnv.data.MOMO_API_URL,
+  geminiApiKey: parsedEnv.data.GEMINI_API_KEY,
+  openaiApiKey: parsedEnv.data.OPENAI_API_KEY
 };

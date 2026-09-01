@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useSocket } from "../../hooks/useSocket";
 import {
   addTicketMessage,
   getManageTickets,
@@ -265,6 +266,7 @@ export function TechTicketsPage() {
   const { authState } = useAuth();
   const currentUserId = authState?.user?.id;
   const techName = authState?.user?.fullName || "Nhân viên kỹ thuật";
+  const { joinRoom, leaveRoom, on } = useSocket();
 
   const [tickets, setTickets] = useState([]);
   const [stats, setStats] = useState(null);
@@ -441,6 +443,58 @@ export function TechTicketsPage() {
 
     loadDetail();
   }, [selectedTicketId]);
+
+  // 🔌 Socket.io: Đăng ký nhận thông báo real-time cho kỹ thuật viên
+  useEffect(() => {
+    joinRoom("join_tech_queue");
+
+    // Ticket mới được tạo → cập nhật danh sách
+    on("tickets:new_ticket", (newTicket) => {
+      setTickets((prev) => {
+        const exists = prev.some((t) => t.id === newTicket.id);
+        if (exists) return prev;
+        return [newTicket, ...prev];
+      });
+      loadStats();
+    });
+
+    // Trạng thái ticket thay đổi → cập nhật trong danh sách
+    on("tickets:queue_updated", ({ ticketId, status }) => {
+      setTickets((prev) =>
+        prev.map((t) =>
+          t.id === ticketId ? { ...t, status: status || t.status } : t
+        )
+      );
+      loadStats();
+    });
+  }, [joinRoom, on, loadStats]);
+
+  // 🔌 Socket.io: Lắng nghe cập nhật real-time khi đang xem chi tiết ticket
+  useEffect(() => {
+    if (!selectedTicketId) return;
+
+    joinRoom("join_ticket", selectedTicketId);
+
+    // Tin nhắn mới trong ticket → cập nhật ngay
+    on("ticket:new_message", ({ ticketId }) => {
+      if (String(ticketId) !== String(selectedTicketId)) return;
+      // Reload chi tiết ticket để lấy tin nhắn mới nhất
+      getTicketDetail(selectedTicketId)
+        .then((response) => setSelectedTicket(getEnvelopeData(response, null)))
+        .catch(() => {});
+    });
+
+    // Trạng thái ticket thay đổi → cập nhật selectedTicket
+    on("ticket:status_changed", (updatedTicket) => {
+      if (updatedTicket?.id === selectedTicketId) {
+        setSelectedTicket(updatedTicket);
+      }
+    });
+
+    return () => {
+      leaveRoom("leave_ticket", selectedTicketId);
+    };
+  }, [selectedTicketId, joinRoom, leaveRoom, on]);
 
   useEffect(() => {
     if (!successMessage) return undefined;

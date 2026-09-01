@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useSocket } from "../../hooks/useSocket";
 import { usePcBuilder } from "../../hooks/usePcBuilder";
 import {
   acceptChatSession,
@@ -97,6 +98,7 @@ function Spinner() {
 export default function StaffChatPage() {
   const { authState } = useAuth();
   const staffName = authState?.user?.fullName || authState?.user?.email || "Nhân viên bán hàng";
+  const { joinRoom, leaveRoom, on } = useSocket();
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [message, setMessage] = useState("");
@@ -152,26 +154,76 @@ export default function StaffChatPage() {
     }
   }, []);
 
+  // ✅ Khởi đầu: load queue một lần khi vào trang
   useEffect(() => {
     loadQueue();
-    const interval = window.setInterval(loadQueue, 5000);
-    return () => window.clearInterval(interval);
   }, [loadQueue]);
 
+  // 🔌 Socket.io: Đăng ký nhận thông báo real-time cho nhân viên bán hàng
   useEffect(() => {
-    if (!activeSession?.sessionId) return undefined;
-    const poll = async () => {
-      try {
-        const response = await getChatSession(activeSession.sessionId);
-        setActiveSession(getEnvelopeData(response, null));
-      } catch {
-        /* ignore polling errors */
-      }
+    // Tham gia room hàng đợi nhân viên
+    joinRoom("join_staff_queue");
+
+    // Khi có session mới từ khách hàng
+    on("queue:new_session", (newSession) => {
+      setSessions((prev) => {
+        // Tránh duplicate
+        const exists = prev.some((s) => s.sessionId === newSession.sessionId || s.id === newSession.id);
+        if (exists) return prev;
+        return [newSession, ...prev];
+      });
+    });
+
+    // Khi queue cập nhật (có tin nhắn mới, status thay đổi)
+    on("queue:updated", ({ sessionId, status }) => {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.sessionId === sessionId ? { ...s, status: status || s.status } : s
+        )
+      );
+    });
+  }, [joinRoom, on]);
+
+  // 🔌 Socket.io: Lắng nghe tin nhắn real-time trong session đang xem
+  useEffect(() => {
+    if (!activeSession?.sessionId) return;
+
+    // Tham gia room của session này
+    joinRoom("join_chat", activeSession.sessionId);
+
+    // Nhận tin nhắn mới ngay tức thì
+    on("chat:new_message", (message) => {
+      setActiveSession((prev) => {
+        if (!prev) return prev;
+        const alreadyExists = prev.messages?.some(
+          (m) => String(m.id) === String(message.id)
+        );
+        if (alreadyExists) return prev;
+        return {
+          ...prev,
+          messages: [...(prev.messages || []), message]
+        };
+      });
+    });
+
+    // Khi session được cập nhật (nhân viên khác nhận, status thay đổi)
+    on("chat:session_updated", (updatedSession) => {
+      setActiveSession(updatedSession);
+    });
+
+    // Khi session bị đóng
+    on("chat:session_closed", () => {
+      setActiveSession((prev) =>
+        prev ? { ...prev, status: "closed" } : prev
+      );
+      setSuccessMessage("Phên tư vấn đã được kết thúc.");
+    });
+
+    // Cleanup: rời room khi đổi session
+    return () => {
+      leaveRoom("leave_chat", activeSession.sessionId);
     };
-    poll();
-    const interval = window.setInterval(poll, 3000);
-    return () => window.clearInterval(interval);
-  }, [activeSession?.sessionId]);
+  }, [activeSession?.sessionId, joinRoom, leaveRoom, on]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;

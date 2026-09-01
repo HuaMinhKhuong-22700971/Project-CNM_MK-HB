@@ -40,8 +40,47 @@ function addWarrantyPeriod(date = new Date(), months = 12) {
   return expiresAt;
 }
 
-function getWarrantyMonthsFromItem(_item: any) {
-  return 12;
+function getWarrantyMonthsFromItem(item: any): number {
+  if (!item) return 24;
+
+  const explicitMonths = Number(item?.warranty_months || item?.warrantyMonths || item?.ProductSku?.Product?.warranty_months);
+  if (Number.isFinite(explicitMonths) && explicitMonths > 0) {
+    return explicitMonths;
+  }
+
+  const catName = String(
+    item?.ProductSku?.Product?.Category?.name ||
+    item?.Category?.name ||
+    item?.category_name ||
+    item?.categoryName ||
+    ""
+  ).toLowerCase();
+
+  const prodName = String(
+    item?.ProductSku?.Product?.name ||
+    item?.Product?.name ||
+    item?.product_name ||
+    item?.productName ||
+    item?.name_snapshot ||
+    ""
+  ).toLowerCase();
+
+  const combined = `${catName} ${prodName}`;
+
+  if (/cpu|vi xử lý|processor|mainboard|bo mạch|motherboard|ram|bộ nhớ|gpu|vga|card đồ họa|graphics/i.test(combined)) {
+    return 36;
+  }
+  if (/ssd|nvme|storage|ổ cứng|psu|nguồn|power supply/i.test(combined)) {
+    return 36;
+  }
+  if (/cooling|tản nhiệt|aio|fan|quạt/i.test(combined)) {
+    return 24;
+  }
+  if (/case|vỏ case|vỏ máy tính|màn hình|monitor/i.test(combined)) {
+    return 12;
+  }
+
+  return 24;
 }
 
 function generateWarrantyCode(orderItemId: number) {
@@ -116,7 +155,7 @@ async function getTableColumns(tableName: string) {
     `SELECT COLUMN_NAME AS column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
     tableName
   );
-  return rows.map((row) => String(row?.column_name || row?.COLUMN_NAME || "").toLowerCase());
+  return rows.map((row: any) => String(row?.column_name || row?.COLUMN_NAME || "").toLowerCase());
 }
 
 async function ensureColumn(tableName: string, columnName: string, definition: string) {
@@ -481,7 +520,7 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
 
   if (rows.length === 0) return [];
 
-  const requestIds = rows.map((row) => row.id);
+  const requestIds = rows.map((row: any) => row.id);
   const placeholders = requestIds.map(() => "?").join(", ");
   const attachments = await queryRows<any>(
     `
@@ -503,20 +542,20 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
   );
 
   const attachmentMap = new Map<number, any[]>();
-  attachments.forEach((attachment) => {
+  attachments.forEach((attachment: any) => {
     const bucket = attachmentMap.get(attachment.requestId) || [];
     bucket.push(attachment);
     attachmentMap.set(attachment.requestId, bucket);
   });
 
   const eventMap = new Map<number, any[]>();
-  events.forEach((event) => {
+  events.forEach((event: any) => {
     const bucket = eventMap.get(event.requestId) || [];
     bucket.push(event);
     eventMap.set(event.requestId, bucket);
   });
 
-  return rows.map((row) => ({
+  return rows.map((row: any) => ({
     id: row.id,
     warrantyId: row.warrantyId,
     userId: row.userId,
@@ -524,7 +563,7 @@ async function getWarrantyRequestsBase(whereSql: string, params: any[]) {
     customerName: row.customerName || row.accountName || row.matchedName || null,
     customerPhone: row.customerPhone || row.accountPhone || row.matchedPhone || null,
     customerEmail: row.customerEmail || row.accountEmail || row.matchedEmail || null,
-    productName: row.productName || row.orderItemProductName || "Sáº£n pháº©m",
+    productName: row.productName || row.orderItemProductName || "Sản phẩm",
     serialNumber: row.serialNumber || row.orderItemSku || null,
     orderId: row.orderId,
     severity: normalizeSeverity(row.severity),
@@ -565,7 +604,7 @@ async function getLatestRequestMapByWarrantyIds(warrantyIds: number[]) {
     ...warrantyIds
   );
 
-  return new Map<number, any>(rows.map((row) => [row.warranty_id, row]));
+  return new Map<number, any>(rows.map((row: any) => [row.warranty_id, row]));
 }
 
 export const getEligibleWarrantyItems = asyncHandler(async (req: Request, res: Response) => {
@@ -628,7 +667,18 @@ export const activateWarranty = asyncHandler(async (req: Request, res: Response)
   const id = typeof orderItemId === "string" ? parseInt(orderItemId, 10) : orderItemId;
   const orderItem = await prisma.orderItem.findUnique({
     where: { id },
-    include: { Order: true }
+    include: {
+      Order: true,
+      ProductSku: {
+        include: {
+          Product: {
+            include: {
+              Category: true
+            }
+          }
+        }
+      }
+    }
   });
 
   if (!orderItem || orderItem.Order.user_id !== userId || orderItem.Order.status !== "DELIVERED") {
@@ -947,15 +997,42 @@ export const updateAdminWarrantyRequest = asyncHandler(async (req: Request, res:
   await createWarrantyNotification(current.userId || null, requestId, "Cáº­p nháº­t báº£o hÃ nh", `${current.productName}: ${REQUEST_STATUS_LABELS[nextStatus]}`);
 
   const updated = await getWarrantyRequestsBase("wr.id = ?", [requestId]);
+
+  // 📧 Email: Gửi thông báo thực khi bảo hành hoàn tất
+  if (nextStatus === "COMPLETED") {
+    try {
+      const emailRecipient = current.customerEmail || null;
+      if (emailRecipient) {
+        const { buildWarrantyDoneEmail } = require("../../templates/email-warranty-done");
+        const { sendEmailAsync: sendAsync } = require("../../services/email.service");
+        const { subject, html } = buildWarrantyDoneEmail({
+          customerName: current.customerName || emailRecipient,
+          customerEmail: emailRecipient,
+          warrantyCode: current.warrantyCode || current.lookupValue || String(current.id),
+          productName: current.productName || "Linh kiện",
+          serialNumber: current.serialNumber || current.lookupValue,
+          status: "COMPLETED",
+          diagnosis: note || undefined,
+          resolution: note || undefined,
+          technicianName: actorName,
+          completedAt: new Date(),
+          notes: note || undefined
+        });
+        sendAsync({ to: emailRecipient, subject, html });
+        console.log(`[Email] 📧 Warranty completion email queued for ${emailRecipient}`);
+      }
+    } catch (emailErr) {
+      console.warn("[Email] Warranty done email failed:", (emailErr as Error).message);
+    }
+  }
+
   res.status(200).json({
     success: true,
     data: updated[0],
     notification: {
-      title: "Cáº­p nháº­t báº£o hÃ nh",
+      title: "Cập nhật bảo hành",
       message: `${current.productName}: ${REQUEST_STATUS_LABELS[nextStatus]}`
     },
-    emailMock
+    emailMock: nextStatus === "COMPLETED" ? `Real email sent to ${current.customerEmail || "N/A"}` : emailMock
   });
 });
-
-

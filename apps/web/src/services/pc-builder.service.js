@@ -41,6 +41,6 @@ export async function checkRawCompatibility(payload) {
 }
 
 export async function suggestBuild(payload) {
-  const response = await httpClient.post("/ai-advisor/suggest-build", payload);
+  const response = await httpClient.post("/pc-builder/suggest-build", payload);
   return response.data;
 }

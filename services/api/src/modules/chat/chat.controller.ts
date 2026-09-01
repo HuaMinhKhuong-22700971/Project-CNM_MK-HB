@@ -2,6 +2,10 @@ import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 
 import { PrismaClient } from "@prisma/client";
+import {
+  emitToChatRoom,
+  emitToStaffChatQueue
+} from "../../socket/socket.service";
 
 const prisma = new PrismaClient();
 let chatTablesReady = false;
@@ -139,7 +143,12 @@ export const createSession = async (req: Request, res: Response) => {
       include: { messages: { orderBy: { created_at: "asc" } } }
     });
 
-    res.status(201).json({ success: true, data: mapSession(session) });
+    const sessionData = mapSession(session);
+
+    // 🔔 Real-time: Thông báo đến tất cả nhân viên đang online có yêu cầu chat mới
+    emitToStaffChatQueue("queue:new_session", sessionData);
+
+    res.status(201).json({ success: true, data: sessionData });
   } catch (error) {
     console.error("Error creating chat session:", error);
     res.status(500).json({
@@ -210,7 +219,14 @@ export const sendMessage = async (req: Request, res: Response) => {
       data: { status: nextStatus, updated_at: new Date() }
     });
 
-    res.status(201).json({ success: true, data: mapMessage(message) });
+    const messageData = mapMessage(message);
+
+    // 🔔 Real-time: Đẩy tin nhắn mới ngay tức thì đến tất cả clients trong room này
+    emitToChatRoom(id, "chat:new_message", messageData);
+    // 🔔 Real-time: Cập nhật hàng đợi cho nhân viên (để cập nhật preview)
+    emitToStaffChatQueue("queue:updated", { sessionId: id, status: nextStatus });
+
+    res.status(201).json({ success: true, data: messageData });
   } catch (error) {
     console.error("Error sending chat message:", error);
     res.status(500).json({ success: false, message: "Failed to send message" });
@@ -293,7 +309,13 @@ export const acceptSession = async (req: Request, res: Response) => {
       include: { messages: { orderBy: { created_at: "asc" } } }
     });
 
-    res.status(200).json({ success: true, data: mapSession(refreshed) });
+    const refreshedData = mapSession(refreshed);
+
+    // 🔔 Real-time: Thông báo session được nhận cho cả khách và nhân viên
+    emitToChatRoom(id, "chat:session_updated", refreshedData);
+    emitToStaffChatQueue("queue:updated", { sessionId: id, status: "active" });
+
+    res.status(200).json({ success: true, data: refreshedData });
   } catch (error) {
     console.error("Error accepting chat session:", error);
     res.status(500).json({ success: false, message: "Failed to accept session" });
@@ -333,7 +355,13 @@ export const closeSession = async (req: Request, res: Response) => {
       include: { messages: { orderBy: { created_at: "asc" } } }
     });
 
-    res.status(200).json({ success: true, data: mapSession(refreshed) });
+    const refreshedData = mapSession(refreshed);
+
+    // 🔔 Real-time: Thông báo đóng session cho tất cả clients trong room
+    emitToChatRoom(req.params.id, "chat:session_closed", refreshedData);
+    emitToStaffChatQueue("queue:updated", { sessionId: req.params.id, status: "closed" });
+
+    res.status(200).json({ success: true, data: refreshedData });
   } catch (error) {
     console.error("Error closing chat session:", error);
     res.status(500).json({ success: false, message: "Failed to close session" });

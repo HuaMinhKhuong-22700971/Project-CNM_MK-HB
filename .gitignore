@@ -1,4 +1,4 @@
-﻿# Node
+# Node
 node_modules/
 .npm/
 
@@ -42,3 +42,9 @@ apps/web/.vite/
 .npm-cache/
 
 *.tsbuildinfo
+
+# Test & Scratch
+scratch/
+test-results/
+playwright-report/
+

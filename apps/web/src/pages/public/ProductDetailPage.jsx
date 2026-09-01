@@ -1,4 +1,4 @@
-﻿import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
@@ -148,6 +148,55 @@ function getSpecRows(product, attributes, skus) {
 
 function getSimilarPrice(product) {
   return Number(product?.price ?? product?.pricing?.minPrice ?? product?.skus?.[0]?.price ?? product?.defaultVariant?.price ?? 0);
+}
+
+const SPEC_ICONS = {
+  "thương hiệu": "🏆",
+  "brand": "🏆",
+  "danh mục": "📂",
+  "category": "📂",
+  "sku": "🔖",
+  "tình trạng": "✅",
+  "cpu": "🧠",
+  "processor": "🧠",
+  "vi xử lý": "🧠",
+  "gpu": "🎮",
+  "vga": "🎮",
+  "graphics": "🎮",
+  "card đồ họa": "🎮",
+  "ram": "💾",
+  "memory": "💾",
+  "ssd": "💿",
+  "hdd": "💿",
+  "storage": "💿",
+  "ổ cứng": "💿",
+  "psu": "⚡",
+  "power": "⚡",
+  "nguồn": "⚡",
+  "mainboard": "🖼️",
+  "motherboard": "🖼️",
+  "case": "🖥️",
+  "vỏ": "🖥️",
+  "cooling": "🌬️",
+  "cooler": "🌬️",
+  "tản nhiệt": "🌬️",
+  "warranty": "🛡️",
+  "bảo hành": "🛡️",
+  "frequency": "📶",
+  "speed": "📶",
+  "tốc độ": "📶",
+  "socket": "🔌",
+  "chipset": "🔌",
+  "display": "🖥️",
+  "màn hình": "🖥️",
+};
+
+function getSpecIcon(key) {
+  const lower = String(key).toLowerCase();
+  for (const [match, icon] of Object.entries(SPEC_ICONS)) {
+    if (lower.includes(match)) return icon;
+  }
+  return "⚙️";
 }
 
 export function ProductDetailPage() {
@@ -362,14 +411,6 @@ export function ProductDetailPage() {
     <div className="product-detail-page">
       <style>{productDetailStyles}</style>
 
-      {actionError ? <div className="product-alert product-alert--danger">{actionError}</div> : null}
-      {successMessage ? (
-        <div className="product-alert product-alert--success">
-          <span>{successMessage}</span>
-          <Link to={routeConfig.public.cart}>Xem giỏ hàng</Link>
-        </div>
-      ) : null}
-
       <nav className="product-breadcrumb">
         <Link to={routeConfig.public.root}>Trang chủ</Link>
         <span>/</span>
@@ -379,16 +420,36 @@ export function ProductDetailPage() {
       </nav>
 
       <section className="product-hero">
+        {/* ── Image Gallery V2 ── */}
         <div className="product-gallery">
-          <div className="product-gallery__image">
-            <img src={displayImage} alt={productName} onError={(event) => { event.currentTarget.src = resolveProductImage({}, { label: categoryName }); }} />
+          <div className="product-gallery__image v2-gallery-main">
+            <img
+              src={displayImage}
+              alt={productName}
+              className="v2-gallery-img"
+              onError={(e) => { e.currentTarget.src = resolveProductImage({}, { label: categoryName }); }}
+            />
+            {/* Zoom hint */}
+            <div className="v2-gallery-zoom-hint">🔍 Hover để phóng to</div>
           </div>
+
+          {/* Thumbnail strip */}
+          <div className="v2-gallery-thumbs">
+            {[displayImage, displayImage, displayImage].map((src, i) => (
+              <div
+                key={i}
+                className={`v2-gallery-thumb ${i === 0 ? "is-active" : ""}`}
+              >
+                <img src={src} alt={`${productName} ${i + 1}`} onError={e => { e.target.style.opacity = 0.3; }} />
+              </div>
+            ))}
+          </div>
+
           <div className="product-badges">
-            <span>Còn hàng</span>
-            <span>Chính hãng 100%</span>
-            <span>Bảo hành điện tử</span>
-            <span>Giao nhanh</span>
-            <span>Build tối ưu</span>
+            <span>✅ Còn hàng</span>
+            <span>🏆 Chính hãng 100%</span>
+            <span>🛡️ Bảo hành điện tử</span>
+            <span>🚀 Giao nhanh</span>
           </div>
         </div>
 
@@ -412,9 +473,22 @@ export function ProductDetailPage() {
         </div>
 
         <aside className="buy-sidebar">
-          <span className="buy-sidebar__label">Giá bán</span>
-          <strong className="buy-sidebar__price">{formatCurrency(heroPrice)}đ</strong>
-          <div className="stock-pill">Còn hàng · {availableStock} sản phẩm</div>
+          {/* Price */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <strong className="buy-sidebar__price">{formatCurrency(heroPrice)}đ</strong>
+            <span style={{ fontSize: 14, color: "#64748b", textDecoration: "line-through", fontWeight: 600 }}>
+              {formatCurrency(Math.round(heroPrice * 1.12))}đ
+            </span>
+            <span style={{
+              padding: "2px 8px", borderRadius: 99, fontSize: 11, fontWeight: 800,
+              background: "linear-gradient(135deg, #f5a623, #f97316)", color: "#0f172a",
+            }}>-12%</span>
+          </div>
+
+          <div className="stock-pill">
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", display: "inline-block", marginRight: 6, boxShadow: "0 0 6px rgba(16,185,129,0.6)" }} />
+            Còn hàng · {availableStock} sản phẩm
+          </div>
 
           <label className="sku-select">
             <span>Phiên bản / SKU</span>
@@ -430,25 +504,108 @@ export function ProductDetailPage() {
           <div className="quantity-row">
             <span>Số lượng</span>
             <div>
-              <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))}>−</button>
-              <input value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(availableStock, Number(event.target.value || 1))))} />
-              <button type="button" onClick={() => setQuantity((current) => Math.min(availableStock, current + 1))}>+</button>
+              <button type="button" onClick={() => setQuantity((c) => Math.max(1, c - 1))}>−</button>
+              <input value={quantity} onChange={(e) => setQuantity(Math.max(1, Math.min(availableStock, Number(e.target.value || 1))))} />
+              <button type="button" onClick={() => setQuantity((c) => Math.min(availableStock, c + 1))}>+</button>
             </div>
           </div>
 
-          <button className="buy-action buy-action--primary" type="button" disabled={submitting} onClick={() => addCurrentToCart()}>
-            {submitting ? "Đang thêm..." : "Thêm vào giỏ"}
-          </button>
-          <button className="buy-action buy-action--buy" type="button" disabled={submitting} onClick={() => addCurrentToCart({ goCheckout: true })}>
-            Mua ngay
-          </button>
-          <button className="buy-action" type="button" onClick={handlePcBuilder}>Đưa vào PC Builder</button>
-          <button className="buy-action" type="button" onClick={handleCompareProduct}>So sánh sản phẩm này</button>
+          {/* Success animation */}
+          {successMessage && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "10px 14px", borderRadius: 12,
+              background: "rgba(5,150,105,0.1)",
+              border: "1px solid rgba(16,185,129,0.3)",
+              color: "#047857", fontSize: 13, fontWeight: 700,
+              animation: "v2-fadeIn 0.3s ease both",
+            }}>
+              <span style={{ fontSize: 18 }}>✅</span>
+              <span>Đã thêm vào giỏ!</span>
+              <Link to={routeConfig.public.cart} style={{ marginLeft: "auto", color: "#047857", fontWeight: 800, textDecoration: "underline", fontSize: 12 }}>Xem giỏ →</Link>
+            </div>
+          )}
 
+          {actionError && (
+            <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(220,38,38,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#b91c1c", fontSize: 12, fontWeight: 600 }}>
+              ⚠️ {actionError}
+            </div>
+          )}
+
+          {/* Primary CTA */}
+          <button
+            className="buy-action buy-action--primary"
+            type="button"
+            disabled={submitting}
+            onClick={() => addCurrentToCart()}
+            style={{
+              background: submitting ? "#64748b" : "linear-gradient(135deg, #1d4ed8, #3b82f6)",
+              boxShadow: submitting ? "none" : "0 6px 20px rgba(37,99,235,0.4)",
+              transform: "translateY(0)",
+              transition: "all 0.22s cubic-bezier(0.34,1.56,0.64,1)",
+            }}
+            onMouseEnter={e => { if (!submitting) { e.currentTarget.style.transform = "translateY(-2px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(37,99,235,0.5)"; } }}
+            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = submitting ? "none" : "0 6px 20px rgba(37,99,235,0.4)"; }}
+          >
+            {submitting ? "⏳ Đang thêm..." : "🛒 Thêm vào giỏ hàng"}
+          </button>
+
+          {/* Buy Now CTA */}
+          <button
+            className="buy-action buy-action--buy"
+            type="button"
+            disabled={submitting}
+            onClick={() => addCurrentToCart({ goCheckout: true })}
+            style={{
+              background: "linear-gradient(135deg, #f97316, #ef4444)",
+              boxShadow: "0 6px 18px rgba(249,115,22,0.35)",
+              transition: "all 0.22s cubic-bezier(0.34,1.56,0.64,1)",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 10px 24px rgba(249,115,22,0.5)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 6px 18px rgba(249,115,22,0.35)"; }}
+          >
+            ⚡ Mua ngay
+          </button>
+
+          {/* Secondary actions */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <button
+              className="buy-action"
+              type="button"
+              onClick={handlePcBuilder}
+              style={{
+                background: "rgba(37,99,235,0.06)",
+                border: "1px solid rgba(37,99,235,0.25)",
+                color: "#1d4ed8", fontSize: 12, fontWeight: 700,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(37,99,235,0.12)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(37,99,235,0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(37,99,235,0.06)"; e.currentTarget.style.boxShadow = "none"; }}
+            >
+              🔧 PC Builder
+            </button>
+            <button
+              className="buy-action"
+              type="button"
+              onClick={handleCompareProduct}
+              style={{
+                background: "rgba(100,116,139,0.06)",
+                border: "1px solid rgba(100,116,139,0.2)",
+                color: "#475569", fontSize: 12, fontWeight: 700,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(100,116,139,0.12)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(100,116,139,0.06)"; }}
+            >
+              ⚖️ So sánh
+            </button>
+          </div>
+
+          {/* AI Advisor Box */}
           <div className="ai-support-box">
-            <strong>AI Advisor</strong>
-            <p>Không chắc sản phẩm có hợp cấu hình của bạn? Hỏi AI để kiểm tra tương thích trước khi mua.</p>
-            <Link to={routeConfig.public.aiChat}>Hỏi AI ngay</Link>
+            <strong>⚡ AI Advisor</strong>
+            <p>Không chắc sản phẩm có hợp cấu hình? Hỏi AI kiểm tra tương thích ngay.</p>
+            <Link to={routeConfig.public.aiChat}>Hỏi AI ngay →</Link>
           </div>
         </aside>
       </section>
@@ -466,11 +623,14 @@ export function ProductDetailPage() {
 
           <section className="detail-section">
             <h2>Thông số kỹ thuật đầy đủ</h2>
-            <div className="spec-table">
-              {specRows.map((row) => (
-                <div key={`${row.key}-${row.value}`}>
-                  <span>{row.key}</span>
-                  <strong>{row.value}</strong>
+            <div className="spec-table v2-spec-table">
+              {specRows.map((row, idx) => (
+                <div key={`${row.key}-${row.value}`} className={`v2-spec-row ${idx % 2 === 0 ? "v2-spec-row--even" : ""}`}>
+                  <span className="v2-spec-key">
+                    <span className="v2-spec-icon">{getSpecIcon(row.key)}</span>
+                    {row.key}
+                  </span>
+                  <strong className="v2-spec-val">{row.value}</strong>
                 </div>
               ))}
             </div>
@@ -996,54 +1156,196 @@ const productDetailStyles = `
   font-weight: 900;
 }
 
-@media (max-width: 1240px) {
-  .product-hero {
-    grid-template-columns: minmax(0, 1fr) 360px;
-  }
+/* ── GALLERY V2 ── */
+.v2-gallery-main {
+  position: relative;
+  overflow: hidden;
+  cursor: zoom-in;
+}
 
-  .product-info {
-    grid-column: 1 / -1;
-    order: -1;
-  }
+.v2-gallery-main:hover .v2-gallery-img {
+  transform: scale(1.06) !important;
+}
+
+.v2-gallery-img {
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  padding: 24px;
+  filter: drop-shadow(0 20px 38px rgba(15, 23, 42, 0.14));
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.v2-gallery-zoom-hint {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  background: rgba(10, 14, 28, 0.75);
+  backdrop-filter: blur(8px);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 99px;
+  border: 1px solid rgba(255,255,255,0.1);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.v2-gallery-main:hover .v2-gallery-zoom-hint {
+  opacity: 1;
+}
+
+.v2-gallery-thumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.v2-gallery-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: #f8fafc;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  flex-shrink: 0;
+}
+
+.v2-gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+}
+
+.v2-gallery-thumb.is-active {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15), 0 4px 10px rgba(37,99,235,0.2);
+}
+
+.v2-gallery-thumb:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59,130,246,0.4);
+}
+
+/* ── SPEC TABLE V2 ── */
+.v2-spec-table {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.v2-spec-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid rgba(226,232,240,0.6);
+  transition: background 0.15s ease;
+}
+
+.v2-spec-row:last-child { border-bottom: none; }
+
+.v2-spec-row--even {
+  background: rgba(241,245,249,0.6);
+}
+
+.v2-spec-row:hover {
+  background: rgba(37,99,235,0.04);
+}
+
+.v2-spec-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-right: 1px solid rgba(226,232,240,0.6);
+}
+
+.v2-spec-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.v2-spec-val {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.45;
+}
+
+/* ── BUY SIDEBAR V2 ── */
+.buy-sidebar {
+  position: sticky;
+  top: 108px;
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+}
+
+.buy-sidebar__price {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 38px;
+  line-height: 1;
+  font-family: 'Be Vietnam Pro', sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.stock-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: #047857;
+  background: rgba(5,150,105,0.1);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(16,185,129,0.25);
+  width: fit-content;
+}
+
+@media (max-width: 1240px) {
+  .product-hero { grid-template-columns: minmax(0, 1fr) 360px; }
+  .product-info { grid-column: 1 / -1; order: -1; }
 }
 
 @media (max-width: 900px) {
-  .product-hero,
-  .spec-table,
-  .policy-grid,
-  .review-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .buy-sidebar {
-    position: static;
-  }
-
-  .pc-config-grid,
-  .audience-grid,
-  .similar-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .product-hero, .spec-table, .policy-grid, .review-grid { grid-template-columns: 1fr; }
+  .buy-sidebar { position: static; }
+  .pc-config-grid, .audience-grid, .similar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v2-spec-row { grid-template-columns: 1fr; }
+  .v2-spec-key { border-right: none; border-bottom: 1px solid rgba(226,232,240,0.4); }
 }
 
 @media (max-width: 560px) {
-  .product-detail-page {
-    padding-top: 18px;
-  }
-
-  .product-gallery__image {
-    min-height: 340px;
-  }
-
-  .pc-config-grid,
-  .audience-grid,
-  .similar-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .buy-sidebar__price {
-    font-size: 32px;
-  }
+  .product-detail-page { padding-top: 18px; }
+  .product-gallery__image { min-height: 300px; }
+  .pc-config-grid, .audience-grid, .similar-grid { grid-template-columns: 1fr; }
+  .buy-sidebar__price { font-size: 30px; }
+  .v2-gallery-thumbs { display: none; }
 }
 `;
 

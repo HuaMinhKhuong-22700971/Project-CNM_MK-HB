@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
 
 import { useAuth } from "../hooks/useAuth";
@@ -54,9 +54,16 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
   }, []);
 
   const handleError = useCallback((err, fallback) => {
-    const msg = axios.isAxiosError(err)
-      ? (err.response?.data?.message || err.response?.data?.error || fallback)
-      : (err?.message || fallback);
+    let msg = fallback;
+    if (axios.isAxiosError(err)) {
+      if (err.code === "ECONNABORTED" || err.code === "ERR_NETWORK" || !err.response) {
+        msg = "⚠️ Kết nối mạng gặp sự cố tạm thời. Vui lòng kiểm tra lại đường truyền.";
+      } else {
+        msg = err.response?.data?.message || err.response?.data?.error || fallback;
+      }
+    } else if (err?.message) {
+      msg = err.message;
+    }
     setError(msg);
   }, []);
 
@@ -294,6 +301,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     }
     setCompatibility(null);
     setSuggestion(null);
+    showSuccess("Đã xóa toàn bộ linh kiện khỏi cấu hình.");
   };
 
   useEffect(() => {
@@ -306,10 +314,58 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     fetchCurrentBuild();
   }, [fetchCurrentBuild]);
 
+  const lastCompatKeyRef = useRef("");
+
+  useEffect(() => {
+    if (selectedCount < 2) {
+      setCompatibility(null);
+      lastCompatKeyRef.current = "";
+      return;
+    }
+
+    // Cache key — avoid re-calling API when components haven't changed
+    const currentComponentsKey = Object.entries(selectedItems)
+      .map(([type, item]) => {
+        const vId = item.variant?.id || item.variant?.variant_id || item.variant?.skuId || item.variantId || item.productVariantId;
+        return `${type}:${vId}`;
+      })
+      .sort()
+      .join("|");
+
+    if (currentComponentsKey === lastCompatKeyRef.current) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const components = Object.entries(selectedItems)
+          .map(([type, item]) => ({
+            component_type: type,
+            variant_id: item.variant?.id || item.variant?.variant_id || item.variant?.skuId || item.variantId || item.productVariantId
+          }))
+          .filter((c) => c.variant_id);
+
+        if (components.length >= 2) {
+          const resp = await checkRawCompatibility({ components });
+          const result = resp?.data?.data || resp?.data || resp;
+          if (result?.checks || result?.compatible !== undefined) {
+            setCompatibility(result);
+            lastCompatKeyRef.current = currentComponentsKey;
+          }
+        }
+      } catch (err) {
+        console.warn("[usePcBuilder] Auto-check compatibility error:", err?.message || err);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [selectedItems, selectedCount]);
+
+  const activeBuildId = useMemo(() => (isAuthenticated ? build?.id : guestBuild?.id) || null, [isAuthenticated, build, guestBuild]);
+
   return {
     buildName,
     setBuildName,
     activeBuild,
+    activeBuildId,
     totalPrice,
     selectedItems,
     selectedCount,
@@ -320,6 +376,7 @@ export function usePcBuilder(initialBuildName = "Cấu hình của tôi") {
     compatibility,
     suggestion,
     actions: {
+      activeBuildId,
       applyComponent,
       removeComponent,
       checkCompatibility,

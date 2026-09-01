@@ -10,6 +10,27 @@ function generateWarrantyCode(orderItemId) {
   return `BH-${orderItemId}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 }
 
+function getWarrantyMonthsFromItem(item) {
+  if (!item) return 24;
+  const catName = String(item.categoryName || "").toLowerCase();
+  const prodName = String(item.productName || "").toLowerCase();
+  const combined = `${catName} ${prodName}`;
+
+  if (/cpu|vi xử lý|processor|mainboard|bo mạch|motherboard|ram|bộ nhớ|gpu|vga|card đồ họa|graphics/i.test(combined)) {
+    return 36;
+  }
+  if (/ssd|nvme|storage|ổ cứng|psu|nguồn|power supply/i.test(combined)) {
+    return 36;
+  }
+  if (/cooling|tản nhiệt|aio|fan|quạt/i.test(combined)) {
+    return 24;
+  }
+  if (/case|vỏ case|vỏ máy tính|màn hình|monitor/i.test(combined)) {
+    return 12;
+  }
+  return 24;
+}
+
 async function ensureWarrantyNotificationTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS warranty_notifications (
@@ -52,8 +73,13 @@ async function createWarrantyRecordsForDeliveredOrder(orderId) {
       SELECT
         oi.id,
         oi.order_id AS orderId,
-        oi.product_variant_id AS skuId
+        oi.product_variant_id AS skuId,
+        c.name AS categoryName,
+        p.name AS productName
       FROM order_items oi
+      LEFT JOIN product_skus s ON s.id = oi.product_variant_id
+      LEFT JOIN products p ON p.id = s.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN warranties w ON w.order_item_id = oi.id
       WHERE oi.order_id = ?
         AND w.id IS NULL
@@ -66,11 +92,12 @@ async function createWarrantyRecordsForDeliveredOrder(orderId) {
   }
 
   const now = new Date();
-  const expiresAt = addWarrantyPeriod(now, 12);
 
   await Promise.all(
-    orderItems.map((item) =>
-      query(
+    orderItems.map((item) => {
+      const months = getWarrantyMonthsFromItem(item);
+      const itemExpiresAt = addWarrantyPeriod(now, months);
+      return query(
         `
           INSERT IGNORE INTO warranties
             (user_id, order_id, order_item_id, sku_id, warranty_code, status, note, activated_at, expires_at)
@@ -84,10 +111,10 @@ async function createWarrantyRecordsForDeliveredOrder(orderId) {
           generateWarrantyCode(item.id),
           "Auto-created when order was completed",
           now,
-          expiresAt
+          itemExpiresAt
         ]
-      )
-    )
+      );
+    })
   );
 
   await ensureWarrantyNotificationTable();

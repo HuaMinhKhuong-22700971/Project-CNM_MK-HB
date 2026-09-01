@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-
 import { useAuth } from "../../hooks/useAuth";
 
-const accountLinks = [
-  { to: "/profile", label: "Hồ sơ cá nhân", icon: "👤" },
-  { to: "/orders", label: "Đơn hàng của tôi", icon: "📦" },
-  { to: "/profile#addresses", label: "Địa chỉ giao hàng", icon: "📍" },
-  { to: "/warranties", label: "Bảo hành của tôi", icon: "🛡️" },
-  { to: "/tickets", label: "Ticket hỗ trợ", icon: "🎫" }
+const ACCOUNT_LINKS = [
+  { to: "/profile",           label: "Hồ sơ cá nhân",   icon: "👤", color: "#3b82f6" },
+  { to: "/orders",            label: "Đơn hàng của tôi", icon: "📦", color: "#f5a623" },
+  { to: "/profile#addresses", label: "Địa chỉ giao hàng",icon: "📍", color: "#10b981" },
+  { to: "/warranties",        label: "Bảo hành của tôi", icon: "🛡️", color: "#8b5cf6" },
+  { to: "/tickets",           label: "Ticket hỗ trợ",    icon: "🎫", color: "#06b6d4" },
+];
+
+const INFO_ITEMS = [
+  { icon: "🚀", text: "Giao hàng 2h nội thành" },
+  { icon: "🔧", text: "Lắp ráp miễn phí" },
+  { icon: "🛡️", text: "Bảo hành 12 tháng" },
+  { icon: "💬", text: "Hỗ trợ 24/7" },
 ];
 
 function getUserDisplayName(user) {
@@ -16,328 +22,459 @@ function getUserDisplayName(user) {
 }
 
 function getAvatarInitial(user) {
-  const source = getUserDisplayName(user).trim();
-  return source.charAt(0).toUpperCase() || "U";
+  return (getUserDisplayName(user).trim().charAt(0) || "U").toUpperCase();
+}
+
+/* Animated scrolling ticker for info strip */
+function InfoTicker() {
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 0,
+      overflow: "hidden",
+      maxWidth: 420,
+      mask: "linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%)",
+      WebkitMask: "linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%)",
+    }}>
+      <div style={{
+        display: "flex",
+        gap: 32,
+        animation: "v2-ticker 22s linear infinite",
+        whiteSpace: "nowrap",
+        alignItems: "center",
+      }}>
+        {[...INFO_ITEMS, ...INFO_ITEMS].map((item, i) => (
+          <span key={i} style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 12,
+            color: "rgba(203, 213, 225, 0.8)",
+            fontWeight: 500,
+          }}>
+            <span style={{ fontSize: 13 }}>{item.icon}</span>
+            {item.text}
+            {i < INFO_ITEMS.length * 2 - 1 && (
+              <span style={{ color: "rgba(100,116,139,0.6)", marginLeft: 32 }}>·</span>
+            )}
+          </span>
+        ))}
+      </div>
+      <style>{`
+        @keyframes v2-ticker {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+      `}</style>
+    </div>
+  );
 }
 
 export function TopBar() {
   const { authState, isAuthenticated, logout } = useAuth();
   const [isAccountOpen, setIsAccountOpen] = useState(false);
-  const accountRef = useRef(null);
+  const accountRef  = useRef(null);
   const normalizedRole = String(authState?.user?.role || "").trim().toUpperCase();
-  const displayName = useMemo(() => getUserDisplayName(authState?.user), [authState?.user]);
-  const avatarInitial = useMemo(() => getAvatarInitial(authState?.user), [authState?.user]);
-
-  const leftLinks = [
-    { href: "/profile", label: "Hỗ trợ" },
-    { href: "/tickets", label: "Thông báo" },
-    { href: "/orders", label: "Đơn hàng" }
-  ];
+  const displayName    = useMemo(() => getUserDisplayName(authState?.user), [authState?.user]);
+  const avatarInitial  = useMemo(() => getAvatarInitial(authState?.user), [authState?.user]);
 
   const workspaceLinks = [];
-
   if (normalizedRole === "ADMIN") {
     workspaceLinks.push(
-      { href: "/admin/dashboard", label: "Quản trị" },
-      { href: "/staff/orders", label: "Bán hàng" },
-      { href: "/tech/tickets", label: "Kỹ thuật" }
+      { href: "/admin/dashboard", label: "Quản trị", color: "#ef4444" },
+      { href: "/staff/orders",    label: "Bán hàng",  color: "#f5a623" },
+      { href: "/tech/tickets",    label: "Kỹ thuật",  color: "#10b981" },
     );
   } else if (normalizedRole === "SALES_STAFF") {
-    workspaceLinks.push({ href: "/staff/orders", label: "Xử lý đơn" });
+    workspaceLinks.push({ href: "/staff/orders", label: "Xử lý đơn", color: "#f5a623" });
   } else if (normalizedRole === "TECH_STAFF") {
-    workspaceLinks.push({ href: "/tech/tickets", label: "Ticket kỹ thuật" });
+    workspaceLinks.push({ href: "/tech/tickets", label: "Ticket KT",  color: "#10b981" });
   }
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (!accountRef.current?.contains(event.target)) {
-        setIsAccountOpen(false);
-      }
-    }
-
-    function handleEscape(event) {
-      if (event.key === "Escape") {
-        setIsAccountOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
+    const onOutside = (e) => { if (!accountRef.current?.contains(e.target)) setIsAccountOpen(false); };
+    const onEscape  = (e) => { if (e.key === "Escape") setIsAccountOpen(false); };
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("keydown", onEscape);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("keydown", onEscape);
     };
   }, []);
 
-  function handleLogout() {
-    setIsAccountOpen(false);
-    logout();
-  }
-
   return (
-    <div className="market-topbar">
-      <style>{accountMenuStyles}</style>
-      <div className="market-topbar__inner market-container">
-        <div className="market-topbar__group">
-          {leftLinks.map((item) => (
-            <Link key={item.label} className="market-topbar__link" to={item.href}>
-              {item.label}
-            </Link>
-          ))}
-        </div>
+    <div style={{
+      background: "rgba(5, 8, 18, 0.95)",
+      borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+      backdropFilter: "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)",
+      position: "relative",
+      zIndex: 101,
+    }}>
+      <div style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        padding: "0 20px",
+        height: 36,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 16,
+      }}>
 
-        <div className="market-topbar__group">
+        {/* ── Left: Animated Info Ticker ── */}
+        <InfoTicker />
+
+        {/* ── Right: Links & Account ── */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          flexShrink: 0,
+        }}>
+
+          {/* Workspace quick links (staff/admin) */}
           {workspaceLinks.map((item) => (
-            <Link key={item.label} className="market-topbar__link" to={item.href}>
+            <Link
+              key={item.href}
+              to={item.href}
+              style={{
+                padding: "3px 10px",
+                fontSize: 11,
+                fontWeight: 700,
+                color: item.color,
+                background: `${item.color}18`,
+                border: `1px solid ${item.color}35`,
+                borderRadius: 9999,
+                textDecoration: "none",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                transition: "all 0.18s ease",
+                whiteSpace: "nowrap",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = `${item.color}30`;
+                e.currentTarget.style.boxShadow = `0 0 10px ${item.color}30`;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = `${item.color}18`;
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
               {item.label}
             </Link>
           ))}
 
+          {/* Divider */}
+          {workspaceLinks.length > 0 && (
+            <span style={{ width: 1, height: 16, background: "rgba(255,255,255,0.1)", margin: "0 4px" }} />
+          )}
+
+          {/* Quick links */}
+          {[
+            { to: "/tickets", label: "Hỗ trợ" },
+            { to: "/orders",  label: "Đơn hàng" },
+          ].map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "rgba(148, 163, 184, 0.85)",
+                textDecoration: "none",
+                padding: "3px 8px",
+                borderRadius: 6,
+                transition: "all 0.15s ease",
+                whiteSpace: "nowrap",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = "#ffffff"; e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "rgba(148,163,184,0.85)"; e.currentTarget.style.background = "transparent"; }}
+            >
+              {item.label}
+            </Link>
+          ))}
+
+          {/* Divider */}
+          <span style={{ width: 1, height: 16, background: "rgba(255,255,255,0.1)", margin: "0 4px" }} />
+
+          {/* Account section */}
           {isAuthenticated ? (
-            <div className="account-menu" ref={accountRef}>
+            <div ref={accountRef} style={{ position: "relative", zIndex: 200 }}>
+              {/* Account Trigger */}
               <button
-                className={`account-menu__trigger ${isAccountOpen ? "is-open" : ""}`}
                 type="button"
-                onClick={() => setIsAccountOpen((current) => !current)}
+                onClick={() => setIsAccountOpen((v) => !v)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "3px 10px 3px 4px",
+                  background: isAccountOpen
+                    ? "rgba(245, 166, 35, 0.12)"
+                    : "rgba(255, 255, 255, 0.05)",
+                  border: isAccountOpen
+                    ? "1px solid rgba(245, 166, 35, 0.4)"
+                    : "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: 9999,
+                  color: "#ffffff",
+                  font: "inherit",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  height: 28,
+                }}
+                onMouseEnter={e => {
+                  if (!isAccountOpen) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isAccountOpen) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+                  }
+                }}
                 aria-haspopup="menu"
                 aria-expanded={isAccountOpen}
               >
-                <span className="account-menu__avatar">{avatarInitial}</span>
-                <span className="account-menu__name">Xin chào, {displayName}</span>
-                <span className="account-menu__chevron">▾</span>
+                {/* Avatar */}
+                <span style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "linear-gradient(135deg, #f5a623, #f97316)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 10,
+                  fontWeight: 900,
+                  color: "#0f172a",
+                  flexShrink: 0,
+                  boxShadow: "0 0 8px rgba(245,166,35,0.3)",
+                }}>
+                  {avatarInitial}
+                </span>
+                <span style={{
+                  maxWidth: 120,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  color: "rgba(226, 232, 240, 0.9)",
+                }}>
+                  {displayName}
+                </span>
+                {/* Chevron */}
+                <svg
+                  width="10" height="10" viewBox="0 0 24 24" fill="none"
+                  stroke="#f5a623" strokeWidth="2.5" strokeLinecap="round"
+                  style={{
+                    transform: isAccountOpen ? "rotate(180deg)" : "rotate(0)",
+                    transition: "transform 0.2s ease",
+                    flexShrink: 0,
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </button>
 
-              {isAccountOpen ? (
-                <div className="account-menu__dropdown" role="menu">
-                  <div className="account-menu__profile">
-                    <span className="account-menu__avatar account-menu__avatar--large">{avatarInitial}</span>
+              {/* Account Dropdown */}
+              {isAccountOpen && (
+                <div style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  right: 0,
+                  width: 280,
+                  background: "rgba(10, 14, 28, 0.98)",
+                  backdropFilter: "blur(24px) saturate(160%)",
+                  WebkitBackdropFilter: "blur(24px) saturate(160%)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: 16,
+                  boxShadow: "0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
+                  overflow: "hidden",
+                  animation: "v2-scaleIn 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+                }}
+                  role="menu"
+                >
+                  {/* Profile Header */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "44px 1fr",
+                    gap: 12,
+                    alignItems: "center",
+                    padding: "16px",
+                    background: "linear-gradient(135deg, rgba(37,99,235,0.25), rgba(245,166,35,0.15))",
+                    borderBottom: "1px solid rgba(255,255,255,0.07)",
+                  }}>
+                    <span style={{
+                      width: 44, height: 44, borderRadius: "50%",
+                      background: "linear-gradient(135deg, #f5a623, #f97316)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 18, fontWeight: 900, color: "#0f172a",
+                      boxShadow: "0 4px 14px rgba(245,166,35,0.35)",
+                    }}>
+                      {avatarInitial}
+                    </span>
                     <div>
-                      <strong>{displayName}</strong>
-                      <small>{authState?.user?.email || "Tài khoản PC Mall"}</small>
+                      <div style={{
+                        fontWeight: 800, fontSize: 14, color: "#ffffff",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {displayName}
+                      </div>
+                      <div style={{
+                        fontSize: 11, color: "rgba(148,163,184,0.8)", marginTop: 2,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {authState?.user?.email || "Tài khoản PC Mall"}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="account-menu__links">
-                    {accountLinks.map((item) => (
-                      <Link key={item.to} to={item.to} role="menuitem" onClick={() => setIsAccountOpen(false)}>
-                        <span>{item.icon}</span>
+                  {/* Menu Links */}
+                  <div style={{ padding: "6px" }}>
+                    {ACCOUNT_LINKS.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        role="menuitem"
+                        onClick={() => setIsAccountOpen(false)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "9px 10px",
+                          borderRadius: 10,
+                          color: "rgba(203, 213, 225, 0.9)",
+                          textDecoration: "none",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          transition: "all 0.15s ease",
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                          e.currentTarget.style.color = "#ffffff";
+                          e.currentTarget.style.paddingLeft = "14px";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.color = "rgba(203,213,225,0.9)";
+                          e.currentTarget.style.paddingLeft = "10px";
+                        }}
+                      >
+                        <span style={{
+                          width: 28, height: 28, borderRadius: 8,
+                          background: `${item.color}18`,
+                          display: "flex", alignItems: "center",
+                          justifyContent: "center", fontSize: 14, flexShrink: 0,
+                        }}>
+                          {item.icon}
+                        </span>
                         {item.label}
+                        <svg style={{ marginLeft: "auto", opacity: 0.3, flexShrink: 0 }}
+                          width="12" height="12" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
                       </Link>
                     ))}
                   </div>
 
-                  <button className="account-menu__logout" type="button" role="menuitem" onClick={handleLogout}>
-                    <span>↗</span>
-                    Đăng xuất
-                  </button>
+                  {/* Logout */}
+                  <div style={{ padding: "6px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setIsAccountOpen(false); logout(); }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        width: "100%",
+                        padding: "9px 10px",
+                        borderRadius: 10,
+                        background: "transparent",
+                        border: "none",
+                        color: "rgba(248, 113, 113, 0.85)",
+                        font: "inherit",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        textAlign: "left",
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                        e.currentTarget.style.color = "#f87171";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = "transparent";
+                        e.currentTarget.style.color = "rgba(248,113,113,0.85)";
+                      }}
+                    >
+                      <span style={{
+                        width: 28, height: 28, borderRadius: 8,
+                        background: "rgba(239,68,68,0.12)",
+                        display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 14, flexShrink: 0,
+                      }}>
+                        🚪
+                      </span>
+                      Đăng xuất
+                    </button>
+                  </div>
                 </div>
-              ) : null}
+              )}
             </div>
           ) : (
-            <>
-              <Link className="market-topbar__link" to="/login">
+            /* Guest: Login / Register */
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <Link
+                to="/login"
+                style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: "rgba(148,163,184,0.85)",
+                  textDecoration: "none",
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "rgba(148,163,184,0.85)"; e.currentTarget.style.background = "transparent"; }}
+              >
                 Đăng nhập
               </Link>
-              <Link className="market-topbar__link" to="/register">
+              <Link
+                to="/register"
+                style={{
+                  fontSize: 12, fontWeight: 800,
+                  color: "#0f172a",
+                  background: "linear-gradient(135deg, #f5a623, #f97316)",
+                  textDecoration: "none",
+                  padding: "3px 12px",
+                  borderRadius: 9999,
+                  transition: "all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                  boxShadow: "0 2px 8px rgba(245,166,35,0.3)",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = "scale(1.06)";
+                  e.currentTarget.style.boxShadow = "0 4px 14px rgba(245,166,35,0.45)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(245,166,35,0.3)";
+                }}
+              >
                 Đăng ký
               </Link>
-            </>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 }
-
-const accountMenuStyles = `
-.account-menu {
-  position: relative;
-  z-index: 60;
-}
-
-.account-menu__trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 4px 10px 4px 4px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.06);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
-}
-
-.account-menu__trigger:hover,
-.account-menu__trigger.is-open {
-  transform: translateY(-1px);
-  border-color: rgba(245, 166, 35, 0.55);
-  background: rgba(245, 166, 35, 0.12);
-}
-
-.account-menu__avatar {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  color: #0f172a;
-  background: linear-gradient(135deg, #fbbf24, #f97316);
-  font-size: 12px;
-  font-weight: 900;
-  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.22);
-}
-
-.account-menu__avatar--large {
-  width: 44px;
-  height: 44px;
-  font-size: 18px;
-}
-
-.account-menu__name {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-menu__chevron {
-  color: #fbbf24;
-  transition: transform 160ms ease;
-}
-
-.account-menu__trigger.is-open .account-menu__chevron {
-  transform: rotate(180deg);
-}
-
-.account-menu__dropdown {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  width: 292px;
-  overflow: hidden;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  background: #fff;
-  color: #0f172a;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
-  animation: account-menu-in 150ms ease;
-}
-
-.account-menu__dropdown::before {
-  content: "";
-  position: absolute;
-  top: -6px;
-  right: 26px;
-  width: 12px;
-  height: 12px;
-  transform: rotate(45deg);
-  background: #fff;
-  border-left: 1px solid #e2e8f0;
-  border-top: 1px solid #e2e8f0;
-}
-
-.account-menu__profile {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  padding: 16px;
-  background: linear-gradient(135deg, #0f172a, #1e3a8a);
-  color: #fff;
-}
-
-.account-menu__profile strong,
-.account-menu__profile small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-menu__profile small {
-  margin-top: 3px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-}
-
-.account-menu__links {
-  display: grid;
-  padding: 8px;
-}
-
-.account-menu__links a,
-.account-menu__logout {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 42px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 12px;
-  color: #334155;
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 800;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
-}
-
-.account-menu__links a:hover,
-.account-menu__logout:hover {
-  transform: translateX(2px);
-  color: #1d4ed8;
-  background: #eff6ff;
-}
-
-.account-menu__links span,
-.account-menu__logout span {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: #f1f5f9;
-}
-
-.account-menu__logout {
-  margin: 0 8px 8px;
-  width: calc(100% - 16px);
-  color: #b91c1c;
-}
-
-.account-menu__logout:hover {
-  color: #b91c1c;
-  background: #fef2f2;
-}
-
-@keyframes account-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (max-width: 720px) {
-  .account-menu__name {
-    max-width: 120px;
-  }
-
-  .account-menu__dropdown {
-    right: -12px;
-    width: min(292px, calc(100vw - 24px));
-  }
-}
-`;

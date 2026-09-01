@@ -5,6 +5,10 @@ import { ROLES } from "../../constants/roles";
 import { AppError } from "../../errors/app-error";
 import { asyncHandler } from "../../utils/async-handler";
 import {
+  emitToTicketRoom,
+  emitToTechQueue
+} from "../../socket/socket.service";
+import {
   createTicketMessage,
   createTicket,
   getTicketById,
@@ -28,6 +32,9 @@ export const postMyTicket = asyncHandler(async (req: Request, res: Response) => 
     description: payload.description,
     priority: payload.priority
   });
+
+  // 🔔 Real-time: Thông báo kỹ thuật viên có ticket mới
+  emitToTechQueue("tickets:new_ticket", ticket);
 
   res.status(201).json({
     success: true,
@@ -174,6 +181,11 @@ export const patchTicket = asyncHandler(async (req: Request, res: Response) => {
     assigned_to_id: payload.assignedToId
   });
 
+  // 🔔 Real-time: Thông báo trạng thái thay đổi cho client trong room ticket
+  emitToTicketRoom(req.params.id, "ticket:status_changed", updated);
+  // 🔔 Real-time: Cập nhật danh sách cho kỹ thuật viên
+  emitToTechQueue("tickets:queue_updated", { ticketId: req.params.id, status: payload.status });
+
   res.status(200).json({
     success: true,
     data: updated
@@ -203,9 +215,19 @@ export const postTicketMessage = asyncHandler(async (req: Request, res: Response
     visibility
   });
 
+  const filtered = filterTicketForViewer(updated, req.user);
+
+  // 🔔 Real-time: Tin nhắn mới trong ticket - đẩy đến tất cả clients đang xem ticket này
+  emitToTicketRoom(req.params.id, "ticket:new_message", {
+    ticketId: req.params.id,
+    message: payload.message,
+    visibility,
+    userId: req.user.userId
+  });
+
   res.status(201).json({
     success: true,
-    data: filterTicketForViewer(updated, req.user)
+    data: filtered
   });
 });
 

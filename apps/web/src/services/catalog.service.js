@@ -66,3 +66,12 @@ export async function getBrands() {
     return response.data;
   });
 }
+
+export function clearCatalogCache() {
+  requestCache.clear();
+  try {
+    localStorage.removeItem("pcmall_builder_catalog_cache_v6");
+  } catch (_e) {
+    // Ignore localStorage errors
+  }
+}

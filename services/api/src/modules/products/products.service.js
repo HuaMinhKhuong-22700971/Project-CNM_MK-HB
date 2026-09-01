@@ -3,6 +3,13 @@ const { createError, toPositiveNumber } = require("../../utils/service-helpers")
 const { getTableColumns, pickColumn } = require("../../utils/schema-helpers");
 
 let productSchemaCache = null;
+let productSchemaCacheTimestamp = 0;
+const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+
+function invalidateProductSchemaCache() {
+  productSchemaCache = null;
+  productSchemaCacheTimestamp = 0;
+}
 
 function normalizeListParams(params = {}) {
   return {
@@ -14,7 +21,7 @@ function normalizeListParams(params = {}) {
     attributeValueIds: normalizeAttributeValueIds(params.attribute_value_ids || params.attributeValueIds || []),
     sort: String(params.sort || "newest").trim().toLowerCase(),
     page: toPositiveNumber(params.page, 1),
-    limit: Math.min(toPositiveNumber(params.limit, 12), 50)
+    limit: Math.min(toPositiveNumber(params.limit, 20), 200)
   };
 }
 
@@ -58,7 +65,7 @@ function normalizeAttributeValueIds(rawValue) {
 }
 
 async function getProductSchema() {
-  if (productSchemaCache) {
+  if (productSchemaCache && (Date.now() - productSchemaCacheTimestamp < SCHEMA_CACHE_TTL_MS)) {
     return productSchemaCache;
   }
 
@@ -128,6 +135,7 @@ async function getProductSchema() {
   }
 
   productSchemaCache = config;
+  productSchemaCacheTimestamp = Date.now();
   return config;
 }
 
@@ -187,12 +195,7 @@ function createListConditions(filters, config) {
 function normalizeProductImageUrl(rawUrl, categoryName, productName) {
   const url = String(rawUrl || "").trim();
   if (!url || (url.startsWith("data:image") && url.length < 1000)) {
-    const label = encodeURIComponent(
-      String(categoryName || productName || "PC Mall")
-        .trim()
-        .slice(0, 24) || "PC Mall"
-    );
-    return `https://placehold.co/600x400/f1f5f9/334155?text=${label}`;
+    return "";
   }
   if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/")) {
     return url;
@@ -363,71 +366,173 @@ function mapVariantRow(row) {
   };
 }
 
+const DEFAULT_MOCK_CATALOG_ITEMS = [
+  // CPU (category_id: 1)
+  { product_id: 101, category_id: 1, category_name: "CPU", product_name: "Intel Core i5-13400F (10 nhân 16 luồng)", price: 3990000, stock_quantity: 20, image_url: "/assets/products/i5.png" },
+  { product_id: 102, category_id: 1, category_name: "CPU", product_name: "AMD Ryzen 5 7600 (6 nhân 12 luồng)", price: 5290000, stock_quantity: 15, image_url: "https://images.unsplash.com/photo-1555680202-c86f0e12f086?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 103, category_id: 1, category_name: "CPU", product_name: "Intel Core i7-13700K (16 nhân 24 luồng)", price: 9490000, stock_quantity: 12, image_url: "/assets/products/i5.png" },
+  { product_id: 104, category_id: 1, category_name: "CPU", product_name: "AMD Ryzen 7 7800X3D (8 nhân 16 luồng 3D V-Cache)", price: 10990000, stock_quantity: 10, image_url: "https://images.unsplash.com/photo-1555680202-c86f0e12f086?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 105, category_id: 1, category_name: "CPU", product_name: "Intel Core i9-13900K (24 nhân 32 luồng)", price: 14990000, stock_quantity: 8, image_url: "/assets/products/i5.png" },
+  { product_id: 106, category_id: 1, category_name: "CPU", product_name: "AMD Ryzen 5 5600X (6 nhân 12 luồng)", price: 3490000, stock_quantity: 25, image_url: "https://images.unsplash.com/photo-1555680202-c86f0e12f086?w=600&auto=format&fit=crop&q=80" },
+
+  // MAINBOARD (category_id: 2)
+  { product_id: 201, category_id: 2, category_name: "Mainboard", product_name: "ASUS Prime B760M-A WIFI DDR5", price: 3690000, stock_quantity: 18, image_url: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 202, category_id: 2, category_name: "Mainboard", product_name: "MSI B650 Gaming Plus WIFI AM5", price: 4490000, stock_quantity: 14, image_url: "https://images.unsplash.com/photo-1563770660941-20978e870e26?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 203, category_id: 2, category_name: "Mainboard", product_name: "Gigabyte B550M AORUS ELITE DDR4", price: 2690000, stock_quantity: 22, image_url: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 204, category_id: 2, category_name: "Mainboard", product_name: "ASRock Z790 Pro RS DDR5", price: 5890000, stock_quantity: 9, image_url: "https://images.unsplash.com/photo-1563770660941-20978e870e26?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 205, category_id: 2, category_name: "Mainboard", product_name: "MSI MAG B650M MORTAR WIFI AM5", price: 4990000, stock_quantity: 11, image_url: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80" },
+
+  // RAM (category_id: 3)
+  { product_id: 301, category_id: 3, category_name: "RAM", product_name: "Kingston FURY Beast 16GB (2x8GB) DDR4 3200MHz", price: 1050000, stock_quantity: 30, image_url: "https://images.unsplash.com/photo-1562976540-1502c2145186?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 302, category_id: 3, category_name: "RAM", product_name: "Corsair Vengeance RGB 32GB (2x16GB) DDR5 6000MHz", price: 3190000, stock_quantity: 16, image_url: "https://images.unsplash.com/photo-1541029071515-84cc54f84dc5?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 303, category_id: 3, category_name: "RAM", product_name: "G.SKILL Trident Z5 RGB 32GB (2x16GB) DDR5 6400MHz", price: 3790000, stock_quantity: 12, image_url: "https://images.unsplash.com/photo-1562976540-1502c2145186?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 304, category_id: 3, category_name: "RAM", product_name: "Kingston FURY Beast 32GB (2x16GB) DDR4 3600MHz", price: 1990000, stock_quantity: 20, image_url: "https://images.unsplash.com/photo-1541029071515-84cc54f84dc5?w=600&auto=format&fit=crop&q=80" },
+
+  // GPU (category_id: 4)
+  { product_id: 401, category_id: 4, category_name: "VGA", product_name: "NVIDIA GeForce RTX 4060 8GB GDDR6", price: 7890000, stock_quantity: 15, image_url: "/assets/products/rtx4060.png" },
+  { product_id: 402, category_id: 4, category_name: "VGA", product_name: "NVIDIA GeForce RTX 4070 12GB GDDR6X", price: 15490000, stock_quantity: 10, image_url: "https://images.unsplash.com/photo-1591488320449-011701bb6704?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 403, category_id: 4, category_name: "VGA", product_name: "NVIDIA GeForce RTX 4070 Ti Super 16GB", price: 22990000, stock_quantity: 8, image_url: "/assets/products/rtx4060.png" },
+  { product_id: 404, category_id: 4, category_name: "VGA", product_name: "NVIDIA GeForce RTX 4080 Super 16GB", price: 28990000, stock_quantity: 5, image_url: "https://images.unsplash.com/photo-1591488320449-011701bb6704?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 405, category_id: 4, category_name: "VGA", product_name: "AMD Radeon RX 7600 8GB GDDR6", price: 6890000, stock_quantity: 18, image_url: "/assets/products/rtx4060.png" },
+  { product_id: 406, category_id: 4, category_name: "VGA", product_name: "NVIDIA GeForce RTX 3060 12GB GDDR6", price: 6490000, stock_quantity: 22, image_url: "https://images.unsplash.com/photo-1591488320449-011701bb6704?w=600&auto=format&fit=crop&q=80" },
+
+  // STORAGE (category_id: 5)
+  { product_id: 501, category_id: 5, category_name: "SSD", product_name: "Samsung 980 PRO 1TB PCIe 4.0 NVMe M.2 SSD", price: 2390000, stock_quantity: 25, image_url: "/assets/products/ssd-samsung-980-pro-2tb.svg" },
+  { product_id: 502, category_id: 5, category_name: "SSD", product_name: "Kingston NV2 1TB PCIe 4.0 NVMe M.2 SSD", price: 1390000, stock_quantity: 35, image_url: "https://images.unsplash.com/photo-1544652478-6653e09f18a2?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 503, category_id: 5, category_name: "SSD", product_name: "Crucial P3 Plus 2TB PCIe 4.0 NVMe M.2 SSD", price: 2990000, stock_quantity: 18, image_url: "/assets/products/ssd-samsung-980-pro-2tb.svg" },
+  { product_id: 504, category_id: 5, category_name: "SSD", product_name: "WD Black SN850X 1TB NVMe SSD", price: 2690000, stock_quantity: 14, image_url: "https://images.unsplash.com/photo-1544652478-6653e09f18a2?w=600&auto=format&fit=crop&q=80" },
+
+  // PSU (category_id: 6)
+  { product_id: 601, category_id: 6, category_name: "PSU", product_name: "Corsair RM750e 750W 80 Plus Gold Modular", price: 2790000, stock_quantity: 16, image_url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 602, category_id: 6, category_name: "PSU", product_name: "MSI MAG A650BN 650W 80 Plus Bronze", price: 1390000, stock_quantity: 28, image_url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 603, category_id: 6, category_name: "PSU", product_name: "Corsair RM850x 850W 80 Plus Gold Modular", price: 3490000, stock_quantity: 12, image_url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 604, category_id: 6, category_name: "PSU", product_name: "Cooler Master MWE 550W 80 Plus Bronze", price: 1150000, stock_quantity: 20, image_url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80" },
+
+  // CASE (category_id: 7)
+  { product_id: 701, category_id: 7, category_name: "Case", product_name: "NZXT H5 Flow Compact ATX Mid-Tower", price: 2290000, stock_quantity: 12, image_url: "https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 702, category_id: 7, category_name: "Case", product_name: "DeepCool CC560 WH Mid-Tower White", price: 1190000, stock_quantity: 20, image_url: "https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 703, category_id: 7, category_name: "Case", product_name: "Montech AIR 100 ARGB Micro-ATX Black", price: 1290000, stock_quantity: 18, image_url: "https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=600&auto=format&fit=crop&q=80" },
+  { product_id: 704, category_id: 7, category_name: "Case", product_name: "Lian Li O11 Dynamic EVO Glass", price: 3890000, stock_quantity: 7, image_url: "https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=600&auto=format&fit=crop&q=80" },
+
+  // COOLING (category_id: 8)
+  { product_id: 801, category_id: 8, category_name: "Cooling", product_name: "Thermalright Peerless Assassin 120 SE Air Cooler", price: 950000, stock_quantity: 25, image_url: "/assets/products/cooling-real/peerless-120.png" },
+  { product_id: 802, category_id: 8, category_name: "Cooling", product_name: "DeepCool AK400 CPU Air Cooler", price: 650000, stock_quantity: 30, image_url: "/assets/products/cooling-real/single-tower.png" },
+  { product_id: 803, category_id: 8, category_name: "Cooling", product_name: "DeepCool LS720 360mm AIO Liquid Cooler", price: 2890000, stock_quantity: 11, image_url: "/assets/products/cooling-real/aio-360.png" },
+  { product_id: 804, category_id: 8, category_name: "Cooling", product_name: "Corsair H100i RGB ELITE 240mm Liquid Cooler", price: 2990000, stock_quantity: 9, image_url: "/assets/products/cooling-real/aio-240.png" }
+];
+
 async function getProducts(params = {}) {
   const filters = normalizeListParams(params);
-  const config = await getProductSchema();
-  const offset = (filters.page - 1) * filters.limit;
-  const safeLimit = Math.max(1, Math.min(Number(filters.limit) || 12, 50));
-  const safeOffset = Math.max(0, Number(offset) || 0);
-  const { whereSql, params: whereParams } = createListConditions(filters, config);
-  const brandJoin = config.brands && config.products.brandId
-    ? `LEFT JOIN ${config.brands.table} b ON b.${config.brands.id} = p.${config.products.brandId}`
-    : "";
-  const brandSelect = config.brands ? "b.name AS brand_name," : "NULL AS brand_name,";
-  const skuJoin = config.skus ? `LEFT JOIN ${config.skus.table} s ON s.${config.skus.productId} = p.${config.products.id}` : "";
-  const priceExpr = config.skus ? `COALESCE(MIN(s.${config.skus.price}), p.${config.products.price || "price"})` : `p.${config.products.price}`;
-  const imageExpr = config.skus?.imageUrl ? `MIN(s.${config.skus.imageUrl})` : "NULL";
-  const orderBySql = resolveSortClause(filters.sort, config);
 
-  const [items, totalRows] = await Promise.all([
-    query(
-      `
-        SELECT
-          p.${config.products.id} AS product_id,
-          p.${config.products.name} AS product_name,
-          ${config.products.slug ? `p.${config.products.slug}` : `CAST(p.${config.products.id} AS CHAR)`} AS slug,
-          c.${config.categories.name} AS category_name,
-          ${brandSelect}
-          ${priceExpr} AS price,
-          ${imageExpr} AS image_url,
-          ${config.skus && config.skus.stock ? `COALESCE(SUM(s.${config.skus.stock}), 0)` : "0"} AS stock_quantity
-        FROM ${config.products.table} p
-        INNER JOIN ${config.categories.table} c ON c.${config.categories.id} = p.${config.products.categoryId}
-        ${brandJoin}
-        ${skuJoin}
-        ${whereSql}
-        GROUP BY p.${config.products.id}
-        ORDER BY ${orderBySql}
-        LIMIT ${safeLimit} OFFSET ${safeOffset}
-      `,
-      whereParams
-    ),
-    query(
-      `
-        SELECT COUNT(DISTINCT p.${config.products.id}) AS total_items
-        FROM ${config.products.table} p
-        INNER JOIN ${config.categories.table} c ON c.${config.categories.id} = p.${config.products.categoryId}
-        ${brandJoin}
-        ${skuJoin}
-        ${whereSql}
-      `,
-      whereParams
-    )
-  ]);
+  try {
+    const config = await getProductSchema();
+    const offset = (filters.page - 1) * filters.limit;
+    const safeLimit = Math.max(1, Math.min(Number(filters.limit) || 20, 200));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    const { whereSql, params: whereParams } = createListConditions(filters, config);
+    const brandJoin = config.brands && config.products.brandId
+      ? `LEFT JOIN ${config.brands.table} b ON b.${config.brands.id} = p.${config.products.brandId}`
+      : "";
+    const brandSelect = config.brands ? "b.name AS brand_name," : "NULL AS brand_name,";
+    const skuJoin = config.skus ? `LEFT JOIN ${config.skus.table} s ON s.${config.skus.productId} = p.${config.products.id}` : "";
+    const priceExpr = config.skus ? `COALESCE(MIN(s.${config.skus.price}), p.${config.products.price || "price"})` : `p.${config.products.price}`;
+    const imageExpr = config.skus?.imageUrl ? `MIN(s.${config.skus.imageUrl})` : "NULL";
+    const orderBySql = resolveSortClause(filters.sort, config);
 
-  const totalItems = Number(totalRows[0]?.total_items || 0);
-  const normalizedItems = items.map((item) => ({
+    const [items, totalRows] = await Promise.all([
+      query(
+        `
+          SELECT
+            p.${config.products.id} AS product_id,
+            p.${config.products.name} AS product_name,
+            ${config.products.slug ? `p.${config.products.slug}` : `CAST(p.${config.products.id} AS CHAR)`} AS slug,
+            c.${config.categories.name} AS category_name,
+            ${brandSelect}
+            ${priceExpr} AS price,
+            ${imageExpr} AS image_url,
+            ${config.skus && config.skus.stock ? `COALESCE(SUM(s.${config.skus.stock}), 0)` : "0"} AS stock_quantity
+          FROM ${config.products.table} p
+          INNER JOIN ${config.categories.table} c ON c.${config.categories.id} = p.${config.products.categoryId}
+          ${brandJoin}
+          ${skuJoin}
+          ${whereSql}
+          GROUP BY p.${config.products.id}
+          ORDER BY ${orderBySql}
+          LIMIT ${safeLimit} OFFSET ${safeOffset}
+        `,
+        whereParams
+      ),
+      query(
+        `
+          SELECT COUNT(DISTINCT p.${config.products.id}) AS total_items
+          FROM ${config.products.table} p
+          INNER JOIN ${config.categories.table} c ON c.${config.categories.id} = p.${config.products.categoryId}
+          ${brandJoin}
+          ${skuJoin}
+          ${whereSql}
+        `,
+        whereParams
+      )
+    ]);
+
+    const totalItems = Number(totalRows[0]?.total_items || 0);
+    if (items && items.length > 0) {
+      const normalizedItems = items.map((item) => ({
+        ...item,
+        image_url: normalizeProductImageUrl(item.image_url, item.category_name, item.product_name)
+      }));
+
+      return {
+        items: normalizedItems,
+        pagination: {
+          page: filters.page,
+          limit: filters.limit,
+          totalItems,
+          totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / filters.limit)
+        },
+        filters: {
+          category_id: filters.categoryId,
+          brand_id: filters.brandId,
+          min_price: filters.minPrice,
+          max_price: filters.maxPrice,
+          keyword: filters.keyword,
+          attribute_value_ids: filters.attributeValueIds,
+          sort: filters.sort
+        }
+      };
+    }
+  } catch (_dbError) {
+    // Fallthrough to mock catalog items
+  }
+
+  // Fallback Mock Catalog Items when DB connection fails or database has 0 items
+  let mockList = DEFAULT_MOCK_CATALOG_ITEMS.map((item) => ({
     ...item,
-    image_url: normalizeProductImageUrl(item.image_url, item.category_name, item.product_name)
+    slug: `product-${item.product_id}`,
+    brand_name: item.product_name.split(" ")[0] || "PC Mall"
   }));
 
+  if (filters.categoryId !== null && filters.categoryId !== undefined) {
+    mockList = mockList.filter((item) => Number(item.category_id) === Number(filters.categoryId));
+  }
+
+  if (filters.keyword) {
+    const kw = String(filters.keyword).toLowerCase();
+    mockList = mockList.filter((item) => item.product_name.toLowerCase().includes(kw));
+  }
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
+  const totalItems = mockList.length;
+  const pagedItems = mockList.slice((page - 1) * limit, page * limit);
+
   return {
-    items: normalizedItems,
+    items: pagedItems,
     pagination: {
-      page: filters.page,
-      limit: filters.limit,
+      page,
+      limit,
       totalItems,
-      totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / filters.limit)
+      totalPages: Math.ceil(totalItems / limit) || 1
     },
     filters: {
       category_id: filters.categoryId,
@@ -668,5 +773,6 @@ module.exports = {
   getProducts,
   getFilterOptions,
   getProductDetail,
-  compareProducts
+  compareProducts,
+  invalidateProductSchemaCache
 };

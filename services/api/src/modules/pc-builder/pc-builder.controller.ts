@@ -55,6 +55,31 @@ export const checkRawCompatibility = asyncHandler(async (req: Request, res: Resp
   return sendSuccess(res, "PC build compatibility checked successfully", result);
 });
 
+export const getMyBuilds = asyncHandler(async (req: Request, res: Response) => {
+  const result = await pcBuilderService.getMyBuilds(getAuthUserId(req));
+  return sendSuccess(res, "Saved PC builds fetched successfully", result);
+});
+
+export const publishBuild = asyncHandler(async (req: Request, res: Response) => {
+  const result = await pcBuilderService.publishBuild(getAuthUserId(req), req.params.buildId);
+  return sendSuccess(res, "PC build published successfully", result);
+});
+
+export const getSharedBuild = asyncHandler(async (req: Request, res: Response) => {
+  const result = await pcBuilderService.getSharedBuild(req.params.shareToken);
+  return sendSuccess(res, "Shared PC build fetched successfully", result);
+});
+
+export const cloneBuild = asyncHandler(async (req: Request, res: Response) => {
+  const result = await pcBuilderService.cloneBuild(getAuthUserId(req), req.params.buildId);
+  return sendSuccess(res, "PC build cloned successfully", result, 201);
+});
+
+export const getAiAdvice = asyncHandler(async (req: Request, res: Response) => {
+  const result = await pcBuilderService.getAiAdvice(req.body || {});
+  return sendSuccess(res, "AI advice generated successfully", result);
+});
+
 export default {
   createBuild,
   getCurrentBuild,
@@ -63,5 +88,10 @@ export default {
   removeBuildItem,
   saveBuild,
   suggestBuild,
-  checkRawCompatibility
+  checkRawCompatibility,
+  getMyBuilds,
+  publishBuild,
+  getSharedBuild,
+  cloneBuild,
+  getAiAdvice
 };

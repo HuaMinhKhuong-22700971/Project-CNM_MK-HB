@@ -14,8 +14,10 @@ import {
   patchOrderStatus,
   payOrderMock,
   createVnpayUrl,
+  createMomoUrl,
   vnpayReturn,
   vnpayIpn,
+  momoIpn,
   cancelMyOrder,
   confirmMockPayment,
   cancelMockPayment,
@@ -58,6 +60,8 @@ const uploadPaymentProofMiddleware = uploadPaymentProofFile.single("paymentProof
 
 ordersRouter.get("/vnpay/return", vnpayReturn);
 ordersRouter.get("/vnpay/ipn", vnpayIpn);
+ordersRouter.post("/momo/ipn", momoIpn);
+ordersRouter.get("/momo/ipn", momoIpn);
 ordersRouter.get("/events", streamOrderEvents);
 
 ordersRouter.use(authenticate);
@@ -66,6 +70,7 @@ ordersRouter.post("/checkout", checkout);
 ordersRouter.get("/my", getMyOrders);
 ordersRouter.get("/:id", getOrderDetail);
 ordersRouter.post("/:id/vnpay-url", createVnpayUrl);
+ordersRouter.post("/:id/momo-url", createMomoUrl);
 ordersRouter.post("/:id/mock-pay", confirmMockPayment);
 ordersRouter.post("/:id/mock-cancel", cancelMockPayment);
 ordersRouter.post("/:id/payment-proof", (req: Request, res: Response, next: NextFunction) => {

@@ -3,10 +3,11 @@ import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 
 import { AppError } from "../errors/app-error";
+import { logger } from "../utils/logger";
 
 export function errorHandler(
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) {
@@ -43,7 +44,12 @@ export function errorHandler(
   const statusCode = err instanceof AppError ? err.statusCode : ((err as any).statusCode || 500);
 
   if (statusCode === 500) {
-    console.error(err);
+    logger.error(err, {
+      url: req.originalUrl || req.url,
+      method: req.method,
+      userId: (req as any).user?.userId || (req as any).user?.id || null,
+      ip: req.ip
+    });
   }
 
   return res.status(statusCode).json({

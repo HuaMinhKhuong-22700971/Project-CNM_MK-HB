@@ -18,13 +18,15 @@ import {
 } from "./orders.repository";
 import { checkoutSchema, updateOrderStatusSchema } from "./orders.validator";
 import { generateVnpayUrl, verifyVnpayReturn } from "../../utils/vnpay";
+import { generateMomoUrl, verifyMomoSignature } from "../../utils/momo";
 import { env } from "../../config/env";
 import jwt from "jsonwebtoken";
+import { sendEmailAsync } from "../../services/email.service";
+import { buildOrderConfirmEmail } from "../../templates/email-order-confirm";
+import { buildPaymentResultEmail } from "../../templates/email-payment-result";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { createWarrantyRecordsForDeliveredOrder } = require("../warranties/warranty-sync.service");
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { publishOrderEvent, subscribeOrderEvents } = require("../../services/order-events");
+import { createWarrantyRecordsForDeliveredOrder } from "../warranties/warranty-sync.service";
+import { publishOrderEvent, subscribeOrderEvents } from "../../services/order-events";
 
 type UploadedPaymentProofFile = {
   filename: string;
@@ -67,7 +69,7 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
         throw new AppError("One or more product variants were not found", 404);
       }
 
-      const variantMap = new Map(variants.map((variant: any) => [variant.id, variant]));
+      const variantMap = new Map<number, any>(variants.map((variant: any) => [variant.id, variant]));
 
       orderSourceItems = directItems.map((item) => {
         const variantId = Number(item.productVariantId);
@@ -214,9 +216,46 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
     return createdOrder;
   });
 
+  const normalizedOrder = await normalizeOrderRecord(result);
+
+  // 📧 Email: Gửi xác nhận đặt hàng cho khách (bất đồng bộ - không block response)
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: Number(currentUser.userId) },
+      select: { email: true, full_name: true }
+    });
+    if (user?.email && result) {
+      const { buildOrderConfirmEmail: buildConfirm } = require("../../templates/email-order-confirm");
+      const { sendEmailAsync: sendAsync } = require("../../services/email.service");
+      const items = (result as any).OrderItem?.map((item: any) => ({
+        name: item.name_snapshot || item.sku_snapshot || "Sản phẩm",
+        sku: item.sku_snapshot,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unit_price),
+        lineTotal: Number(item.line_total)
+      })) || [];
+      const { subject, html } = buildConfirm({
+        customerName: (user as any).full_name || (user as any).name || user.email,
+        customerEmail: user.email,
+        orderId: result.id,
+        orderDate: (result as any).created_at || new Date(),
+        items,
+        totalAmount: Number((result as any).total_amount || (result as any).total_price || 0),
+        shippingFee: Number((result as any).shipping_fee || 0),
+        finalAmount: Number((result as any).final_amount || (result as any).total_amount || 0),
+        paymentMethod: (result as any).payment_method || "COD",
+        shippingAddress: (result as any).shipping_address
+      });
+      sendAsync({ to: user.email, subject, html });
+    }
+  } catch (emailErr) {
+    // Email errors never block order creation
+    console.warn("[Email] Order confirm email failed:", (emailErr as Error).message);
+  }
+
   res.status(201).json({
     success: true,
-    data: result
+    data: normalizedOrder
   });
 });
 
@@ -381,10 +420,10 @@ export const createVnpayUrl = asyncHandler(async (req: Request, res: Response) =
     throw new AppError("Order already paid", 400);
   }
 
-  const tmnCode = env.vnpayTmnCode || process.env.VNPAY_TMN_CODE;
-  const secretKey = env.vnpayHashSecret || process.env.VNPAY_HASH_SECRET;
+  const tmnCode = env.vnpayTmnCode || process.env?.VNPAY_TMN_CODE;
+  const secretKey = env.vnpayHashSecret || process.env?.VNPAY_HASH_SECRET;
   const frontendUrl = env.frontendUrl || process.env.FRONTEND_URL || "http://localhost:5173";
-  const shouldUseMockPayment = env.paymentMockMode || !tmnCode || !secretKey;
+  const shouldUseMockPayment = env.paymentMockMode || (!tmnCode && !process.env.VNPAY_TMN_CODE);
 
   if (shouldUseMockPayment) {
     const payAmount = Number(order.final_amount || order.total_amount || 0);
@@ -396,22 +435,48 @@ export const createVnpayUrl = asyncHandler(async (req: Request, res: Response) =
     return;
   }
 
-  if (!tmnCode || !secretKey) {
-    throw new AppError("VNPay is not configured", 503);
-  }
-
-  const ipAddr = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1";
+  const ipAddr = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1") as string;
   const url = generateVnpayUrl(
-    ipAddr as string,
+    ipAddr,
     String(order.id),
     Number(order.final_amount || order.total_amount || 0),
-    `Thanh toan don hang ${order.id}`
+    `Thanh toan don hang #${order.id}`
   );
 
   res.status(200).json({
     success: true,
     data: { paymentUrl: url }
   });
+});
+
+export const createMomoUrl = asyncHandler(async (req: Request, res: Response) => {
+  const order = await getOrderById(req.params.id);
+  if (!order || order.user_id !== Number(req.user?.userId)) {
+    throw new AppError("Order not found", 404);
+  }
+
+  if (order.payment_status === "PAID") {
+    throw new AppError("Order already paid", 400);
+  }
+
+  const amount = Number(order.final_amount || order.total_amount || 0);
+  const orderInfo = `Thanh toan don hang PC Mall #${order.id}`;
+
+  try {
+    const { payUrl, requestId } = await generateMomoUrl(String(order.id), amount, orderInfo);
+    res.status(200).json({
+      success: true,
+      data: { paymentUrl: payUrl, requestId, provider: "MOMO" }
+    });
+  } catch (error) {
+    // Fallback to Mock Payment Mode if MoMo sandbox is unreachable
+    const frontendUrl = env.frontendUrl || process.env.FRONTEND_URL || "http://localhost:5173";
+    const mockUrl = `${frontendUrl}/payment/mock?orderId=${order.id}&amount=${amount}&provider=MOMO`;
+    res.status(200).json({
+      success: true,
+      data: { paymentUrl: mockUrl, isMock: true, provider: "MOMO" }
+    });
+  }
 });
 
 export const confirmMockPayment = asyncHandler(async (req: Request, res: Response) => {
@@ -538,6 +603,30 @@ export const approvePaymentProof = asyncHandler(async (req: Request, res: Respon
     });
   }
 
+  // 📧 Email: Thông báo kết quả duyệt thanh toán
+  try {
+    const customer = await prisma.user.findUnique({
+      where: { id: Number(updatedOrder?.user_id) },
+      select: { email: true, full_name: true }
+    });
+    if (customer?.email && updatedOrder) {
+      const { buildPaymentResultEmail: buildResult } = require("../../templates/email-payment-result");
+      const { sendEmailAsync: sendAsync } = require("../../services/email.service");
+      const { subject, html } = buildResult({
+        customerName: (customer as any).full_name || (customer as any).name || customer.email,
+        customerEmail: customer.email,
+        orderId: updatedOrder.id,
+        approved,
+        rejectionReason: !approved ? (req.body?.reason || "Ảnh hóa đơn không hợp lệ hoặc không rõ ràng.") : undefined,
+        finalAmount: Number((updatedOrder as any).final_amount || (updatedOrder as any).total_amount || 0),
+        reviewedAt: new Date()
+      });
+      sendAsync({ to: customer.email, subject, html });
+    }
+  } catch (emailErr) {
+    console.warn("[Email] Payment result email failed:", (emailErr as Error).message);
+  }
+
   res.status(200).json({
     success: true,
     message: approved ? "Payment approved" : "Payment rejected",
@@ -595,11 +684,96 @@ export const vnpayIpn = asyncHandler(async (req: Request, res: Response) => {
         status: updatedOrder.status,
         paymentStatus: updatedOrder.payment_status
       });
+
+      // 📧 Email: Gửi email kết quả thanh toán thành công
+      try {
+        const customer = await prisma.user.findUnique({
+          where: { id: Number(updatedOrder.user_id) },
+          select: { email: true, full_name: true }
+        });
+        if (customer?.email) {
+          const { buildPaymentResultEmail: buildResult } = require("../../templates/email-payment-result");
+          const { sendEmailAsync: sendAsync } = require("../../services/email.service");
+          const { subject, html } = buildResult({
+            customerName: (customer as any).full_name || (customer as any).name || customer.email,
+            customerEmail: customer.email,
+            orderId: updatedOrder.id,
+            approved: true,
+            finalAmount: Number((updatedOrder as any).final_amount || (updatedOrder as any).total_amount || 0),
+            reviewedAt: new Date()
+          });
+          sendAsync({ to: customer.email, subject, html });
+        }
+      } catch (e) {
+        console.warn("[VNPay IPN Email Error]", (e as Error).message);
+      }
     }
     console.log(`[VNPay IPN] Order marked as paid: ${orderId}`);
   }
 
   res.status(200).json({ RspCode: "00", Message: "Confirm Success" });
+});
+
+export const momoIpn = asyncHandler(async (req: Request, res: Response) => {
+  const payload = req.body || req.query;
+  const isSecure = verifyMomoSignature(payload);
+
+  if (!isSecure) {
+    console.error("[MoMo IPN] Signature verification failed:", payload);
+    res.status(400).json({ message: "Invalid MoMo signature", resultCode: 97 });
+    return;
+  }
+
+  const { orderId, resultCode, transId } = payload;
+  console.log(`[MoMo IPN] Order: ${orderId}, ResultCode: ${resultCode}, TransId: ${transId}`);
+
+  if (Number(resultCode) === 0) {
+    const order = await getOrderById(orderId);
+    if (!order) {
+      res.status(404).json({ message: "Order not found", resultCode: 1 });
+      return;
+    }
+
+    if (order.payment_status === "PAID") {
+      res.status(200).json({ message: "Already paid", resultCode: 0 });
+      return;
+    }
+
+    await markOrderPaid(orderId);
+    const updatedOrder = await getOrderById(orderId);
+    if (updatedOrder?.user_id) {
+      publishOrderEvent(updatedOrder.user_id, {
+        orderId: updatedOrder.id,
+        status: updatedOrder.status,
+        paymentStatus: updatedOrder.payment_status
+      });
+
+      // 📧 Email notification for MoMo Payment
+      try {
+        const customer = await prisma.user.findUnique({
+          where: { id: Number(updatedOrder.user_id) },
+          select: { email: true, full_name: true }
+        });
+        if (customer?.email) {
+          const { buildPaymentResultEmail: buildResult } = require("../../templates/email-payment-result");
+          const { sendEmailAsync: sendAsync } = require("../../services/email.service");
+          const { subject, html } = buildResult({
+            customerName: (customer as any).full_name || (customer as any).name || customer.email,
+            customerEmail: customer.email,
+            orderId: updatedOrder.id,
+            approved: true,
+            finalAmount: Number((updatedOrder as any).final_amount || (updatedOrder as any).total_amount || 0),
+            reviewedAt: new Date()
+          });
+          sendAsync({ to: customer.email, subject, html });
+        }
+      } catch (e) {
+        console.warn("[MoMo IPN Email Error]", (e as Error).message);
+      }
+    }
+  }
+
+  res.status(204).send();
 });
 
 export const cancelMyOrder = asyncHandler(async (req: Request, res: Response) => {

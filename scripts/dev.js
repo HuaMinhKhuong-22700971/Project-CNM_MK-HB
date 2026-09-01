@@ -9,13 +9,16 @@ console.log("=======================================================\n");
 
 // Ensure Prisma Client is generated
 try {
-  const apiDir = path.resolve(__dirname, "../services/api");
-  execSync("npx prisma generate", { cwd: apiDir, stdio: "ignore" });
+  const rootDir = path.resolve(__dirname, "..");
+  const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+  execSync(`${npmCmd} run prisma:generate -w services/api`, { cwd: rootDir, stdio: "ignore" });
 } catch (e) {
   // Ignore error if offline
 }
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const shellOption = process.platform === "win32" ? "cmd.exe" : true;
+
 const processes = [
   {
     command: npmCommand,
@@ -30,7 +33,7 @@ const processes = [
 const children = processes.map((processConfig) =>
   spawn(processConfig.command, processConfig.args, {
     stdio: "inherit",
-    shell: true
+    shell: shellOption
   })
 );
 

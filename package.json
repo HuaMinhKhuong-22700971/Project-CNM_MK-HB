@@ -9,8 +9,13 @@
     "packages/*"
   ],
   "scripts": {
-    "start": "node scripts/dev.js",
+    "start": "node scripts/bootstrap-master.js",
+    "setup": "node scripts/bootstrap-master.js",
+    "bootstrap": "node scripts/bootstrap-master.js",
     "dev": "node scripts/dev.js",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "check:all": "cd services/api && npx tsc --noEmit && cd ../apps/web && npx vite build && cd ../.. && npx playwright test e2e/pc-builder-qa-checklist.spec.ts",
     "dev:api": "npm run dev -w services/api",
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build -ws",
@@ -26,8 +31,7 @@
     "prod:check-env": "node scripts/production/check-env.js",
     "prod:smoke": "node scripts/production/smoke-test.js",
     "db:up": "docker compose -f infra/docker/docker-compose.yml up -d || docker-compose -f infra/docker/docker-compose.yml up -d",
-    "db:down": "docker compose -f infra/docker/docker-compose.yml down || docker-compose -f infra/docker/docker-compose.yml down",
-    "start:api": "node services/api/src/server.js",
+    "start:api": "npm run dev -w services/api",
     "start:web:static": "python -m http.server 5173 --directory apps/web/dist"
   },
   "engines": {

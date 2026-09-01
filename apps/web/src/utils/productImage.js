@@ -17,12 +17,16 @@ const CATEGORY_PLACEHOLDERS = {
 };
 
 const FALLBACK_IMAGES = {
-  default: "https://placehold.co/800x800/f8fafc/1e293b?text=PC+Mall",
+  default: "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?w=800&h=800&fit=crop",
   cpu: "/assets/products/i5.png",
+  mainboard: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=800&fit=crop",
+  ram: "https://images.unsplash.com/photo-1562976540-1502c2145186?w=800&h=800&fit=crop",
   gpu: "/assets/products/rtx4060.png",
-  cooling: "/assets/products/cooling-real/deepcool-ag400.webp",
-  laptop: "/assets/products/laptop-acer-predator-helios-16.svg",
   storage: "/assets/products/ssd-samsung-980-pro-2tb.svg",
+  psu: "https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=800&h=800&fit=crop",
+  case: "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?w=800&h=800&fit=crop",
+  cooling: "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?w=800&h=800&fit=crop",
+  laptop: "/assets/products/laptop-acer-predator-helios-16.svg",
   completepc: "/assets/products/complete-pc-gaming-mid.jpg"
 };
 
@@ -44,6 +48,7 @@ function isBrokenImage(url) {
   if (value.startsWith("data:image/svg+xml")) return false;
   if (value.startsWith("data:image") && value.length < 1000) return true;
   if (value.includes("placehold.co") && /0f172a|111827|black/i.test(value)) return true;
+  if (value.includes("null") || value.includes("undefined")) return true;
   return false;
 }
 
@@ -61,26 +66,20 @@ function getProductCategoryKey(product = {}) {
 }
 
 function getCategoryFallbackKey(product = {}, options = {}) {
-  const key = `${getProductCategoryKey(product)} ${String(options.label || "").toLowerCase()}`;
+  const name = String(product?.product_name || product?.name || "").toLowerCase();
+  const cat = getProductCategoryKey(product);
+  const key = `${cat} ${String(options.label || "").toLowerCase()} ${name}`;
 
-  if (["cpu", "processor", "intel", "ryzen"].some((token) => key.includes(token))) {
-    return "cpu";
-  }
-  if (["gpu", "vga", "rtx", "radeon", "graphics card"].some((token) => key.includes(token))) {
-    return "gpu";
-  }
-  if (["cooling", "cooler", "fan", "aio", "radiator", "tan nhiet", "tản nhiệt"].some((token) => key.includes(token))) {
-    return "cooling";
-  }
-  if (["laptop", "notebook"].some((token) => key.includes(token))) {
-    return "laptop";
-  }
-  if (["storage", "ssd", "hdd", "nvme"].some((token) => key.includes(token))) {
-    return "storage";
-  }
-  if (["complete pc", "pc bo", "pc bộ", "pc build", "custom build"].some((token) => key.includes(token))) {
-    return "completepc";
-  }
+  if (["cpu", "processor", "intel", "ryzen", "bo xu ly"].some((t) => key.includes(t))) return "cpu";
+  if (["mainboard", "motherboard", "bo mach", "b650", "b760", "z790", "x670", "b550", "a520"].some((t) => key.includes(t))) return "mainboard";
+  if (["ram", "memory", "ddr4", "ddr5"].some((t) => key.includes(t))) return "ram";
+  if (["gpu", "vga", "rtx", "radeon", "graphics card", "card do hoa"].some((t) => key.includes(t))) return "gpu";
+  if (["cooling", "cooler", "fan", "aio", "radiator", "tan nhiet"].some((t) => key.includes(t))) return "cooling";
+  if (["psu", "power", "nguon"].some((t) => key.includes(t))) return "psu";
+  if (["case", "thung may", "vo pc", "chassis"].some((t) => key.includes(t))) return "case";
+  if (["storage", "ssd", "hdd", "nvme"].some((t) => key.includes(t))) return "storage";
+  if (["laptop", "notebook"].some((t) => key.includes(t))) return "laptop";
+  if (["complete pc", "pc bo", "pc bộ", "pc build", "custom build"].some((t) => key.includes(t))) return "completepc";
 
   return "default";
 }
@@ -90,7 +89,8 @@ function getFallbackImage(product = {}, options = {}) {
     return options.fallbackUrl;
   }
 
-  return FALLBACK_IMAGES[getCategoryFallbackKey(product, options)] || FALLBACK_IMAGES.default;
+  const key = getCategoryFallbackKey(product, options);
+  return FALLBACK_IMAGES[key] || FALLBACK_IMAGES.default;
 }
 
 export function resolveProductImage(product = {}, options = {}) {
@@ -129,9 +129,5 @@ export function resolveProductImage(product = {}, options = {}) {
   const categoryFallback = getFallbackImage(product, options);
   if (categoryFallback) return categoryFallback;
 
-  const label = encodeURIComponent(
-    options.label || pickLabel(product?.category_name || product?.category?.name, product?.product_name || product?.name)
-  );
-
-  return `https://placehold.co/800x800/f8fafc/334155?text=${label}`;
+  return FALLBACK_IMAGES.default;
 }

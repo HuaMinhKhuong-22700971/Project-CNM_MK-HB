@@ -27,7 +27,11 @@ const paymentsRouter = require("../modules/payments/payments.route");
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const compatibilityRouter = require("../modules/compatibility/compatibility.route");
 
+import { authRateLimiter, aiRateLimiter, generalApiLimiter } from "../middlewares/rate-limiter.middleware";
+
 export const apiRouter = Router();
+
+apiRouter.use(generalApiLimiter);
 
 apiRouter.get("/health", async (_req, res) => {
   const database = await checkDatabaseConnection();
@@ -41,7 +45,7 @@ apiRouter.get("/health", async (_req, res) => {
   });
 });
 
-apiRouter.use("/auth", authRouter);
+apiRouter.use("/auth", authRateLimiter, authRouter);
 apiRouter.use("/users", usersRouter);
 apiRouter.use("/admin", adminRouter);
 apiRouter.use("/staff", staffRouter);
@@ -54,9 +58,9 @@ apiRouter.use("/payments", paymentsRouter);
 apiRouter.use("/pc-builder", pcBuilderRouter);
 apiRouter.use("/compatibility", compatibilityRouter);
 apiRouter.use("/tickets", ticketsRouter);
-apiRouter.use("/ai-advisor", aiAdvisorRouter);
-apiRouter.use("/ai", aiRouter);
+apiRouter.use("/ai-advisor", aiRateLimiter, aiAdvisorRouter);
+apiRouter.use("/ai", aiRateLimiter, aiRouter);
 apiRouter.use("/warranties", warrantiesRouter);
-apiRouter.use("/chat", chatRouter);
+apiRouter.use("/chat", aiRateLimiter, chatRouter);
 
 

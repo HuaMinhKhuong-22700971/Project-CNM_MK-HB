@@ -35,6 +35,11 @@ export async function createVnpayUrl(orderId, payload = {}) {
   return response.data;
 }
 
+export async function createMomoUrl(orderId, payload = {}) {
+  const response = await httpClient.post(`/orders/${orderId}/momo-url`, payload);
+  return response.data;
+}
+
 export async function confirmMockPayment(orderId) {
   const response = await httpClient.post(`/orders/${orderId}/mock-pay`);
   return response.data;

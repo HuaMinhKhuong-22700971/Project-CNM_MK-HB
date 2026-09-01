@@ -23,6 +23,7 @@ import {
   listProductsQuerySchema,
   updateProductSchema
 } from "./catalog.validator";
+import { invalidateProductSchemaCache } from "../products/products.service";
 
 export const getCategories = asyncHandler(async (_req: Request, res: Response) => {
   const categories = await listCategories();
@@ -45,11 +46,12 @@ export const getBrands = asyncHandler(async (_req: Request, res: Response) => {
 const mapProduct = (p: any) => {
   const sku = p.ProductSku?.[0];
   const variant = p.ProductVariant?.[0];
-  let imageUrl = sku?.image_url || variant?.image_url || "";
-  
-  // Fallback for missing or broken images (short base64 strings in DB)
-  if (!imageUrl || (imageUrl.startsWith('data:image') && imageUrl.length < 1000)) {
-    imageUrl = "https://placehold.co/600x400/f3f4f6/374151?text=No+Image";
+  let rawUrl = sku?.image_url || variant?.image_url || p.image_url || p.imageUrl || "";
+
+  // Normalize missing, empty, or broken images to null
+  let imageUrl: string | null = rawUrl;
+  if (!imageUrl || (typeof imageUrl === "string" && imageUrl.trim() === "") || (imageUrl.startsWith("data:image") && imageUrl.length < 1000)) {
+    imageUrl = null;
   }
 
   // Extract attributes (technical specifications) from SkuAttributes
@@ -75,13 +77,13 @@ const mapProduct = (p: any) => {
 
   // Also check product_variants for consistency if needed, but primary is Sku
   if (attributes.length === 0 && p.attributes && Array.isArray(p.attributes)) {
-      // Fallback for some legacy data structure
-      p.attributes.forEach((attr: any) => {
-          if (attr.key && attr.value && !seenKeys.has(attr.key)) {
-              attributes.push(attr);
-              seenKeys.add(attr.key);
-          }
-      });
+    // Fallback for some legacy data structure
+    p.attributes.forEach((attr: any) => {
+      if (attr.key && attr.value && !seenKeys.has(attr.key)) {
+        attributes.push(attr);
+        seenKeys.add(attr.key);
+      }
+    });
   }
 
   return {
@@ -89,16 +91,16 @@ const mapProduct = (p: any) => {
     image_url: imageUrl,
     imageUrl: imageUrl,
     isActive: p.is_active,
-    stock: sku?.stock || variant?.stock_quantity || 0,
+    stock: sku?.stock ?? variant?.stock_quantity ?? 0,
     brand_name: p.Brand?.name,
     brand: p.Brand,
     attributes,
     skus: (p.ProductSku || []).map((s: any) => ({
       ...s,
-      imageUrl: s.image_url || imageUrl
+      imageUrl: (s.image_url && typeof s.image_url === "string" && s.image_url.trim() !== "") ? s.image_url : imageUrl
     })),
     // Add defaultVariant for consistency with some frontend parts
-    defaultVariant: variant ? { ...variant, imageUrl: typeof variant.image_url === 'string' && variant.image_url.length > 1000 ? variant.image_url : imageUrl } : undefined
+    defaultVariant: variant ? { ...variant, imageUrl: (variant.image_url && typeof variant.image_url === "string" && variant.image_url.trim() !== "") ? variant.image_url : imageUrl } : undefined
   };
 };
 
@@ -166,6 +168,7 @@ export const postCategory = asyncHandler(async (req: Request, res: Response) => 
   }
 
   const category = await createCategory(payload);
+  invalidateProductSchemaCache();
 
   res.status(201).json({
     success: true,
@@ -195,6 +198,7 @@ export const postProduct = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const product = await createProduct(payload);
+  invalidateProductSchemaCache();
 
   res.status(201).json({
     success: true,
@@ -225,6 +229,7 @@ export const patchProduct = asyncHandler(async (req: Request, res: Response) => 
   }
 
   const updated = await updateProduct(req.params.id, payload);
+  invalidateProductSchemaCache();
 
   res.status(200).json({
     success: true,
